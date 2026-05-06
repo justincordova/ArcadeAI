@@ -4,7 +4,8 @@ import { asc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
-import { db, loadOwnedGame } from "../lib/ownership.js";
+import { db } from "../lib/db.js";
+import { loadOwnedGame } from "../lib/ownership.js";
 import { endSSE, writeSSE, writeSSEHeaders } from "../lib/sse.js";
 import { streamGame } from "../services/llm/client.js";
 
@@ -40,14 +41,15 @@ export async function gamesRoutes(app: FastifyInstance) {
       throw err;
     }
 
-    const id = randomUUID();
-    const now = Date.now();
-    const title = prompt.slice(0, 40);
+    // From here on, we must always release(userId) on every exit path.
+    try {
+      const id = randomUUID();
+      const now = Date.now();
+      const title = prompt.slice(0, 40);
 
-    // Insert game row and initial prompt message
-    db.transaction((tx) => {
-      tx.insert(games)
-        .values({
+      // Insert game row and initial prompt message in a single transaction
+      await db.transaction(async (tx) => {
+        await tx.insert(games).values({
           id,
           userId,
           title,
@@ -57,60 +59,68 @@ export async function gamesRoutes(app: FastifyInstance) {
           originalPrompt: prompt,
           createdAt: now,
           updatedAt: now,
-        })
-        .run();
+        });
 
-      tx.insert(messages)
-        .values({
+        await tx.insert(messages).values({
           id: randomUUID(),
           gameId: id,
           kind: "prompt",
           content: prompt,
           createdAt: now,
-        })
-        .run();
-    });
+        });
+      });
 
-    // Hijack response for SSE
-    reply.hijack();
-    writeSSEHeaders(reply);
-    writeSSE(reply, "meta", { gameId: id, placeholderTitle: title });
+      // Hijack response for SSE
+      reply.hijack();
+      writeSSEHeaders(reply);
+      writeSSE(reply, "meta", { gameId: id, placeholderTitle: title });
 
-    const ac = new AbortController();
-    let clientClosed = false;
+      const ac = new AbortController();
+      let clientClosed = false;
 
-    request.raw.on("close", () => {
-      clientClosed = true;
-      ac.abort();
-    });
+      request.raw.on("close", () => {
+        clientClosed = true;
+        ac.abort();
+      });
 
-    let accumulatedCode = "";
+      let accumulatedCode = "";
+      let streamError: Error | null = null;
 
-    try {
-      const result = await streamGame({ prompt, signal: ac.signal });
+      try {
+        const result = await streamGame({ prompt, signal: ac.signal });
 
-      for await (const delta of result.textStream) {
-        accumulatedCode += delta;
-        writeSSE(reply, "chunk", { delta });
+        for await (const delta of result.textStream) {
+          accumulatedCode += delta;
+          if (!clientClosed) {
+            writeSSE(reply, "chunk", { delta });
+          }
+        }
+      } catch (err) {
+        streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
-      if (!clientClosed) {
-        // Persist final code
+      // Persist whatever we have. If the client closed mid-stream we still
+      // save the partial code so the user doesn't lose it on a tab-close race.
+      try {
         await db
           .update(games)
           .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
           .where(eq(games.id, id));
-
-        writeSSE(reply, "done", {});
+      } catch {
+        // Persistence failure is logged-and-swallowed; we still need to close
+        // the SSE stream cleanly. The client already has the code via chunks.
       }
-    } catch (err) {
+
       if (!clientClosed) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        writeSSE(reply, "error", { message });
+        if (streamError) {
+          writeSSE(reply, "error", { message: streamError.message });
+        } else {
+          writeSSE(reply, "done", {});
+        }
+        endSSE(reply);
       }
     } finally {
       release(userId);
-      endSSE(reply);
     }
   });
 

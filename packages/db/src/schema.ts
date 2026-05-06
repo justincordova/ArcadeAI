@@ -16,8 +16,8 @@ export const users = sqliteTable("user", {
   dailyResetAt: integer("daily_reset_at").notNull().default(0),
   monthlyResetAt: integer("monthly_reset_at").notNull().default(0),
   theme: text("theme").notNull().default("dark"), // 'dark' | 'light' | 'system'
-  createdAt: integer("created_at").notNull().default(0),
-  updatedAt: integer("updated_at").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
 export const sessions = sqliteTable("session", {

@@ -19,16 +19,16 @@ export function TopBar() {
           className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
         >
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-700 text-xs font-medium text-white">
-            {me?.display_name?.[0]?.toUpperCase() ?? "?"}
+            {me?.displayName?.[0]?.toUpperCase() ?? "?"}
           </span>
-          <span className="hidden sm:block">{me?.display_name ?? "..."}</span>
+          <span className="hidden sm:block">{me?.displayName ?? "..."}</span>
           <span className="text-xs">▾</span>
         </button>
 
         {open && (
           <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-xl">
             <div className="border-b border-gray-700 px-4 py-3">
-              <p className="text-sm font-medium text-white">{me?.display_name}</p>
+              <p className="text-sm font-medium text-white">{me?.displayName}</p>
               <p className="truncate text-xs text-gray-400">{me?.email}</p>
             </div>
             <button

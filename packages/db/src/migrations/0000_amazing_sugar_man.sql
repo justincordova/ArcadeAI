@@ -86,8 +86,8 @@ CREATE TABLE `user` (
 	`daily_reset_at` integer DEFAULT 0 NOT NULL,
 	`monthly_reset_at` integer DEFAULT 0 NOT NULL,
 	`theme` text DEFAULT 'dark' NOT NULL,
-	`created_at` integer DEFAULT 0 NOT NULL,
-	`updated_at` integer DEFAULT 0 NOT NULL
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `user_email_unique` ON `user` (`email`);--> statement-breakpoint

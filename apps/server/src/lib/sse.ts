@@ -5,6 +5,7 @@ export function writeSSEHeaders(reply: FastifyReply) {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
     Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
     "Access-Control-Allow-Origin": process.env.WEB_ORIGIN ?? "http://localhost:5173",
     "Access-Control-Allow-Credentials": "true",
   });

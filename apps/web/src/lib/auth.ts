@@ -3,7 +3,7 @@ const API = "http://localhost:3000";
 export interface MeResponse {
   id: string;
   email: string;
-  display_name: string;
+  displayName: string;
   tier: string;
 }
 

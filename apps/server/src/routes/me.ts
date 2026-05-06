@@ -7,7 +7,7 @@ export async function meRoutes(app: FastifyInstance) {
     return reply.send({
       id: user.id,
       email: user.email,
-      display_name: u.displayName ?? user.name ?? "",
+      displayName: u.displayName ?? user.name ?? "",
       tier: u.tier ?? "free",
     });
   });

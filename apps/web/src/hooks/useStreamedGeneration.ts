@@ -25,6 +25,7 @@ export function useStreamedGeneration(): StreamedGenerationState {
     abortRef.current = ac;
 
     setStatus("streaming");
+    setGameId(null);
     setCode("");
     setError(null);
 

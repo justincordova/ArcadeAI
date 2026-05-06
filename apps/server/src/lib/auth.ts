@@ -1,4 +1,3 @@
-import { createClient } from "@arcadeai/db";
 import { TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -9,9 +8,7 @@ import {
   nextUtcMidnightMs,
   randomHex,
 } from "./auth-helpers.js";
-
-const dbPath = process.env.DATABASE_PATH ?? "./apps/server/data/arcadeai.db";
-const db = createClient(dbPath);
+import { db } from "./db.js";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-me",
@@ -38,7 +35,7 @@ export const auth = betterAuth({
   },
   user: {
     additionalFields: {
-      display_name: {
+      displayName: {
         type: "string",
         required: false,
         defaultValue: "",
@@ -48,22 +45,22 @@ export const auth = betterAuth({
         required: false,
         defaultValue: "free",
       },
-      credits_remaining_daily: {
+      creditsRemainingDaily: {
         type: "number",
         required: false,
         defaultValue: 500,
       },
-      credits_remaining_monthly: {
+      creditsRemainingMonthly: {
         type: "number",
         required: false,
         defaultValue: 3000,
       },
-      daily_reset_at: {
+      dailyResetAt: {
         type: "number",
         required: false,
         defaultValue: 0,
       },
-      monthly_reset_at: {
+      monthlyResetAt: {
         type: "number",
         required: false,
         defaultValue: 0,
@@ -89,12 +86,12 @@ export const auth = betterAuth({
           return {
             data: {
               ...user,
-              display_name: displayName,
+              displayName,
               tier,
-              credits_remaining_daily: caps.daily,
-              credits_remaining_monthly: caps.monthly,
-              daily_reset_at: nextUtcMidnightMs(now),
-              monthly_reset_at: firstOfNextMonthUtcMs(now),
+              creditsRemainingDaily: caps.daily,
+              creditsRemainingMonthly: caps.monthly,
+              dailyResetAt: nextUtcMidnightMs(now),
+              monthlyResetAt: firstOfNextMonthUtcMs(now),
               theme: "dark",
             },
           };

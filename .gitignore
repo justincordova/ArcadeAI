@@ -10,3 +10,4 @@ apps/server/data/
 .DS_Store
 *.log
 .tanstack/
+apps/web/src/routeTree.gen.ts
