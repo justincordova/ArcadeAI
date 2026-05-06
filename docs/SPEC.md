@@ -228,6 +228,7 @@ usage_log
   action          text not null     // 'generation' | 'refinement' | 'repair' (repair logged but charges 0)
   credits_charged integer not null
   succeeded       integer not null  // 0 or 1
+  refunded_at     integer           // unix ms when credits were refunded; null if never refunded. Set once; refund is idempotent on this column.
   created_at      integer not null
 
 // RAG library — curated reference games
@@ -238,11 +239,13 @@ rag_examples
   html            text not null     // the full single-file HTML
   created_at      integer not null
 
-// vec0 virtual table for embeddings, joined to rag_examples by id
-rag_embeddings    vec0 virtual table (id text primary key, embedding float[1536])
+// vec0 virtual table for embeddings, joined to rag_examples by id.
+// `genre` is duplicated here as a vec0 metadata column so the retrieval query
+// can filter and rank in a single statement (see §8).
+rag_embeddings    vec0 virtual table (id text primary key, genre text, embedding float[1536])
 ```
 
-The `vec0` virtual table cannot be expressed in Drizzle's schema DSL. It's created via a **post-migration raw SQL step** that runs after Drizzle migrations: `CREATE VIRTUAL TABLE IF NOT EXISTS rag_embeddings USING vec0(id text primary key, embedding float[1536])`. This is a one-line script in `packages/db/src/post-migrate.ts` invoked after `drizzle-kit migrate`.
+The `vec0` virtual table cannot be expressed in Drizzle's schema DSL. It's created via a **post-migration raw SQL step** that runs after Drizzle migrations: `CREATE VIRTUAL TABLE IF NOT EXISTS rag_embeddings USING vec0(id text primary key, genre text, embedding float[1536])`. This is a one-line script in `packages/db/src/post-migrate.ts` invoked after `drizzle-kit migrate`. The `genre` column is duplicated from `rag_examples` so the single-query genre-filtered retrieval in §8 works without a JOIN.
 
 Better Auth's `session` and `account` tables live alongside, managed by the library. The `account` table stores per-provider OAuth tokens and linkage (one row per linked provider per user).
 
@@ -317,6 +320,8 @@ Client captures thumbnail after ~2s, POSTs to /api/games/:id/thumbnail
 
 The placeholder title is the first 40 chars of the prompt. The generated title arrives via the next dashboard load or by polling/refetching `/api/games/:id`. The original prompt is also stored on `games.original_prompt` for use in refinement context.
 
+**Build-order note.** The parallel fanout (genre classification + style tags + embedding + title generation) lands in build-order step 10. Build-order step 4 ships with only the placeholder title (first 40 chars of the prompt) and a hardcoded prompt; the title-generation call, classification call, embedding call, and RAG retrieval are layered on in steps 9 and 10. See §19.
+
 ### Refinement
 
 ```
@@ -389,7 +394,9 @@ The reference library has its own scope — a build-time script, an editorial pr
 ### iframe setup
 
 - `<iframe srcdoc={generatedHTML} sandbox="allow-scripts">` (no `allow-same-origin` — that would let generated code escape).
-- A wrapper script is injected into the bottom of every generated HTML before assignment to `srcdoc`:
+- A wrapper script is injected into the bottom of every generated HTML before assignment to `srcdoc`. The wrapper is the **single canonical file** at `apps/web/src/lib/iframe-wrapper.ts`; every step that adds a behavior extends this one file.
+
+**Required handlers (build-order step 4):**
 
 ```js
 window.addEventListener('error', (e) => {
@@ -399,6 +406,10 @@ window.addEventListener('unhandledrejection', (e) => {
   parent.postMessage({type: 'game-error', message: String(e.reason)}, '*');
 });
 ```
+
+**Thumbnail capture handler (build-order step 5):** the wrapper also registers a `message` listener for `{ type: 'capture-thumbnail' }` from the parent. On receipt it serializes the canvas via `canvas.toDataURL('image/png')` and posts back `{ type: 'thumbnail', dataUrl }`. The parent triggers capture only after the relevant SSE stream emits `done` (generation, refinement, or successful repair).
+
+Any future step that extends the wrapper must update this section. The wrapper is **never persisted** — `games.current_code` stores only the LLM's raw output, and the wrapper is appended client-side at every iframe assignment.
 
 ### Error scope
 
@@ -434,10 +445,12 @@ Hard reload — replacing `srcdoc` re-runs the game from scratch. No hot-swap.
 | Tier | Price (mo) | Price (yr) | Credits | Notes |
 |---|---|---|---|---|
 | Free | $0 | $0 | 3,000/month, 500/day cap | Public default |
-| Creator | $15 | $13/mo ($156 billed yearly, -15%) | 20,000/month | Public |
-| Pro | $29 | $25/mo ($300 billed yearly, -15%) | 50,000/month | Public |
+| Creator | $15 | $13/mo ($156 billed yearly, -15%) | 20,000/month, no daily cap | Public |
+| Pro | $29 | $25/mo ($300 billed yearly, -15%) | 50,000/month, no daily cap | Public |
 | Enterprise | Custom | Custom | Custom | Display only — "Contact Sales" no-op |
 | Admin | — | — | Unlimited | Internal only, not shown on pricing page. Bypasses all credit checks. |
+
+**Daily counter for paid tiers.** Only Free has an enforced daily cap (500). Creator, Pro, and Admin tiers have no daily cap — the daily counter is decremented for observability but the daily check is skipped. The `users.credits_remaining_daily` and `daily_reset_at` columns still exist and reset for all tiers; they're informational for paid tiers.
 
 ### Admin assignment
 
@@ -447,11 +460,12 @@ Hard reload — replacing `srcdoc` re-runs the game from scratch. No hot-swap.
 
 ### Credit lifecycle
 
-1. Request arrives → check `credits_remaining_*` >= action cost.
+1. Request arrives → check `credits_remaining_*` >= action cost (Free: daily + monthly; paid: monthly only).
 2. If insufficient → 402 Payment Required with reset time.
-3. If sufficient → deduct optimistically, log to `usage_log` with `succeeded = 0`.
-4. On unrecoverable failure → refund credits, leave log row marked `succeeded = 0`.
-5. On success (including auto-repaired) → mark log row `succeeded = 1`.
+3. If sufficient → deduct optimistically, log to `usage_log` with `succeeded = 0` and `refunded_at = null`.
+4. On unrecoverable failure → refund credits AND set `refunded_at = now`, leave log row marked `succeeded = 0`. Refund is idempotent on `refunded_at IS NULL` — a second refund call for the same row is a no-op.
+5. On success (including auto-repaired) → mark log row `succeeded = 1` (do NOT set `refunded_at`).
+6. On user-initiated cancel → mark log row `succeeded = 1`, do NOT refund (per §14).
 
 ### Reset behavior
 
@@ -854,7 +868,7 @@ Each step is independently shippable and testable.
 7. **Credit model + usage tracking** — usage_log table, deduction/refund logic, usage bars in user dropdown, daily/monthly resets.
 8. **Pricing page + plan tiers** — pricing route, plan badge in top bar, billing endpoint (no-op).
 9. **RAG library** — install sqlite-vec extension and load via `db.loadExtension()`, wire retrieval into generation. **Reference game creation is a separate workstream with its own design doc — drafted with Claude Opus 4.7, hand-curated, embedded with text-embedding-3-small, seeded into `rag_examples` + `rag_embeddings` vec0 tables.** This step covers the integration; the library itself is built in parallel via its own plan.
-10. **Genre classification + style tags** — GPT-4.1-mini classification step with structured output, fallback to `other`/empty on failure, genre-filtered RAG retrieval, prompt variants.
+10. **Genre classification + style tags + title generation** — GPT-4.1-mini classification step with structured output, fallback to `other`/empty on failure, genre-filtered RAG retrieval, prompt variants. Also lands the parallel GPT-4.1-mini title-generation call (PATCH `/api/games/:id` when complete) per §7. Until this step ships, games keep their placeholder title (first 40 chars of the prompt).
 11. **Auto-repair loop** — iframe error postMessage, repair endpoint, "fixing..." indicator, 2-attempt cap with fallback UI.
 12. **Settings page + theme toggle** — display name editing, connected accounts management (link/unlink Google/GitHub with last-provider guard), dark/light mode.
 13. **Logging + rate limiting polish** — structured Pino logging on every request, `@fastify/rate-limit` setup.
