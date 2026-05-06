@@ -1,0 +1,26 @@
+{
+  "name": "@arcadeai/web",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@tanstack/react-router": "^1.114.6",
+    "@tanstack/react-query": "^5.75.5",
+    "@arcadeai/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^6.3.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@tanstack/router-plugin": "^1.114.6",
+    "vite-tsconfig-paths": "^5.1.4",
+    "@tailwindcss/vite": "^4.1.4",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.7.2",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "types": ["node", "bun-types"],
+    "paths": {
+      "@arcadeai/db": ["../../packages/db/src"],
+      "@arcadeai/db/*": ["../../packages/db/src/*"],
+      "@arcadeai/shared": ["../../packages/shared/src"],
+      "@arcadeai/shared/*": ["../../packages/shared/src/*"]
+    }
+  },
+  "include": ["src", "../../packages/db/src/**/*", "../../packages/shared/src/**/*"]
+}

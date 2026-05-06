@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "paths": {
+      "@arcadeai/db": ["./packages/db/src"],
+      "@arcadeai/db/*": ["./packages/db/src/*"],
+      "@arcadeai/shared": ["./packages/shared/src"],
+      "@arcadeai/shared/*": ["./packages/shared/src/*"]
+    }
+  }
+}
