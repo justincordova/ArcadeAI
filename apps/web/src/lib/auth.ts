@@ -31,11 +31,18 @@ export async function signOut(): Promise<void> {
  * the upstream OAuth provider URL we then navigate the browser to.
  */
 export async function startSocialSignIn(provider: "google" | "github", next = "/"): Promise<void> {
+  // Better Auth's OAuth callback runs on the server origin (localhost:3000)
+  // and 302-redirects to `callbackURL` after exchanging the auth code. If we
+  // pass a relative path here, the browser resolves it against the server
+  // origin and lands on the wrong host (the API server has no UI). Build an
+  // absolute URL anchored at the web origin so the user lands on the SPA.
+  const callbackURL = new URL(next || "/", window.location.origin).toString();
+
   const res = await fetch(`${API}/api/auth/sign-in/social`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, callbackURL: next }),
+    body: JSON.stringify({ provider, callbackURL }),
   });
   if (!res.ok) {
     throw new Error(`Sign-in failed: ${res.status}`);
