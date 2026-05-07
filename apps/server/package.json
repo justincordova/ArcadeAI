@@ -12,6 +12,7 @@
     "@arcadeai/db": "workspace:*",
     "@arcadeai/shared": "workspace:*",
     "@fastify/cors": "^10.0.2",
+    "@fastify/rate-limit": "^10.3.0",
     "ai": "^6.0.175",
     "better-auth": "^1.6.9",
     "drizzle-orm": "^0.45.2",

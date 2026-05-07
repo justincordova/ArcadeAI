@@ -53,9 +53,20 @@ const RepairBody = z.object({
   }),
 });
 
+// Per-user rate limit for streaming endpoints: 10 req/min (SPEC §14)
+const perUser10PerMin = {
+  rateLimit: {
+    max: 10,
+    timeWindow: "1 minute",
+    keyGenerator: (req: import("fastify").FastifyRequest) =>
+      (req as import("fastify").FastifyRequest & { authSession?: { user?: { id?: string } } })
+        .authSession?.user?.id ?? req.ip,
+  },
+};
+
 export async function gamesRoutes(app: FastifyInstance) {
   // POST /api/games — create game row and stream generation
-  app.post("/api/games", async (request, reply) => {
+  app.post("/api/games", { config: perUser10PerMin }, async (request, reply) => {
     const parseResult = CreateGameBody.safeParse(request.body);
     if (!parseResult.success) {
       return reply.status(400).send({
@@ -166,8 +177,8 @@ export async function gamesRoutes(app: FastifyInstance) {
       // generate title — all three branches run concurrently.
       const [classRes, embedRes, titleRes] = await Promise.allSettled([
         classifyPrompt(prompt, request.log),
-        embedPrompt(prompt),
-        generateTitle(prompt),
+        embedPrompt(prompt, request.log),
+        generateTitle(prompt, request.log),
       ]);
 
       const { genre, styleTags } =
@@ -220,6 +231,7 @@ export async function gamesRoutes(app: FastifyInstance) {
           system,
           prompt,
           signal: ac.signal,
+          logger: request.log,
         });
 
         for await (const delta of result.textStream) {
@@ -391,7 +403,7 @@ export async function gamesRoutes(app: FastifyInstance) {
   });
 
   // POST /api/games/:id/refine — refinement turn with SSE streaming
-  app.post("/api/games/:id/refine", async (request, reply) => {
+  app.post("/api/games/:id/refine", { config: perUser10PerMin }, async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
       return reply.status(400).send({ error: "Invalid id" });
@@ -497,6 +509,7 @@ export async function gamesRoutes(app: FastifyInstance) {
           game,
           feedback,
           pastFeedback,
+          logger: request.log,
         }));
       } catch (err) {
         await refund(logId).catch(() => {});
@@ -523,6 +536,7 @@ export async function gamesRoutes(app: FastifyInstance) {
           system,
           prompt: refinementPrompt,
           signal: ac.signal,
+          logger: request.log,
         });
 
         for await (const delta of result.textStream) {
@@ -568,7 +582,7 @@ export async function gamesRoutes(app: FastifyInstance) {
   });
 
   // POST /api/games/:id/repair — auto-repair loop (SPEC §9, §11)
-  app.post("/api/games/:id/repair", async (request, reply) => {
+  app.post("/api/games/:id/repair", { config: perUser10PerMin }, async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
       return reply.status(400).send({ error: "Invalid id" });
@@ -636,6 +650,7 @@ export async function gamesRoutes(app: FastifyInstance) {
           system: REPAIR_SYSTEM_PROMPT,
           userMessage,
           signal: ac.signal,
+          logger: request.log,
         });
 
         for await (const delta of result.textStream) {

@@ -1,31 +1,41 @@
+import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { authPlugin, getSession } from "./plugins/auth.js";
 import { corsPlugin } from "./plugins/cors.js";
+import { registerRateLimit } from "./plugins/rate-limit.js";
+import { registerRequestContext } from "./plugins/request-context.js";
 import { billingRoutes } from "./routes/billing.js";
 import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
 
+const isDev = process.env.NODE_ENV !== "production";
+
 const app = Fastify({
-  logger:
-    process.env.NODE_ENV !== "production"
+  logger: {
+    level: process.env.LOG_LEVEL ?? "info",
+    ...(isDev
       ? {
           transport: {
             target: "pino-pretty",
-            options: {
-              colorize: true,
-            },
+            options: { colorize: true },
           },
-          level: process.env.LOG_LEVEL ?? "info",
         }
-      : {
-          level: process.env.LOG_LEVEL ?? "info",
-        },
+      : {}),
+    serializers: {
+      req: (req) => ({ method: req.method, url: req.url }),
+      res: (res) => ({ statusCode: res.statusCode }),
+    },
+  },
+  genReqId: () => randomUUID(),
+  disableRequestLogging: true,
 });
 
 // Plugins
 await app.register(corsPlugin);
+await app.register(registerRateLimit);
 await app.register(authPlugin);
+await app.register(registerRequestContext);
 
 // Global auth guard on all /api/* except /api/auth/* and /api/health
 app.addHook("preHandler", async (request, reply) => {

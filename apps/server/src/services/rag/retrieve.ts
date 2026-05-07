@@ -74,11 +74,7 @@ export async function retrieveExample({
     return (row as { html: string }).html;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (log) {
-      log.warn({ err: msg, genre }, "rag retrieveExample failed");
-    } else {
-      console.warn(`rag retrieveExample failed (genre=${genre}): ${msg}`);
-    }
+    log?.warn({ err: msg, genre }, "rag retrieveExample failed");
     return null;
   }
 }

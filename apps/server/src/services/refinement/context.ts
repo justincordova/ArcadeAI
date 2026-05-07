@@ -1,3 +1,4 @@
+import type { FastifyBaseLogger } from "fastify";
 import { REFINEMENT_SYSTEM_PROMPT } from "../llm/prompts/refinement.js";
 import { summarizeCode } from "../llm/summarize.js";
 
@@ -8,6 +9,7 @@ interface RefinementContextInput {
   };
   feedback: string;
   pastFeedback: string[];
+  logger?: FastifyBaseLogger;
 }
 
 interface RefinementContext {
@@ -19,11 +21,12 @@ export async function buildRefinementContext({
   game,
   feedback,
   pastFeedback,
+  logger,
 }: RefinementContextInput): Promise<RefinementContext> {
   // Decide whether to use full code or a summarized digest
   const estimatedTokens = game.currentCode.length / 4;
   const codeOrDigest =
-    estimatedTokens > 2000 ? await summarizeCode(game.currentCode) : game.currentCode;
+    estimatedTokens > 2000 ? await summarizeCode(game.currentCode, logger) : game.currentCode;
 
   const parts: string[] = [];
 

@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai";
-import { GPT_MINI } from "@arcadeai/shared/models.js";
+import { GPT_MINI, computeCost } from "@arcadeai/shared/models.js";
 import { generateObject } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";
@@ -22,12 +22,23 @@ export async function categorizeError(
 ): Promise<{ category: "syntax" | "runtime" | "logic" }> {
   const prompt = `Error message: "${args.message}"\nStack trace: ${args.stack ?? "(none provided)"}`;
   try {
-    const { object } = await generateObject({
+    const start = Date.now();
+    const { object, usage } = await generateObject({
       model: openai(GPT_MINI),
       schema: Schema,
       system: SYSTEM,
       prompt,
     });
+    logger?.info(
+      {
+        model: GPT_MINI,
+        tokens_in: usage.inputTokens,
+        tokens_out: usage.outputTokens,
+        duration_ms: Date.now() - start,
+        cost_usd: computeCost({ model: GPT_MINI, usage }),
+      },
+      "llm call"
+    );
     return { category: object.category };
   } catch (err) {
     logger?.warn({ err, raw: args.message }, "category classify failed; defaulting to runtime");
