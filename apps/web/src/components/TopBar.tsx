@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useSession } from "../hooks/useSession.js";
 import { signOut } from "../lib/auth.js";
+import { PlanBadge } from "./topbar/PlanBadge.js";
 
 // Tier credit limits mirrored from @arcadeai/shared — kept in sync with packages/shared/src/plans.ts
 const TIER_DAILY: Record<string, number> = {
@@ -60,9 +61,12 @@ export function TopBar() {
 
   return (
     <header className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-6 py-3">
-      <Link to="/" className="font-mono text-lg font-bold tracking-tight text-white">
-        ArcadeAI
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link to="/" className="font-mono text-lg font-bold tracking-tight text-white">
+          ArcadeAI
+        </Link>
+        <PlanBadge />
+      </div>
       <div className="relative">
         <button
           type="button"

@@ -28,3 +28,84 @@ export const CREDIT_COSTS = {
   refinement: 150,
   repair: 0,
 } as const;
+
+// ── Plan display types (step 08) ──────────────────────────────────────────────
+
+// The four tiers visible on the pricing page (enterprise is display-only)
+export type PublicTier = "free" | "creator" | "pro";
+export type DisplayTier = PublicTier | "enterprise";
+export type BillingInterval = "monthly" | "yearly";
+
+export const YEARLY_DISCOUNT = 0.15;
+
+// Prices in USD. Yearly value is per-month after the discount.
+// Enterprise is null — renders "Custom".
+export const PLAN_PRICES: Record<DisplayTier, { monthly: number; yearly: number } | null> = {
+  free: { monthly: 0, yearly: 0 },
+  creator: { monthly: 15, yearly: 13 }, // $156 billed yearly
+  pro: { monthly: 29, yearly: 25 }, // $300 billed yearly
+  enterprise: null,
+} as const;
+
+export interface PlanCopy {
+  id: DisplayTier;
+  name: string;
+  accent: string; // Tailwind color class for the neon border
+  features: string[];
+  ctaLabel: string;
+}
+
+// Plan display copy. Numeric credit values are NOT duplicated here —
+// components read from TIER_CREDIT_LIMITS[plan.id] for credit counts
+// and PLAN_PRICES[plan.id] for pricing.
+export const PLANS: PlanCopy[] = [
+  {
+    id: "free",
+    name: "Free",
+    accent: "border-green-500",
+    features: [
+      "3,000 credits / month",
+      "500 credits / day cap",
+      "Unlimited game saves",
+      "Canvas game generation",
+    ],
+    ctaLabel: "CHOOSE PLAN",
+  },
+  {
+    id: "creator",
+    name: "Creator",
+    accent: "border-orange-400",
+    features: [
+      "20,000 credits / month",
+      "No daily cap",
+      "Unlimited game saves",
+      "Priority generation",
+    ],
+    ctaLabel: "CHOOSE PLAN",
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    accent: "border-yellow-400",
+    features: [
+      "50,000 credits / month",
+      "No daily cap",
+      "Unlimited game saves",
+      "Priority generation",
+      "Early access to new features",
+    ],
+    ctaLabel: "CHOOSE PLAN",
+  },
+  {
+    id: "enterprise",
+    name: "Enterprise",
+    accent: "border-purple-500",
+    features: [
+      "Custom credit volume",
+      "Dedicated support",
+      "SLA guarantees",
+      "Custom integrations",
+    ],
+    ctaLabel: "CONTACT SALES",
+  },
+];

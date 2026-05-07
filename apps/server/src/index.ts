@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { authPlugin, getSession } from "./plugins/auth.js";
 import { corsPlugin } from "./plugins/cors.js";
+import { billingRoutes } from "./routes/billing.js";
 import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
@@ -50,6 +51,7 @@ app.addHook("preHandler", async (request, reply) => {
 await app.register(healthRoutes);
 await app.register(meRoutes);
 await app.register(gamesRoutes);
+await app.register(billingRoutes);
 
 const port = Number(process.env.PORT ?? 3000);
 
