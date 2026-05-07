@@ -132,7 +132,7 @@ export function GameCard({ game, view }: GameCardProps) {
             borderRadius: 10,
             overflow: "hidden",
             boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
-            zIndex: 20,
+            zIndex: 50,
           }}
         >
           {(
@@ -297,7 +297,6 @@ export function GameCard({ game, view }: GameCardProps) {
             background: hovered ? "var(--color-surface)" : "transparent",
             transition: "all 0.15s",
             position: "relative",
-            overflow: "hidden",
           }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
