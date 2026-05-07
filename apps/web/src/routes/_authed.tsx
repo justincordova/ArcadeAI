@@ -10,9 +10,14 @@ export const Route = createFileRoute("/_authed")({
       queryFn: fetchMe,
     });
     if (!me) {
+      // location.search in TanStack Router is the PARSED search-params
+      // object, not a query string. Concatenating it with `+` triggers
+      // String(obj) which throws "Cannot convert object to primitive
+      // value". Use location.href, which is the full pathname + raw
+      // search string already serialized.
       throw redirect({
         to: "/sign-in",
-        search: { next: location.pathname + location.search },
+        search: { next: location.href },
       });
     }
   },
