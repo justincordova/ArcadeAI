@@ -8,9 +8,11 @@ import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
 import { db } from "../lib/db.js";
 import { loadOwnedGame } from "../lib/ownership.js";
 import { endSSE, writeSSE, writeSSEHeaders } from "../lib/sse.js";
+import { classifyPrompt } from "../services/llm/classify.js";
 import { streamGame, streamRefinement } from "../services/llm/client.js";
 import { embedPrompt } from "../services/llm/embed.js";
-import { buildGenerationSystemPrompt } from "../services/llm/prompts/generation.js";
+import { buildGenerationSystemPrompt } from "../services/llm/prompts/generation/index.js";
+import { generateTitle } from "../services/llm/title.js";
 import { retrieveExample } from "../services/rag/retrieve.js";
 import { buildRefinementContext } from "../services/refinement/context.js";
 import {
@@ -150,27 +152,55 @@ export async function gamesRoutes(app: FastifyInstance) {
         ac.abort();
       });
 
-      // Pre-LLM parallel fanout per SPEC §7. Today this is just the prompt
-      // embedding; step 10 will add a classify call as a sibling promise
-      // without restructuring this block. `null` is the graceful-degrade
-      // signal for both legs (retrieval falls back to no few-shot).
-      const [embedding] = await Promise.all([
-        embedPrompt(prompt).catch((err) => {
-          request.log.warn(
-            { err: err instanceof Error ? err.message : String(err) },
-            "embedPrompt failed; continuing without RAG retrieval"
-          );
-          return null;
-        }),
-        // step 10: classifyGenre(prompt),
+      // Pre-LLM parallel fanout (SPEC §7): classify genre, embed prompt,
+      // generate title — all three branches run concurrently.
+      const [classRes, embedRes, titleRes] = await Promise.allSettled([
+        classifyPrompt(prompt, request.log),
+        embedPrompt(prompt),
+        generateTitle(prompt),
       ]);
-      const genre = "other"; // step 10 replaces this with classifier output
+
+      const { genre, styleTags } =
+        classRes.status === "fulfilled"
+          ? classRes.value
+          : { genre: "other" as const, styleTags: [] };
+
+      const embedding = embedRes.status === "fulfilled" ? embedRes.value : null;
+      if (embedRes.status === "rejected") {
+        request.log.warn(
+          {
+            err:
+              embedRes.reason instanceof Error ? embedRes.reason.message : String(embedRes.reason),
+          },
+          "embedPrompt failed; continuing without RAG retrieval"
+        );
+      }
+
+      // Persist genre before streaming
+      await db.update(games).set({ genre, updatedAt: Date.now() }).where(eq(games.id, id));
+
+      // Persist title if generation succeeded; otherwise keep placeholder
+      if (titleRes.status === "fulfilled") {
+        await db
+          .update(games)
+          .set({ title: titleRes.value, updatedAt: Date.now() })
+          .where(eq(games.id, id));
+      } else {
+        request.log.warn(
+          {
+            err:
+              titleRes.reason instanceof Error ? titleRes.reason.message : String(titleRes.reason),
+          },
+          "title generation failed; keeping placeholder"
+        );
+      }
+
       const ragHtml = await retrieveExample({
         embedding,
         genre,
         log: request.log,
       });
-      const system = buildGenerationSystemPrompt({ ragExample: ragHtml });
+      const system = buildGenerationSystemPrompt({ genre, styleTags, example: ragHtml });
 
       let accumulatedCode = "";
       let streamError: Error | null = null;
