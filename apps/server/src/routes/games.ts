@@ -7,7 +7,8 @@ import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
 import { db } from "../lib/db.js";
 import { loadOwnedGame } from "../lib/ownership.js";
 import { endSSE, writeSSE, writeSSEHeaders } from "../lib/sse.js";
-import { streamGame } from "../services/llm/client.js";
+import { streamGame, streamRefinement } from "../services/llm/client.js";
+import { buildRefinementContext } from "../services/refinement/context.js";
 
 const CreateGameBody = z.object({
   prompt: z.string().min(1).max(2000),
@@ -23,6 +24,10 @@ const PatchGameBody = z.object({
 
 const ThumbnailBody = z.object({
   thumbnail: z.string().startsWith("data:image/png;base64,").max(350_000),
+});
+
+const RefineBody = z.object({
+  feedback: z.string().min(1).max(2000),
 });
 
 export async function gamesRoutes(app: FastifyInstance) {
@@ -256,5 +261,135 @@ export async function gamesRoutes(app: FastifyInstance) {
     await db.update(games).set({ thumbnail, updatedAt: Date.now() }).where(eq(games.id, id));
 
     return reply.status(204).send();
+  });
+
+  // POST /api/games/:id/refine — refinement turn with SSE streaming
+  app.post("/api/games/:id/refine", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return reply.status(400).send({ error: "Invalid id" });
+    }
+
+    const bodyResult = RefineBody.safeParse(request.body);
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        error: "Validation error",
+        issues: bodyResult.error.issues,
+      });
+    }
+
+    const { id } = paramsResult.data;
+    const { feedback } = bodyResult.data;
+    const userId = request.authSession.user.id;
+
+    const game = await loadOwnedGame(id, userId);
+    if (!game) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    if (!game.currentCode) {
+      return reply.status(400).send({ error: "Game has no code to refine" });
+    }
+
+    // Concurrency cap: 1 active stream per user
+    try {
+      acquire(userId);
+    } catch (err) {
+      if (err instanceof ConcurrencyError) {
+        return reply.status(409).send({ error: err.message });
+      }
+      throw err;
+    }
+
+    try {
+      const now = Date.now();
+      const feedbackId = randomUUID();
+
+      // Persist the feedback message
+      await db.insert(messages).values({
+        id: feedbackId,
+        gameId: id,
+        kind: "feedback",
+        content: feedback,
+        createdAt: now,
+      });
+
+      // Load past feedback messages (excluding the current one) for context
+      const pastRows = await db
+        .select({ content: messages.content })
+        .from(messages)
+        .where(eq(messages.gameId, id))
+        .orderBy(asc(messages.createdAt));
+
+      const pastFeedback = pastRows
+        .filter((r) => r.content !== feedback)
+        .filter((_, i) => {
+          // exclude the last row (the one we just inserted)
+          return i < pastRows.length - 1;
+        })
+        .filter((r) => {
+          // only feedback rows (not the initial prompt)
+          const idx = pastRows.findIndex((pr) => pr.content === r.content);
+          return idx > 0; // skip the first message (the prompt)
+        })
+        .map((r) => r.content);
+
+      const { system, prompt } = await buildRefinementContext({
+        game,
+        feedback,
+        pastFeedback,
+      });
+
+      reply.hijack();
+      writeSSEHeaders(reply);
+      writeSSE(reply, "meta", { gameId: id, placeholderTitle: game.title });
+
+      const ac = new AbortController();
+      let clientClosed = false;
+
+      request.raw.on("close", () => {
+        clientClosed = true;
+        ac.abort();
+      });
+
+      let accumulatedCode = "";
+      let streamError: Error | null = null;
+
+      try {
+        const result = await streamRefinement({ system, prompt, signal: ac.signal });
+
+        for await (const delta of result.textStream) {
+          accumulatedCode += delta;
+          if (!clientClosed) {
+            writeSSE(reply, "chunk", { delta });
+          }
+        }
+      } catch (err) {
+        streamError = err instanceof Error ? err : new Error("Unknown error");
+      }
+
+      // Persist refined code (only on clean completion, not on error or abort)
+      if (!streamError && !clientClosed && accumulatedCode) {
+        try {
+          await db
+            .update(games)
+            .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
+            .where(eq(games.id, id));
+        } catch {
+          // persistence failure is non-fatal; client already has code via chunks
+        }
+      }
+
+      if (!clientClosed) {
+        if (streamError) {
+          writeSSE(reply, "error", { message: streamError.message });
+        } else {
+          writeSSE(reply, "done", {});
+        }
+        endSSE(reply);
+      }
+    } finally {
+      release(userId);
+    }
   });
 }

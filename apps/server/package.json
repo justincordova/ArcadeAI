@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.75",
+    "@ai-sdk/openai": "^3.0.62",
     "@arcadeai/db": "workspace:*",
     "@arcadeai/shared": "workspace:*",
     "@fastify/cors": "^10.0.2",

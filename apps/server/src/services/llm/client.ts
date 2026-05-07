@@ -22,3 +22,21 @@ export async function streamGame({
     maxOutputTokens: 8192,
   });
 }
+
+export async function streamRefinement({
+  system,
+  prompt,
+  signal,
+}: {
+  system: string;
+  prompt: string;
+  signal: AbortSignal;
+}) {
+  return streamText({
+    model: anthropic(SONNET),
+    system,
+    messages: [{ role: "user", content: prompt }],
+    abortSignal: signal,
+    maxOutputTokens: 8192,
+  });
+}
