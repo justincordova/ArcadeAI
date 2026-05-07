@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lane Runner</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #1a1a2a; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #1a1a2a; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="500" height="700"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2 };
+  const LANE_COUNT = 3;
+  const ROAD_W = 360;
+  const ROAD_X = (W - ROAD_W) / 2;
+  const LANE_W = ROAD_W / LANE_COUNT;
+  const PLAYER_Y = H - 110;
+  const PLAYER_W = 50;
+  const PLAYER_H = 80;
+  const BASE_SPEED = 360;
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let player, traffic, coins, score, distance, speed, spawnTimer, scrollY;
+  let lastTime = 0;
+
+  function laneX(i) { return ROAD_X + i * LANE_W + LANE_W / 2; }
+
+  function init() {
+    player = { lane: 1, x: laneX(1), targetLane: 1 };
+    traffic = [];
+    coins = [];
+    score = 0;
+    distance = 0;
+    speed = BASE_SPEED;
+    spawnTimer = 0;
+    scrollY = 0;
+  }
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function spawn() {
+    if (Math.random() < 0.7) {
+      const lane = Math.floor(Math.random() * LANE_COUNT);
+      traffic.push({ lane, x: laneX(lane), y: -120, w: 50, h: 80, color: ["#ff5d6c", "#ffae3b", "#7df9ff", "#a23bff"][Math.floor(Math.random() * 4)] });
+    } else {
+      const lane = Math.floor(Math.random() * LANE_COUNT);
+      coins.push({ x: laneX(lane), y: -30, taken: false });
+    }
+  }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+    if (state === STATE.OVER) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+
+    distance += speed * dt;
+    speed = Math.min(BASE_SPEED + distance * 0.02, 720);
+    scrollY = (scrollY + speed * dt) % 60;
+
+    if (pressed("arrowleft") || pressed("a")) player.targetLane = Math.max(0, player.targetLane - 1);
+    if (pressed("arrowright") || pressed("d")) player.targetLane = Math.min(LANE_COUNT - 1, player.targetLane + 1);
+    const targetX = laneX(player.targetLane);
+    player.x += (targetX - player.x) * Math.min(1, dt * 18);
+    if (Math.abs(player.x - targetX) < 0.5) player.x = targetX;
+
+    spawnTimer += dt;
+    const interval = Math.max(0.35, 0.9 - distance / 30000);
+    while (spawnTimer >= interval) {
+      spawnTimer -= interval;
+      spawn();
+    }
+
+    for (const t of traffic) t.y += speed * dt;
+    traffic = traffic.filter((t) => t.y < H + 120);
+
+    for (const c of coins) c.y += speed * dt;
+    coins = coins.filter((c) => !c.taken && c.y < H + 30);
+
+    // Coin pickup
+    for (const c of coins) {
+      if (c.taken) continue;
+      const dx = c.x - player.x;
+      const dy = c.y - PLAYER_Y;
+      if (Math.abs(dx) < 24 && Math.abs(dy) < PLAYER_H / 2 + 12) {
+        c.taken = true;
+        score += 10;
+      }
+    }
+
+    // Traffic collision
+    for (const t of traffic) {
+      if (
+        Math.abs(t.x - player.x) < (t.w + PLAYER_W) / 2 - 6 &&
+        t.y + t.h / 2 > PLAYER_Y - PLAYER_H / 2 &&
+        t.y - t.h / 2 < PLAYER_Y + PLAYER_H / 2
+      ) {
+        state = STATE.OVER;
+        return;
+      }
+    }
+  }
+
+  function drawCar(x, y, w, h, color, isPlayer) {
+    ctx.fillStyle = color;
+    ctx.fillRect(x - w / 2, y - h / 2, w, h);
+    // Window
+    ctx.fillStyle = "#0a1a2a";
+    ctx.fillRect(x - w / 2 + 6, y - h / 2 + 8, w - 12, 18);
+    ctx.fillRect(x - w / 2 + 6, y + h / 2 - 26, w - 12, 18);
+    // Wheels
+    ctx.fillStyle = "#222";
+    ctx.fillRect(x - w / 2 - 3, y - h / 2 + 4, 4, 14);
+    ctx.fillRect(x + w / 2 - 1, y - h / 2 + 4, 4, 14);
+    ctx.fillRect(x - w / 2 - 3, y + h / 2 - 18, 4, 14);
+    ctx.fillRect(x + w / 2 - 1, y + h / 2 - 18, 4, 14);
+    if (isPlayer) {
+      // Headlights up
+      ctx.fillStyle = "rgba(255,238,180,0.5)";
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, y - h / 2);
+      ctx.lineTo(x + w / 2, y - h / 2);
+      ctx.lineTo(x + w / 2 + 16, y - h / 2 - 60);
+      ctx.lineTo(x - w / 2 - 16, y - h / 2 - 60);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function render() {
+    // Sky
+    ctx.fillStyle = "#1a1a2a";
+    ctx.fillRect(0, 0, W, H);
+
+    // Road
+    ctx.fillStyle = "#2a2a3a";
+    ctx.fillRect(ROAD_X, 0, ROAD_W, H);
+
+    // Lane dividers (animated dashes)
+    ctx.fillStyle = "#fff";
+    for (let i = 1; i < LANE_COUNT; i++) {
+      const x = ROAD_X + i * LANE_W - 2;
+      for (let y = -60 + scrollY; y < H; y += 60) ctx.fillRect(x, y, 4, 30);
+    }
+    // Edges
+    ctx.fillStyle = "#ffd23b";
+    ctx.fillRect(ROAD_X - 4, 0, 4, H);
+    ctx.fillRect(ROAD_X + ROAD_W, 0, 4, H);
+
+    if (state === STATE.TITLE) {
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 44px sans-serif";
+      ctx.fillText("LANE RUNNER", W / 2, H / 2 - 30);
+      ctx.font = "18px sans-serif";
+      ctx.fillStyle = "#aab";
+      ctx.fillText("Arrows or A/D to switch lanes", W / 2, H / 2 + 4);
+      ctx.fillText("Dodge cars, grab coins", W / 2, H / 2 + 30);
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 64);
+      return;
+    }
+
+    for (const c of coins) {
+      if (c.taken) continue;
+      ctx.fillStyle = "#ffd23b";
+      ctx.beginPath(); ctx.arc(c.x, c.y, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#a48420";
+      ctx.beginPath(); ctx.arc(c.x, c.y, 5, 0, Math.PI * 2); ctx.fill();
+    }
+    for (const t of traffic) drawCar(t.x, t.y, t.w, t.h, t.color, false);
+    drawCar(player.x, PLAYER_Y, PLAYER_W, PLAYER_H, "#3bff7a", true);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText("Score: " + score, 14, 28);
+    ctx.textAlign = "right";
+    ctx.fillText("Distance: " + Math.floor(distance / 10) + "m", W - 14, 28);
+
+    if (state === STATE.OVER) {
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 46px sans-serif";
+      ctx.fillText("CRASHED", W / 2, H / 2 - 10);
+      ctx.font = "20px sans-serif";
+      ctx.fillStyle = "#aab";
+      ctx.fillText("Score " + score + " — SPACE to retry", W / 2, H / 2 + 26);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>

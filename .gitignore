@@ -11,3 +11,4 @@ apps/server/data/
 *.log
 .tanstack/
 apps/web/src/routeTree.gen.ts
+apps/server/scripts/rag-embeddings/

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Arkanoid Powerups</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #101522; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #101522; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="600"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2, WIN: 3 };
+  const BASE_PADDLE_W = 100;
+  const PADDLE_H = 14;
+  const BALL_R = 7;
+  const ROWS = 5;
+  const COLS = 10;
+  const BRICK_W = 70;
+  const BRICK_H = 24;
+  const BRICK_GAP = 6;
+  const POWERUP_TYPES = ["wide", "slow", "multi"];
+  const POWERUP_COLOR = { wide: "#3bd6ff", slow: "#8aff3b", multi: "#ff3bc1" };
+  const POWERUP_DURATION = 8.0;
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let paddle, balls, bricks, powerups, score, lives;
+  let wideTimer = 0, slowTimer = 0;
+  let lastTime = 0;
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function buildBricks() {
+    const result = [];
+    const totalW = COLS * BRICK_W + (COLS - 1) * BRICK_GAP;
+    const startX = (W - totalW) / 2;
+    const startY = 60;
+    const colors = ["#ff5d6c", "#ffae3b", "#ffe83b", "#7dff5d", "#5db4ff"];
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        result.push({
+          x: startX + c * (BRICK_W + BRICK_GAP),
+          y: startY + r * (BRICK_H + BRICK_GAP),
+          w: BRICK_W,
+          h: BRICK_H,
+          color: colors[r % colors.length],
+          alive: true,
+        });
+      }
+    }
+    return result;
+  }
+
+  function init() {
+    paddle = { x: W / 2 - BASE_PADDLE_W / 2, y: H - 40, w: BASE_PADDLE_W };
+    balls = [{ x: W / 2, y: H - 80, vx: 200, vy: -260 }];
+    bricks = buildBricks();
+    powerups = [];
+    score = 0;
+    lives = 3;
+    wideTimer = 0;
+    slowTimer = 0;
+  }
+
+  function spawnPowerup(x, y) {
+    if (Math.random() > 0.18) return;
+    const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+    powerups.push({ x, y, vy: 130, type });
+  }
+
+  function applyPowerup(type) {
+    if (type === "wide") { paddle.w = BASE_PADDLE_W * 1.7; wideTimer = POWERUP_DURATION; }
+    else if (type === "slow") { slowTimer = POWERUP_DURATION; }
+    else if (type === "multi") {
+      const newBalls = [];
+      for (const b of balls) {
+        newBalls.push({ x: b.x, y: b.y, vx: -b.vx, vy: b.vy });
+        newBalls.push({ x: b.x, y: b.y, vx: b.vy, vy: -b.vx });
+      }
+      balls.push(...newBalls);
+    }
+  }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ")) { init(); state = STATE.PLAY; }
+      return;
+    }
+    if (state === STATE.OVER || state === STATE.WIN) {
+      if (pressed(" ")) { init(); state = STATE.PLAY; }
+      return;
+    }
+
+    const speed = 600;
+    if (keys["arrowleft"] || keys["a"]) paddle.x -= speed * dt;
+    if (keys["arrowright"] || keys["d"]) paddle.x += speed * dt;
+    paddle.x = Math.max(0, Math.min(W - paddle.w, paddle.x));
+
+    if (wideTimer > 0) { wideTimer -= dt; if (wideTimer <= 0) paddle.w = BASE_PADDLE_W; }
+    if (slowTimer > 0) slowTimer -= dt;
+    const slowFactor = slowTimer > 0 ? 0.6 : 1;
+
+    // Update each ball
+    for (const ball of balls) {
+      ball.x += ball.vx * slowFactor * dt;
+      ball.y += ball.vy * slowFactor * dt;
+      if (ball.x - BALL_R < 0) { ball.x = BALL_R; ball.vx = -ball.vx; }
+      if (ball.x + BALL_R > W) { ball.x = W - BALL_R; ball.vx = -ball.vx; }
+      if (ball.y - BALL_R < 0) { ball.y = BALL_R; ball.vy = -ball.vy; }
+
+      // Paddle collision
+      if (
+        ball.vy > 0 &&
+        ball.y + BALL_R > paddle.y &&
+        ball.y - BALL_R < paddle.y + PADDLE_H &&
+        ball.x > paddle.x &&
+        ball.x < paddle.x + paddle.w
+      ) {
+        ball.y = paddle.y - BALL_R;
+        const offset = (ball.x - (paddle.x + paddle.w / 2)) / (paddle.w / 2);
+        const angle = offset * (Math.PI / 3);
+        const sp = Math.hypot(ball.vx, ball.vy);
+        ball.vx = Math.sin(angle) * sp;
+        ball.vy = -Math.cos(angle) * sp;
+      }
+
+      // Brick collisions
+      for (const b of bricks) {
+        if (!b.alive) continue;
+        if (ball.x + BALL_R > b.x && ball.x - BALL_R < b.x + b.w && ball.y + BALL_R > b.y && ball.y - BALL_R < b.y + b.h) {
+          b.alive = false;
+          score += 10;
+          spawnPowerup(b.x + b.w / 2, b.y + b.h / 2);
+          const dxLeft = ball.x + BALL_R - b.x;
+          const dxRight = b.x + b.w - (ball.x - BALL_R);
+          const dyTop = ball.y + BALL_R - b.y;
+          const dyBottom = b.y + b.h - (ball.y - BALL_R);
+          const minOverlap = Math.min(dxLeft, dxRight, dyTop, dyBottom);
+          if (minOverlap === dyTop || minOverlap === dyBottom) ball.vy = -ball.vy;
+          else ball.vx = -ball.vx;
+          break;
+        }
+      }
+    }
+
+    // Drop balls that fell off
+    balls = balls.filter((b) => b.y - BALL_R <= H);
+    if (balls.length === 0) {
+      lives--;
+      if (lives <= 0) { state = STATE.OVER; return; }
+      balls = [{ x: W / 2, y: H - 80, vx: 200, vy: -260 }];
+    }
+
+    // Powerups
+    for (const p of powerups) {
+      p.y += p.vy * dt;
+      if (
+        p.y + 10 > paddle.y &&
+        p.y - 10 < paddle.y + PADDLE_H &&
+        p.x + 10 > paddle.x &&
+        p.x - 10 < paddle.x + paddle.w
+      ) {
+        applyPowerup(p.type);
+        p.collected = true;
+        score += 25;
+      }
+    }
+    powerups = powerups.filter((p) => !p.collected && p.y < H + 20);
+
+    if (bricks.every((b) => !b.alive)) state = STATE.WIN;
+  }
+
+  function render() {
+    ctx.fillStyle = "#101522";
+    ctx.fillRect(0, 0, W, H);
+
+    if (state === STATE.TITLE) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 52px sans-serif";
+      ctx.fillText("ARKANOID", W / 2, H / 2 - 60);
+      ctx.fillStyle = "#aab";
+      ctx.font = "18px sans-serif";
+      ctx.fillText("Arrow keys to move — catch power-ups", W / 2, H / 2 - 20);
+      ctx.fillText("Wide paddle, slow ball, or multi-ball", W / 2, H / 2 + 6);
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 50);
+      return;
+    }
+
+    // Bricks
+    for (const b of bricks) {
+      if (!b.alive) continue;
+      ctx.fillStyle = b.color;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      ctx.fillRect(b.x, b.y, b.w, 4);
+    }
+
+    // Paddle
+    ctx.fillStyle = wideTimer > 0 ? "#3bd6ff" : "#fff";
+    ctx.fillRect(paddle.x, paddle.y, paddle.w, PADDLE_H);
+
+    // Balls
+    ctx.fillStyle = "#fff";
+    for (const b of balls) {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, BALL_R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Powerups
+    for (const p of powerups) {
+      ctx.fillStyle = POWERUP_COLOR[p.type];
+      ctx.fillRect(p.x - 14, p.y - 8, 28, 16);
+      ctx.fillStyle = "#000";
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const label = p.type === "wide" ? "W" : p.type === "slow" ? "S" : "M";
+      ctx.fillText(label, p.x, p.y);
+      ctx.textBaseline = "alphabetic";
+    }
+
+    // HUD
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("Score: " + score, 16, 26);
+    ctx.textAlign = "right";
+    ctx.fillText("Lives: " + lives, W - 16, 26);
+
+    if (state === STATE.OVER || state === STATE.WIN) {
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 48px sans-serif";
+      ctx.fillText(state === STATE.WIN ? "STAGE CLEAR" : "GAME OVER", W / 2, H / 2 - 10);
+      ctx.font = "20px sans-serif";
+      ctx.fillStyle = "#aab";
+      ctx.fillText("Score " + score + " — press SPACE to retry", W / 2, H / 2 + 30);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>

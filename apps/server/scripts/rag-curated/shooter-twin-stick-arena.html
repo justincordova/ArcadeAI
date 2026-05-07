@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Twin-Stick Arena</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0c0c10; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #0c0c10; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="600"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2 };
+  const PLAYER_R = 14;
+  const PLAYER_SPEED = 240;
+  const BULLET_SPEED = 540;
+  const BULLET_LIFE = 1.2;
+  const SHOT_COOLDOWN = 0.16;
+  const ENEMY_R = 14;
+  const ENEMY_SPEED_BASE = 80;
+  const SPAWN_INTERVAL_BASE = 1.6;
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let player, bullets, enemies, kills, hp, fireCooldown, spawnTimer, gameTime;
+  let lastTime = 0;
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function init() {
+    player = { x: W / 2, y: H / 2 };
+    bullets = [];
+    enemies = [];
+    kills = 0;
+    hp = 3;
+    fireCooldown = 0;
+    spawnTimer = 0;
+    gameTime = 0;
+  }
+
+  function spawnEnemy() {
+    let x, y;
+    if (Math.random() < 0.5) { x = Math.random() < 0.5 ? -20 : W + 20; y = Math.random() * H; }
+    else { y = Math.random() < 0.5 ? -20 : H + 20; x = Math.random() * W; }
+    enemies.push({ x, y, hp: 1 });
+  }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+    if (state === STATE.OVER) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+
+    gameTime += dt;
+
+    // Movement
+    let mx = 0, my = 0;
+    if (keys["w"]) my -= 1;
+    if (keys["s"]) my += 1;
+    if (keys["a"]) mx -= 1;
+    if (keys["d"]) mx += 1;
+    const len = Math.hypot(mx, my);
+    if (len > 0) { mx /= len; my /= len; }
+    player.x += mx * PLAYER_SPEED * dt;
+    player.y += my * PLAYER_SPEED * dt;
+    player.x = Math.max(PLAYER_R, Math.min(W - PLAYER_R, player.x));
+    player.y = Math.max(PLAYER_R, Math.min(H - PLAYER_R, player.y));
+
+    // Aim with arrow keys (8-way)
+    let ax = 0, ay = 0;
+    if (keys["arrowup"]) ay -= 1;
+    if (keys["arrowdown"]) ay += 1;
+    if (keys["arrowleft"]) ax -= 1;
+    if (keys["arrowright"]) ax += 1;
+    fireCooldown -= dt;
+    if ((ax !== 0 || ay !== 0) && fireCooldown <= 0) {
+      const al = Math.hypot(ax, ay);
+      ax /= al; ay /= al;
+      bullets.push({ x: player.x, y: player.y, vx: ax * BULLET_SPEED, vy: ay * BULLET_SPEED, life: BULLET_LIFE });
+      fireCooldown = SHOT_COOLDOWN;
+    }
+
+    for (const b of bullets) {
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+    }
+    bullets = bullets.filter((b) => b.life > 0 && b.x > -20 && b.x < W + 20 && b.y > -20 && b.y < H + 20);
+
+    // Spawn enemies (rate ramps up)
+    const interval = Math.max(0.35, SPAWN_INTERVAL_BASE - gameTime * 0.018);
+    spawnTimer += dt;
+    while (spawnTimer >= interval) {
+      spawnTimer -= interval;
+      spawnEnemy();
+    }
+
+    // Enemy AI
+    const enemySpeed = ENEMY_SPEED_BASE + Math.min(80, gameTime * 1.6);
+    for (const e of enemies) {
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const d = Math.hypot(dx, dy) || 1;
+      e.x += (dx / d) * enemySpeed * dt;
+      e.y += (dy / d) * enemySpeed * dt;
+    }
+
+    // Bullet-enemy
+    for (const b of bullets) {
+      for (const e of enemies) {
+        if (e.dead) continue;
+        const dx = e.x - b.x;
+        const dy = e.y - b.y;
+        if (dx * dx + dy * dy < (ENEMY_R + 3) * (ENEMY_R + 3)) {
+          e.dead = true;
+          b.dead = true;
+          kills++;
+          break;
+        }
+      }
+    }
+    bullets = bullets.filter((b) => !b.dead);
+    enemies = enemies.filter((e) => !e.dead);
+
+    // Enemy-player
+    for (const e of enemies) {
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+      if (dx * dx + dy * dy < (ENEMY_R + PLAYER_R) * (ENEMY_R + PLAYER_R)) {
+        e.dead = true;
+        hp--;
+        if (hp <= 0) { state = STATE.OVER; return; }
+      }
+    }
+    enemies = enemies.filter((e) => !e.dead);
+  }
+
+  function render() {
+    ctx.fillStyle = "#0c0c10";
+    ctx.fillRect(0, 0, W, H);
+
+    // Grid
+    ctx.strokeStyle = "rgba(125,229,255,0.06)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 40) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let y = 0; y < H; y += 40) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+
+    if (state === STATE.TITLE) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#7df9ff";
+      ctx.font = "bold 50px sans-serif";
+      ctx.fillText("ARENA", W / 2, H / 2 - 50);
+      ctx.fillStyle = "#aab";
+      ctx.font = "18px sans-serif";
+      ctx.fillText("WASD to move, arrow keys to shoot (8 directions)", W / 2, H / 2);
+      ctx.fillText("3 lives — survive as long as you can", W / 2, H / 2 + 26);
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 60);
+      return;
+    }
+
+    for (const e of enemies) {
+      ctx.fillStyle = "#ff5d6c";
+      ctx.shadowColor = "#ff5d6c";
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, ENEMY_R, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "#7df9ff";
+    ctx.shadowColor = "#7df9ff";
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, PLAYER_R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = "#fff";
+    for (const b of bullets) {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("Kills: " + kills, 12, 24);
+    ctx.fillText("Time: " + gameTime.toFixed(1) + "s", 12, 44);
+    ctx.textAlign = "right";
+    ctx.fillText("HP: " + hp, W - 12, 24);
+
+    if (state === STATE.OVER) {
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 48px sans-serif";
+      ctx.fillText("GAME OVER", W / 2, H / 2 - 10);
+      ctx.font = "20px sans-serif";
+      ctx.fillStyle = "#aab";
+      ctx.fillText(kills + " kills in " + gameTime.toFixed(1) + "s", W / 2, H / 2 + 24);
+      ctx.fillText("Press SPACE to retry", W / 2, H / 2 + 54);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>

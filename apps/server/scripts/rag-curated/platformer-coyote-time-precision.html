@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Precision Jumper</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #15121f; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #15121f; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="500"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2, WIN: 3 };
+  const GRAVITY = 1900;
+  const JUMP = -640;
+  const JUMP_RELEASE_CUT = 0.45; // variable jump height
+  const MOVE = 280;
+  const COYOTE = 0.10;
+  const JUMP_BUFFER = 0.10;
+  const PLAYER_W = 22;
+  const PLAYER_H = 26;
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let player, platforms, enemies, goal, room, coyoteTimer, jumpBuffer, deaths;
+  let lastTime = 0;
+
+  // Three rooms (single-screen). Each defines platforms, enemies (bouncing
+  // patrols), and a goal. Reach the goal to advance. Last goal = WIN.
+  const ROOMS = [
+    {
+      platforms: [
+        { x: 0, y: 460, w: 240, h: 40 },
+        { x: 320, y: 380, w: 100, h: 18 },
+        { x: 470, y: 320, w: 100, h: 18 },
+        { x: 620, y: 260, w: 180, h: 18 },
+        { x: 540, y: 460, w: 260, h: 40 },
+      ],
+      enemies: [
+        { x: 360, y: 360, w: 22, h: 22, minX: 320, maxX: 400, vx: 60 },
+      ],
+      goal: { x: 720, y: 220, w: 24, h: 40 },
+    },
+    {
+      platforms: [
+        { x: 0, y: 460, w: 140, h: 40 },
+        { x: 220, y: 410, w: 80, h: 18 },
+        { x: 360, y: 360, w: 80, h: 18 },
+        { x: 240, y: 280, w: 80, h: 18 },
+        { x: 380, y: 220, w: 80, h: 18 },
+        { x: 540, y: 280, w: 100, h: 18 },
+        { x: 700, y: 360, w: 100, h: 18 },
+        { x: 700, y: 460, w: 100, h: 40 },
+      ],
+      enemies: [
+        { x: 240, y: 388, w: 22, h: 22, minX: 220, maxX: 280, vx: 70 },
+        { x: 540, y: 258, w: 22, h: 22, minX: 540, maxX: 620, vx: 80 },
+      ],
+      goal: { x: 730, y: 320, w: 24, h: 40 },
+    },
+    {
+      platforms: [
+        { x: 0, y: 460, w: 100, h: 40 },
+        { x: 160, y: 380, w: 60, h: 18 },
+        { x: 280, y: 320, w: 60, h: 18 },
+        { x: 410, y: 260, w: 60, h: 18 },
+        { x: 540, y: 200, w: 60, h: 18 },
+        { x: 660, y: 260, w: 60, h: 18 },
+        { x: 720, y: 380, w: 80, h: 18 },
+        { x: 580, y: 460, w: 220, h: 40 },
+      ],
+      enemies: [
+        { x: 280, y: 298, w: 22, h: 22, minX: 280, maxX: 320, vx: 90 },
+        { x: 580, y: 438, w: 22, h: 22, minX: 580, maxX: 760, vx: 110 },
+      ],
+      goal: { x: 740, y: 420, w: 24, h: 40 },
+    },
+  ];
+
+  function loadRoom(i) {
+    const r = ROOMS[i];
+    platforms = r.platforms.map((p) => ({ ...p }));
+    enemies = r.enemies.map((e) => ({ ...e, alive: true }));
+    goal = { ...r.goal };
+    player = { x: 30, y: 410, vx: 0, vy: 0, onGround: false };
+  }
+
+  function init() {
+    room = 0;
+    deaths = 0;
+    coyoteTimer = 0;
+    jumpBuffer = 0;
+    loadRoom(0);
+  }
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+    if (state === STATE.OVER || state === STATE.WIN) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+
+    let dir = 0;
+    if (keys["arrowleft"] || keys["a"]) dir -= 1;
+    if (keys["arrowright"] || keys["d"]) dir += 1;
+    player.vx = dir * MOVE;
+
+    // Jump input handling
+    if (pressed(" ") || pressed("arrowup") || pressed("w")) jumpBuffer = JUMP_BUFFER;
+    jumpBuffer -= dt;
+    if (player.onGround) coyoteTimer = COYOTE; else coyoteTimer -= dt;
+    if (jumpBuffer > 0 && coyoteTimer > 0) {
+      player.vy = JUMP;
+      jumpBuffer = 0;
+      coyoteTimer = 0;
+      player.onGround = false;
+    }
+    // Variable jump height: cut velocity if jump released early on the way up
+    const jumpHeld = keys[" "] || keys["arrowup"] || keys["w"];
+    if (!jumpHeld && player.vy < 0) player.vy *= Math.pow(JUMP_RELEASE_CUT, dt * 60);
+
+    player.vy += GRAVITY * dt;
+    player.x += player.vx * dt;
+    if (player.x < 0) player.x = 0;
+    if (player.x > W - PLAYER_W) player.x = W - PLAYER_W;
+
+    const oldY = player.y;
+    player.y += player.vy * dt;
+    player.onGround = false;
+    if (player.vy >= 0) {
+      for (const p of platforms) {
+        if (
+          player.x + PLAYER_W > p.x &&
+          player.x < p.x + p.w &&
+          oldY + PLAYER_H <= p.y + 1 &&
+          player.y + PLAYER_H >= p.y
+        ) {
+          player.y = p.y - PLAYER_H;
+          player.vy = 0;
+          player.onGround = true;
+        }
+      }
+    } else {
+      for (const p of platforms) {
+        if (
+          player.x + PLAYER_W > p.x &&
+          player.x < p.x + p.w &&
+          oldY >= p.y + p.h &&
+          player.y <= p.y + p.h
+        ) {
+          player.y = p.y + p.h;
+          player.vy = 0;
+        }
+      }
+    }
+    if (player.y > H + 60) { deaths++; loadRoom(room); return; }
+
+    // Enemies patrol; stomp from above defeats; touching from side dies
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      e.x += e.vx * dt;
+      if (e.x < e.minX) { e.x = e.minX; e.vx = -e.vx; }
+      else if (e.x + e.w > e.maxX) { e.x = e.maxX - e.w; e.vx = -e.vx; }
+
+      const overlapX = player.x + PLAYER_W > e.x && player.x < e.x + e.w;
+      const overlapY = player.y + PLAYER_H > e.y && player.y < e.y + e.h;
+      if (overlapX && overlapY) {
+        // Stomp: feet are above the enemy's middle, falling
+        if (player.vy > 0 && player.y + PLAYER_H - e.y < 14) {
+          e.alive = false;
+          player.vy = JUMP * 0.7;
+        } else {
+          deaths++;
+          loadRoom(room);
+          return;
+        }
+      }
+    }
+
+    // Goal
+    if (
+      player.x + PLAYER_W > goal.x &&
+      player.x < goal.x + goal.w &&
+      player.y + PLAYER_H > goal.y &&
+      player.y < goal.y + goal.h
+    ) {
+      if (room < ROOMS.length - 1) { room++; loadRoom(room); }
+      else { state = STATE.WIN; }
+    }
+  }
+
+  function render() {
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#15121f");
+    grad.addColorStop(1, "#2a1f3f");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    if (state === STATE.TITLE) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 50px sans-serif";
+      ctx.fillText("PRECISION", W / 2, H / 2 - 30);
+      ctx.fillStyle = "#aab";
+      ctx.font = "18px sans-serif";
+      ctx.fillText("Arrows + SPACE — coyote time + variable jump", W / 2, H / 2);
+      ctx.fillText("Stomp enemies, reach the door", W / 2, H / 2 + 26);
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 56);
+      return;
+    }
+
+    for (const p of platforms) {
+      ctx.fillStyle = "#3a4a78";
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.fillStyle = "#5a6fa8";
+      ctx.fillRect(p.x, p.y, p.w, 4);
+    }
+
+    // Goal door
+    ctx.fillStyle = "#3bff7a";
+    ctx.fillRect(goal.x, goal.y, goal.w, goal.h);
+    ctx.fillStyle = "#0a0";
+    ctx.fillRect(goal.x + goal.w - 6, goal.y + goal.h / 2 - 2, 4, 4);
+
+    for (const e of enemies) {
+      if (!e.alive) continue;
+      ctx.fillStyle = "#ff5d6c";
+      ctx.fillRect(e.x, e.y, e.w, e.h);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(e.x + 4, e.y + 6, 4, 4);
+      ctx.fillRect(e.x + e.w - 8, e.y + 6, 4, 4);
+    }
+
+    ctx.fillStyle = "#ffd23b";
+    ctx.fillRect(player.x, player.y, PLAYER_W, PLAYER_H);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(player.x + 5, player.y + 8, 3, 3);
+    ctx.fillRect(player.x + PLAYER_W - 8, player.y + 8, 3, 3);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("Room: " + (room + 1) + " / " + ROOMS.length, 12, 24);
+    ctx.textAlign = "right";
+    ctx.fillText("Deaths: " + deaths, W - 12, 24);
+
+    if (state === STATE.WIN) {
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 48px sans-serif";
+      ctx.fillText("YOU WIN", W / 2, H / 2 - 10);
+      ctx.font = "20px sans-serif";
+      ctx.fillStyle = "#aab";
+      ctx.fillText(deaths + " deaths — SPACE to play again", W / 2, H / 2 + 26);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>

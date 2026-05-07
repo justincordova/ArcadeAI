@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rocket Drift</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #050018; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #050018; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="500" height="700"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2 };
+  const GRAVITY = 900;
+  const FLAP = -360;
+  const ASTEROID_INTERVAL = 0.85;
+  const ASTEROID_SPEED = 220;
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let rocket, asteroids, stars, score, spawnTimer, distance;
+  let lastTime = 0;
+
+  function init() {
+    rocket = { x: 110, y: H / 2, vy: 0, w: 24, h: 36, thrust: 0 };
+    asteroids = [];
+    stars = [];
+    for (let i = 0; i < 60; i++) {
+      stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.4 + 0.4, speed: 30 + Math.random() * 70 });
+    }
+    score = 0;
+    spawnTimer = 0;
+    distance = 0;
+  }
+
+  function spawnAsteroid() {
+    const r = 18 + Math.random() * 26;
+    asteroids.push({
+      x: W + r,
+      y: 60 + Math.random() * (H - 120),
+      r,
+      drift: (Math.random() - 0.5) * 60,
+      passed: false,
+      seed: Math.random() * 1000,
+    });
+  }
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ") || pressed("arrowup")) { init(); state = STATE.PLAY; rocket.vy = FLAP; }
+      return;
+    }
+    if (state === STATE.OVER) {
+      if (pressed(" ") || pressed("arrowup")) { init(); state = STATE.PLAY; rocket.vy = FLAP; }
+      return;
+    }
+
+    if (pressed(" ") || pressed("arrowup")) { rocket.vy = FLAP; rocket.thrust = 0.18; }
+    rocket.thrust = Math.max(0, rocket.thrust - dt);
+
+    rocket.vy += GRAVITY * dt;
+    rocket.y += rocket.vy * dt;
+
+    if (rocket.y - rocket.h / 2 < 0) { rocket.y = rocket.h / 2; rocket.vy = 0; }
+    if (rocket.y + rocket.h / 2 > H) { state = STATE.OVER; return; }
+
+    // Stars parallax
+    for (const s of stars) {
+      s.x -= s.speed * dt;
+      if (s.x < 0) { s.x = W; s.y = Math.random() * H; }
+    }
+
+    spawnTimer += dt;
+    if (spawnTimer >= ASTEROID_INTERVAL) {
+      spawnTimer -= ASTEROID_INTERVAL;
+      spawnAsteroid();
+    }
+
+    distance += dt * ASTEROID_SPEED * 0.05;
+
+    for (const a of asteroids) {
+      a.x -= ASTEROID_SPEED * dt;
+      a.y += a.drift * dt;
+      if (a.y < a.r) { a.y = a.r; a.drift = -a.drift; }
+      if (a.y > H - a.r) { a.y = H - a.r; a.drift = -a.drift; }
+      if (!a.passed && a.x + a.r < rocket.x - rocket.w / 2) { a.passed = true; score++; }
+
+      // Circle-rect (approx) collision
+      const dx = Math.max(rocket.x - rocket.w / 2 - a.x, 0, a.x - (rocket.x + rocket.w / 2));
+      const dy = Math.max(rocket.y - rocket.h / 2 - a.y, 0, a.y - (rocket.y + rocket.h / 2));
+      if (dx * dx + dy * dy < a.r * a.r) {
+        state = STATE.OVER;
+      }
+    }
+    asteroids = asteroids.filter((a) => a.x + a.r > 0);
+  }
+
+  function drawAsteroid(a) {
+    ctx.save();
+    ctx.translate(a.x, a.y);
+    ctx.fillStyle = "#7a6650";
+    ctx.beginPath();
+    const points = 9;
+    for (let i = 0; i < points; i++) {
+      const ang = (i / points) * Math.PI * 2;
+      const radius = a.r * (0.78 + 0.22 * Math.sin(a.seed + i * 1.3));
+      const x = Math.cos(ang) * radius;
+      const y = Math.sin(ang) * radius;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath();
+    ctx.arc(-a.r * 0.3, a.r * 0.3, a.r * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawRocket() {
+    const { x, y, w, h } = rocket;
+    if (rocket.thrust > 0) {
+      ctx.fillStyle = "#ff8a3b";
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2 + 2, y + h / 2 - 4);
+      ctx.lineTo(x - w / 2 + 4, y + h / 2 + 12 + Math.random() * 8);
+      ctx.lineTo(x + w / 2 - 4, y + h / 2 + 12 + Math.random() * 8);
+      ctx.lineTo(x + w / 2 - 2, y + h / 2 - 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#ffd23b";
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y + h / 2 - 4);
+      ctx.lineTo(x, y + h / 2 + 6 + Math.random() * 4);
+      ctx.lineTo(x + 4, y + h / 2 - 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = "#dde2ec";
+    ctx.fillRect(x - w / 2, y - h / 2, w, h);
+    ctx.fillStyle = "#ff5d6c";
+    ctx.beginPath();
+    ctx.moveTo(x, y - h / 2 - 8);
+    ctx.lineTo(x - w / 2, y - h / 2 + 4);
+    ctx.lineTo(x + w / 2, y - h / 2 + 4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#7df9ff";
+    ctx.beginPath();
+    ctx.arc(x, y - 4, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function render() {
+    ctx.fillStyle = "#050018";
+    ctx.fillRect(0, 0, W, H);
+    for (const s of stars) {
+      ctx.fillStyle = "rgba(255,255,255," + Math.min(1, s.r) + ")";
+      ctx.fillRect(s.x, s.y, s.r, s.r);
+    }
+
+    for (const a of asteroids) drawAsteroid(a);
+    drawRocket();
+
+    if (state === STATE.TITLE) {
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 44px sans-serif";
+      ctx.fillText("ROCKET DRIFT", W / 2, H / 2 - 30);
+      ctx.font = "18px sans-serif";
+      ctx.fillStyle = "#bcd";
+      ctx.fillText("SPACE to flap", W / 2, H / 2 + 4);
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 38);
+      return;
+    }
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("Score: " + score, 12, 24);
+    ctx.textAlign = "right";
+    ctx.fillText("Dist: " + Math.floor(distance) + "m", W - 12, 24);
+
+    if (state === STATE.OVER) {
+      ctx.fillStyle = "rgba(0,0,0,0.65)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 44px sans-serif";
+      ctx.fillText("CRASHED", W / 2, H / 2 - 20);
+      ctx.font = "20px sans-serif";
+      ctx.fillStyle = "#bcd";
+      ctx.fillText("Score " + score + " — SPACE to retry", W / 2, H / 2 + 16);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>

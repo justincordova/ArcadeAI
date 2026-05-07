@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rhythm Tap</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0c0a18; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #0c0a18; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="500" height="700"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2 };
+  const LANES = 4;
+  const LANE_KEYS = ["d", "f", "j", "k"];
+  const LANE_COLORS = ["#ff5d6c", "#ffae3b", "#3bff7a", "#3bd6ff"];
+  const LANE_W = 90;
+  const LANES_X = (W - LANES * LANE_W) / 2;
+  const HIT_LINE_Y = H - 100;
+  const NOTE_FALL_TIME = 1.4; // seconds from spawn to hit line
+  const HIT_WINDOW_PERFECT = 0.08;
+  const HIT_WINDOW_GOOD = 0.18;
+  const SONG_LENGTH = 50; // seconds
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let notes, songTime, score, combo, multiplier, lastJudge, judgeTimer, missCount;
+  let lastTime = 0;
+
+  // Generate a deterministic-ish "song" of note times per lane
+  function makeChart() {
+    const chart = [];
+    let t = 1.5;
+    while (t < SONG_LENGTH - 1) {
+      const lane = Math.floor(Math.random() * LANES);
+      chart.push({ t, lane });
+      // Occasionally add a chord (two simultaneous)
+      if (Math.random() < 0.18) {
+        let other = Math.floor(Math.random() * LANES);
+        while (other === lane) other = Math.floor(Math.random() * LANES);
+        chart.push({ t, lane: other });
+      }
+      t += 0.32 + Math.random() * 0.45;
+    }
+    return chart;
+  }
+
+  function init() {
+    notes = makeChart().map((n) => ({ ...n, hit: false, missed: false }));
+    songTime = 0;
+    score = 0;
+    combo = 0;
+    multiplier = 1;
+    lastJudge = "";
+    judgeTimer = 0;
+    missCount = 0;
+  }
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function judgeHit(diff) {
+    const abs = Math.abs(diff);
+    if (abs <= HIT_WINDOW_PERFECT) return "PERFECT";
+    if (abs <= HIT_WINDOW_GOOD) return "GOOD";
+    return null;
+  }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+    if (state === STATE.OVER) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+
+    songTime += dt;
+    if (judgeTimer > 0) judgeTimer -= dt;
+
+    // Process key presses for hits
+    for (let lane = 0; lane < LANES; lane++) {
+      if (pressed(LANE_KEYS[lane])) {
+        // Find nearest unhit note in this lane within hit window
+        let bestNote = null, bestAbs = Infinity;
+        for (const n of notes) {
+          if (n.lane !== lane || n.hit || n.missed) continue;
+          const diff = n.t - songTime;
+          if (Math.abs(diff) < bestAbs && Math.abs(diff) <= HIT_WINDOW_GOOD) {
+            bestAbs = Math.abs(diff);
+            bestNote = n;
+          }
+        }
+        if (bestNote) {
+          const diff = bestNote.t - songTime;
+          const j = judgeHit(diff);
+          if (j) {
+            bestNote.hit = true;
+            combo++;
+            multiplier = 1 + Math.min(3, Math.floor(combo / 10));
+            const base = j === "PERFECT" ? 100 : 50;
+            score += base * multiplier;
+            lastJudge = j;
+            judgeTimer = 0.6;
+          }
+        }
+      }
+    }
+
+    // Mark notes as missed if they pass the hit line + window
+    for (const n of notes) {
+      if (n.hit || n.missed) continue;
+      if (songTime > n.t + HIT_WINDOW_GOOD) {
+        n.missed = true;
+        combo = 0;
+        multiplier = 1;
+        missCount++;
+        lastJudge = "MISS";
+        judgeTimer = 0.5;
+      }
+    }
+
+    // Song ends
+    if (songTime > SONG_LENGTH) state = STATE.OVER;
+  }
+
+  function laneX(i) { return LANES_X + i * LANE_W; }
+
+  function render() {
+    ctx.fillStyle = "#0c0a18";
+    ctx.fillRect(0, 0, W, H);
+
+    if (state === STATE.TITLE) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 48px sans-serif";
+      ctx.fillText("RHYTHM TAP", W / 2, H / 2 - 50);
+      ctx.fillStyle = "#aab";
+      ctx.font = "16px sans-serif";
+      ctx.fillText("Press D F J K when notes hit the line", W / 2, H / 2 - 16);
+      ctx.fillText("Combos build a multiplier", W / 2, H / 2 + 8);
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 44);
+      return;
+    }
+
+    // Lanes
+    for (let i = 0; i < LANES; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "#15122a" : "#1a1532";
+      ctx.fillRect(laneX(i), 0, LANE_W, H);
+    }
+
+    // Hit line
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(LANES_X, HIT_LINE_Y);
+    ctx.lineTo(LANES_X + LANES * LANE_W, HIT_LINE_Y);
+    ctx.stroke();
+
+    // Lane key labels
+    ctx.textAlign = "center";
+    ctx.font = "bold 24px sans-serif";
+    for (let i = 0; i < LANES; i++) {
+      const isHeld = !!keys[LANE_KEYS[i]];
+      ctx.fillStyle = isHeld ? LANE_COLORS[i] : "rgba(255,255,255,0.4)";
+      ctx.fillText(LANE_KEYS[i].toUpperCase(), laneX(i) + LANE_W / 2, HIT_LINE_Y + 40);
+      if (isHeld) {
+        ctx.fillStyle = LANE_COLORS[i] + "55";
+        ctx.fillRect(laneX(i), HIT_LINE_Y - 30, LANE_W, 60);
+      }
+    }
+
+    // Notes
+    for (const n of notes) {
+      if (n.hit) continue;
+      const dt = n.t - songTime;
+      if (dt > NOTE_FALL_TIME || dt < -HIT_WINDOW_GOOD - 0.2) continue;
+      const progress = 1 - dt / NOTE_FALL_TIME;
+      const y = progress * HIT_LINE_Y;
+      ctx.fillStyle = LANE_COLORS[n.lane];
+      ctx.fillRect(laneX(n.lane) + 8, y - 12, LANE_W - 16, 20);
+      ctx.fillStyle = "rgba(255,255,255,0.3)";
+      ctx.fillRect(laneX(n.lane) + 8, y - 12, LANE_W - 16, 5);
+    }
+
+    // HUD
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText("Score " + score, 14, 32);
+    ctx.font = "14px sans-serif";
+    ctx.fillText("Combo " + combo + "  x" + multiplier, 14, 54);
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#aab";
+    ctx.fillText("Miss " + missCount, W - 14, 32);
+    ctx.fillText(songTime.toFixed(1) + " / " + SONG_LENGTH, W - 14, 54);
+
+    // Judge popup
+    if (judgeTimer > 0 && lastJudge) {
+      ctx.textAlign = "center";
+      const a = Math.min(1, judgeTimer / 0.4);
+      const color = lastJudge === "PERFECT" ? "rgba(123,229,255,A)" : lastJudge === "GOOD" ? "rgba(123,255,123,A)" : "rgba(255,93,108,A)";
+      ctx.fillStyle = color.replace("A", a.toFixed(2));
+      ctx.font = "bold 36px sans-serif";
+      ctx.fillText(lastJudge, W / 2, HIT_LINE_Y - 60);
+    }
+
+    if (state === STATE.OVER) {
+      ctx.fillStyle = "rgba(0,0,0,0.75)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 44px sans-serif";
+      ctx.fillText("SONG OVER", W / 2, H / 2 - 20);
+      ctx.font = "18px sans-serif";
+      ctx.fillStyle = "#aab";
+      ctx.fillText("Score " + score, W / 2, H / 2 + 12);
+      ctx.fillText("Misses " + missCount + " — SPACE for new song", W / 2, H / 2 + 40);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>

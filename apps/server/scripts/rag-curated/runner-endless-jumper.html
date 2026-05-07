@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Endless Runner</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #f3e6c4; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #f3e6c4; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="400"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2 };
+  const GROUND_Y = H - 60;
+  const GRAVITY = 2200;
+  const JUMP = -780;
+  const PLAYER_W = 28;
+  const PLAYER_H = 36;
+  const BASE_SPEED = 320;
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let player, obstacles, clouds, score, distance, speed, spawnTimer, spawnInterval, runFrame;
+  let lastTime = 0;
+
+  function init() {
+    player = { x: 90, y: GROUND_Y - PLAYER_H, vy: 0, onGround: true };
+    obstacles = [];
+    clouds = [];
+    for (let i = 0; i < 5; i++) clouds.push({ x: Math.random() * W, y: 40 + Math.random() * 90, w: 50 + Math.random() * 40 });
+    score = 0;
+    distance = 0;
+    speed = BASE_SPEED;
+    spawnTimer = 0;
+    spawnInterval = 1.4;
+    runFrame = 0;
+  }
+
+  function spawnObstacle() {
+    const r = Math.random();
+    if (r < 0.7) {
+      // Cactus (low) — varying height
+      const w = 18 + Math.floor(Math.random() * 14);
+      const h = 30 + Math.floor(Math.random() * 26);
+      obstacles.push({ kind: "cactus", x: W + w, y: GROUND_Y - h, w, h });
+    } else {
+      // Low wall (slightly taller)
+      const w = 32, h = 38;
+      obstacles.push({ kind: "wall", x: W + w, y: GROUND_Y - h, w, h });
+    }
+  }
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ") || pressed("arrowup")) { init(); state = STATE.PLAY; player.vy = JUMP; player.onGround = false; }
+      return;
+    }
+    if (state === STATE.OVER) {
+      if (pressed(" ") || pressed("arrowup")) { init(); state = STATE.PLAY; player.vy = JUMP; player.onGround = false; }
+      return;
+    }
+
+    distance += speed * dt;
+    score = Math.floor(distance / 8);
+    speed = Math.min(BASE_SPEED + distance * 0.04, 720);
+    spawnInterval = Math.max(0.5, 1.4 - distance / 14000);
+
+    // Jump
+    if ((pressed(" ") || pressed("arrowup") || pressed("w")) && player.onGround) {
+      player.vy = JUMP;
+      player.onGround = false;
+    }
+    player.vy += GRAVITY * dt;
+    player.y += player.vy * dt;
+    if (player.y + PLAYER_H >= GROUND_Y) {
+      player.y = GROUND_Y - PLAYER_H;
+      player.vy = 0;
+      player.onGround = true;
+    }
+    runFrame += dt * 12;
+
+    spawnTimer += dt;
+    if (spawnTimer >= spawnInterval) {
+      spawnTimer -= spawnInterval;
+      spawnObstacle();
+    }
+
+    for (const o of obstacles) o.x -= speed * dt;
+    obstacles = obstacles.filter((o) => o.x + o.w > -5);
+
+    for (const c of clouds) {
+      c.x -= speed * 0.2 * dt;
+      if (c.x + c.w < 0) { c.x = W + 20; c.y = 40 + Math.random() * 90; }
+    }
+
+    // Collision (AABB)
+    for (const o of obstacles) {
+      if (
+        player.x + PLAYER_W > o.x + 4 &&
+        player.x < o.x + o.w - 4 &&
+        player.y + PLAYER_H > o.y + 4 &&
+        player.y < o.y + o.h
+      ) {
+        state = STATE.OVER;
+        return;
+      }
+    }
+  }
+
+  function drawPlayer() {
+    ctx.fillStyle = "#3d3d3d";
+    ctx.fillRect(player.x, player.y, PLAYER_W, PLAYER_H);
+    // Eye
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(player.x + PLAYER_W - 9, player.y + 7, 5, 5);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(player.x + PLAYER_W - 7, player.y + 9, 2, 2);
+    // Legs (animated when running)
+    ctx.fillStyle = "#3d3d3d";
+    if (player.onGround) {
+      const phase = Math.floor(runFrame) % 2;
+      if (phase === 0) {
+        ctx.fillRect(player.x + 4, player.y + PLAYER_H, 6, 6);
+        ctx.fillRect(player.x + PLAYER_W - 12, player.y + PLAYER_H + 3, 6, 3);
+      } else {
+        ctx.fillRect(player.x + 4, player.y + PLAYER_H + 3, 6, 3);
+        ctx.fillRect(player.x + PLAYER_W - 12, player.y + PLAYER_H, 6, 6);
+      }
+    } else {
+      ctx.fillRect(player.x + 4, player.y + PLAYER_H, 6, 4);
+      ctx.fillRect(player.x + PLAYER_W - 12, player.y + PLAYER_H, 6, 4);
+    }
+  }
+
+  function drawObstacle(o) {
+    if (o.kind === "cactus") {
+      ctx.fillStyle = "#3a7d3a";
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.fillStyle = "#2a5d2a";
+      ctx.fillRect(o.x - 4, o.y + 8, 4, o.h - 14);
+      ctx.fillRect(o.x + o.w, o.y + 12, 4, o.h - 18);
+    } else {
+      ctx.fillStyle = "#7a4a30";
+      ctx.fillRect(o.x, o.y, o.w, o.h);
+      ctx.fillStyle = "#5a3520";
+      ctx.fillRect(o.x, o.y, o.w, 4);
+    }
+  }
+
+  function render() {
+    ctx.fillStyle = "#f3e6c4";
+    ctx.fillRect(0, 0, W, H);
+
+    // Clouds
+    ctx.fillStyle = "#fff";
+    for (const c of clouds) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.w * 0.4, 0, Math.PI * 2);
+      ctx.arc(c.x + c.w * 0.35, c.y - 6, c.w * 0.34, 0, Math.PI * 2);
+      ctx.arc(c.x + c.w * 0.7, c.y, c.w * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Ground
+    ctx.fillStyle = "#c0a96a";
+    ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
+    ctx.fillStyle = "#9b873e";
+    ctx.fillRect(0, GROUND_Y, W, 4);
+
+    if (state === STATE.TITLE) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#3d3d3d";
+      ctx.font = "bold 50px sans-serif";
+      ctx.fillText("RUNNER", W / 2, H / 2 - 30);
+      ctx.font = "18px sans-serif";
+      ctx.fillText("SPACE to jump — survive as long as you can", W / 2, H / 2 + 4);
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 36);
+      return;
+    }
+
+    for (const o of obstacles) drawObstacle(o);
+    drawPlayer();
+
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#3d3d3d";
+    ctx.font = "bold 22px monospace";
+    ctx.fillText(String(score).padStart(5, "0"), W - 16, 30);
+
+    if (state === STATE.OVER) {
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 46px sans-serif";
+      ctx.fillText("GAME OVER", W / 2, H / 2 - 10);
+      ctx.font = "20px sans-serif";
+      ctx.fillText("Score " + score + " — SPACE to retry", W / 2, H / 2 + 26);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>

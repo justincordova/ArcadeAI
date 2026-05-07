@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Jump and Run</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #1a2030; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  canvas { background: #1a2030; display: block; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="500"></canvas>
+<script>
+(() => {
+  "use strict";
+
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const STATE = { TITLE: 0, PLAY: 1, OVER: 2, WIN: 3 };
+  const GRAVITY = 1700;
+  const MOVE = 280;
+  const JUMP = -620;
+  const PLAYER_W = 24;
+  const PLAYER_H = 30;
+
+  const keys = Object.create(null);
+  let prevKeys = Object.create(null);
+  let state = STATE.TITLE;
+  let player, platforms, coins, spikes, flag, score, cameraX;
+  let lastTime = 0;
+
+  // Level layout (in world coordinates). World is wider than viewport.
+  const LEVEL = {
+    width: 2400,
+    ground: 440,
+    platforms: [
+      { x: 0, y: 440, w: 400, h: 60 },
+      { x: 480, y: 440, w: 220, h: 60 },
+      { x: 760, y: 380, w: 120, h: 18 },
+      { x: 940, y: 320, w: 120, h: 18 },
+      { x: 1100, y: 440, w: 200, h: 60 },
+      { x: 1380, y: 440, w: 80, h: 60 },
+      { x: 1540, y: 360, w: 140, h: 18 },
+      { x: 1740, y: 300, w: 140, h: 18 },
+      { x: 1940, y: 440, w: 460, h: 60 },
+    ],
+    spikes: [
+      { x: 720, y: 425, w: 40 }, // gap spikes
+      { x: 1310, y: 425, w: 60 },
+      { x: 1480, y: 425, w: 50 },
+    ],
+    coins: [
+      { x: 200, y: 400 }, { x: 280, y: 400 },
+      { x: 800, y: 340 }, { x: 980, y: 280 },
+      { x: 1180, y: 400 }, { x: 1580, y: 320 },
+      { x: 1780, y: 260 }, { x: 2050, y: 400 }, { x: 2200, y: 400 },
+    ],
+    flag: { x: 2330, y: 380 },
+  };
+
+  function init() {
+    player = { x: 60, y: LEVEL.ground - PLAYER_H, vx: 0, vy: 0, onGround: false, coyote: 0 };
+    platforms = LEVEL.platforms.map((p) => ({ ...p }));
+    coins = LEVEL.coins.map((c) => ({ ...c, taken: false }));
+    spikes = LEVEL.spikes.map((s) => ({ ...s }));
+    flag = { ...LEVEL.flag };
+    score = 0;
+    cameraX = 0;
+  }
+
+  function pressed(k) { return !!keys[k] && !prevKeys[k]; }
+
+  function update(dt) {
+    if (state === STATE.TITLE) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+    if (state === STATE.OVER || state === STATE.WIN) {
+      if (pressed(" ") || pressed("enter")) { init(); state = STATE.PLAY; }
+      return;
+    }
+
+    // Horizontal input
+    let dir = 0;
+    if (keys["arrowleft"] || keys["a"]) dir -= 1;
+    if (keys["arrowright"] || keys["d"]) dir += 1;
+    player.vx = dir * MOVE;
+
+    // Coyote-time jump
+    if (player.onGround) player.coyote = 0.1; else player.coyote -= dt;
+    if ((pressed(" ") || pressed("arrowup") || pressed("w")) && player.coyote > 0) {
+      player.vy = JUMP;
+      player.coyote = 0;
+      player.onGround = false;
+    }
+
+    player.vy += GRAVITY * dt;
+    player.x += player.vx * dt;
+    // Horizontal bounds
+    if (player.x < 0) player.x = 0;
+    if (player.x > LEVEL.width - PLAYER_W) player.x = LEVEL.width - PLAYER_W;
+
+    // Vertical movement + collision (resolve against platform tops)
+    const oldY = player.y;
+    player.y += player.vy * dt;
+    player.onGround = false;
+    if (player.vy >= 0) {
+      for (const p of platforms) {
+        if (
+          player.x + PLAYER_W > p.x &&
+          player.x < p.x + p.w &&
+          oldY + PLAYER_H <= p.y + 1 &&
+          player.y + PLAYER_H >= p.y
+        ) {
+          player.y = p.y - PLAYER_H;
+          player.vy = 0;
+          player.onGround = true;
+        }
+      }
+    } else {
+      // hitting head on the underside of a platform
+      for (const p of platforms) {
+        if (
+          player.x + PLAYER_W > p.x &&
+          player.x < p.x + p.w &&
+          oldY >= p.y + p.h &&
+          player.y <= p.y + p.h
+        ) {
+          player.y = p.y + p.h;
+          player.vy = 0;
+        }
+      }
+    }
+
+    // Fall off the world
+    if (player.y > H + 200) { state = STATE.OVER; return; }
+
+    // Spikes (located on the ground)
+    for (const s of spikes) {
+      if (
+        player.x + PLAYER_W > s.x &&
+        player.x < s.x + s.w &&
+        player.y + PLAYER_H > s.y
+      ) {
+        state = STATE.OVER; return;
+      }
+    }
+
+    // Coins
+    for (const c of coins) {
+      if (c.taken) continue;
+      if (
+        player.x + PLAYER_W > c.x - 8 &&
+        player.x < c.x + 8 &&
+        player.y + PLAYER_H > c.y - 8 &&
+        player.y < c.y + 8
+      ) {
+        c.taken = true;
+        score += 10;
+      }
+    }
+
+    // Flag (win)
+    if (
+      player.x + PLAYER_W > flag.x &&
+      player.x < flag.x + 12 &&
+      player.y + PLAYER_H > flag.y &&
+      player.y < flag.y + 60
+    ) {
+      state = STATE.WIN;
+    }
+
+    // Camera follows player (clamp to level)
+    cameraX = Math.max(0, Math.min(LEVEL.width - W, player.x - W * 0.4));
+  }
+
+  function render() {
+    // Sky
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#1a2030");
+    grad.addColorStop(1, "#2a3144");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Hills (parallax)
+    ctx.fillStyle = "#222a3a";
+    for (let i = 0; i < 6; i++) {
+      const hx = i * 320 - (cameraX * 0.4) % 320;
+      ctx.beginPath();
+      ctx.arc(hx, H - 60, 180, Math.PI, 0);
+      ctx.fill();
+    }
+
+    if (state === STATE.TITLE) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 48px sans-serif";
+      ctx.fillText("JUMP & RUN", W / 2, H / 2 - 30);
+      ctx.fillStyle = "#aab";
+      ctx.font = "18px sans-serif";
+      ctx.fillText("Arrows to move, SPACE to jump — reach the flag", W / 2, H / 2);
+      ctx.fillStyle = "#fff";
+      ctx.fillText("Press SPACE to start", W / 2, H / 2 + 36);
+      return;
+    }
+
+    ctx.save();
+    ctx.translate(-cameraX, 0);
+
+    // Platforms
+    for (const p of platforms) {
+      ctx.fillStyle = "#5a6f3a";
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.fillStyle = "#7caa4f";
+      ctx.fillRect(p.x, p.y, p.w, 6);
+    }
+
+    // Spikes (triangles along the ground line)
+    ctx.fillStyle = "#dd4060";
+    for (const s of spikes) {
+      const count = Math.max(2, Math.floor(s.w / 14));
+      for (let i = 0; i < count; i++) {
+        const sx = s.x + i * (s.w / count);
+        ctx.beginPath();
+        ctx.moveTo(sx, s.y + 14);
+        ctx.lineTo(sx + (s.w / count) / 2, s.y);
+        ctx.lineTo(sx + (s.w / count), s.y + 14);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Coins
+    for (const c of coins) {
+      if (c.taken) continue;
+      ctx.fillStyle = "#ffd23b";
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#a48420";
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Flag
+    ctx.fillStyle = "#aaa";
+    ctx.fillRect(flag.x, flag.y, 4, 60);
+    ctx.fillStyle = "#3bff7a";
+    ctx.beginPath();
+    ctx.moveTo(flag.x + 4, flag.y);
+    ctx.lineTo(flag.x + 30, flag.y + 10);
+    ctx.lineTo(flag.x + 4, flag.y + 20);
+    ctx.closePath();
+    ctx.fill();
+
+    // Player
+    ctx.fillStyle = "#7df9ff";
+    ctx.fillRect(player.x, player.y, PLAYER_W, PLAYER_H);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(player.x + 5, player.y + 8, 4, 4);
+    ctx.fillRect(player.x + 15, player.y + 8, 4, 4);
+
+    ctx.restore();
+
+    // HUD
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#fff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText("Score: " + score, 12, 24);
+
+    if (state === STATE.OVER || state === STATE.WIN) {
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 48px sans-serif";
+      ctx.fillText(state === STATE.WIN ? "YOU WIN" : "GAME OVER", W / 2, H / 2 - 10);
+      ctx.font = "20px sans-serif";
+      ctx.fillStyle = "#aab";
+      ctx.fillText("Score " + score + " — SPACE to retry", W / 2, H / 2 + 30);
+    }
+  }
+
+  function gameLoop(t) {
+    try {
+      const dt = Math.min((t - lastTime) / 1000, 0.05);
+      lastTime = t;
+      update(dt);
+      prevKeys = Object.assign(Object.create(null), keys);
+      render();
+      requestAnimationFrame(gameLoop);
+    } catch (err) {
+      try { parent.postMessage({ type: "game-error", message: err && err.message || String(err), stack: err && err.stack }, "*"); } catch (_) {}
+    }
+  }
+
+  window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+  window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+  init();
+  requestAnimationFrame((t) => { lastTime = t; gameLoop(t); });
+})();
+</script>
+</body>
+</html>
