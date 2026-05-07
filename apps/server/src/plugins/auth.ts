@@ -130,10 +130,28 @@ export async function authPlugin(app: FastifyInstance) {
     const response = await auth.handler(webRequest);
     const responseBuffer = Buffer.from(await response.arrayBuffer());
 
+    // Preserve any CORS / other headers that Fastify hooks (e.g. @fastify/cors
+    // running in onRequest) already attached to the reply. After
+    // reply.hijack() the onSend hooks are skipped, so anything we don't
+    // forward to reply.raw here won't reach the client. Without this the
+    // browser blocks the response with "No 'Access-Control-Allow-Origin'
+    // header is present", even though the preflight succeeded.
+    const preexistingHeaders = reply.getHeaders();
+
     // Bypass Fastify serialization. Write directly to the raw socket so the
     // already-encoded response body is sent unchanged.
     reply.hijack();
     reply.raw.statusCode = response.status;
+
+    for (const [key, value] of Object.entries(preexistingHeaders)) {
+      if (value === undefined) continue;
+      const lower = key.toLowerCase();
+      if (HOP_BY_HOP_RESPONSE_HEADERS.has(lower)) continue;
+      reply.raw.setHeader(
+        key,
+        Array.isArray(value) ? value.map(String) : (value as string | number)
+      );
+    }
 
     // Copy headers, but handle Set-Cookie specially. Headers.entries() collapses
     // multiple Set-Cookie values into a single comma-separated string, which
