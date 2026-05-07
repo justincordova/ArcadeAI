@@ -26,7 +26,27 @@ export async function signOut(): Promise<void> {
   window.location.href = "/sign-in";
 }
 
-export function getSignInUrl(provider: "google" | "github", next = "/"): string {
-  const callbackURL = encodeURIComponent(next);
-  return `${API}/api/auth/sign-in/${provider}?callbackURL=${callbackURL}`;
+/**
+ * Initiates a social sign-in via Better Auth.
+ *
+ * Better Auth exposes social sign-in as `POST /api/auth/sign-in/social` with
+ * a JSON body `{ provider, callbackURL }`. The response includes `{ url }` —
+ * the upstream OAuth provider URL we then navigate the browser to.
+ */
+export async function startSocialSignIn(provider: "google" | "github", next = "/"): Promise<void> {
+  const res = await fetch(`${API}/api/auth/sign-in/social`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ provider, callbackURL: next }),
+  });
+  if (!res.ok) {
+    throw new Error(`Sign-in failed: ${res.status}`);
+  }
+  const body = (await res.json()) as { url?: string; redirect?: boolean };
+  if (body.url) {
+    window.location.href = body.url;
+  } else {
+    throw new Error("Sign-in response missing url");
+  }
 }

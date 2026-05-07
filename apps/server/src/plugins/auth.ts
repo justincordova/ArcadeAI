@@ -4,17 +4,20 @@ import { auth } from "../lib/auth.js";
 type AuthSession = Awaited<ReturnType<typeof auth.api.getSession>>;
 
 // Headers that must not be forwarded from the original Fastify request to the
-// reconstructed Web Request, because their values would be wrong after we
-// re-encode the body (or are hop-by-hop / connection-scoped).
+// reconstructed Web Request: hop-by-hop or connection-scoped, plus host (the
+// reconstructed URL has its own host) and content-length (we recompute the
+// body bytes so the original length may not match).
 const HOP_BY_HOP_REQUEST_HEADERS = new Set([
-  "content-length",
   "host",
   "connection",
   "transfer-encoding",
+  "content-length",
 ]);
 
-// Response headers we must strip before forwarding to Fastify, because we've
-// already decoded the body via response.text() and Fastify will recompute these.
+// Response headers we must strip before forwarding to the client because Node's
+// http response will recompute them based on the buffer we write. Keeping the
+// originals would corrupt the response (especially content-encoding, since we
+// already decoded the body via response.arrayBuffer()).
 const HOP_BY_HOP_RESPONSE_HEADERS = new Set([
   "content-length",
   "content-encoding",
@@ -47,14 +50,34 @@ export async function getSession(request: FastifyRequest): Promise<AuthSession> 
 }
 
 export async function authPlugin(app: FastifyInstance) {
+  // Capture form-encoded bodies as raw Buffers (Fastify only auto-parses
+  // application/json out of the box). Better Auth needs to receive these
+  // verbatim so it can parse them itself. JSON bodies are still parsed by
+  // Fastify's default parser; we re-stringify them when forwarding.
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "buffer" },
+    (_request, payload, done) => {
+      done(null, payload);
+    }
+  );
+
   // Delegate all /api/auth/* requests to Better Auth
   app.all("/api/auth/*", async (request, reply) => {
     const url = buildRequestUrl(request);
     const headers = buildHeaders(request, HOP_BY_HOP_REQUEST_HEADERS);
 
-    let body: BodyInit | undefined;
+    let body: ArrayBuffer | string | undefined;
     if (request.method !== "GET" && request.method !== "HEAD" && request.body !== undefined) {
-      body = JSON.stringify(request.body);
+      // For form-encoded bodies, request.body is a Buffer (per the parser
+      // above). For JSON bodies, request.body is the parsed object — we
+      // re-stringify it so Better Auth sees valid JSON bytes again.
+      if (Buffer.isBuffer(request.body)) {
+        const buf = request.body;
+        body = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+      } else {
+        body = JSON.stringify(request.body);
+      }
     }
 
     const webRequest = new Request(url, {
@@ -64,16 +87,36 @@ export async function authPlugin(app: FastifyInstance) {
     });
 
     const response = await auth.handler(webRequest);
-
-    // Write directly to the raw socket so Fastify does not re-serialize the
-    // (already-JSON) response body and double-encode it.
     const responseBuffer = Buffer.from(await response.arrayBuffer());
+
+    // Bypass Fastify serialization. Write directly to the raw socket so the
+    // already-encoded response body is sent unchanged.
     reply.hijack();
     reply.raw.statusCode = response.status;
+
+    // Copy headers, but handle Set-Cookie specially. Headers.entries() collapses
+    // multiple Set-Cookie values into a single comma-separated string, which
+    // breaks browser parsing. Use getSetCookie() (Node 18+ / WHATWG fetch) to
+    // recover them as separate values.
+    const setCookies =
+      typeof (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie ===
+      "function"
+        ? (response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
+        : [];
+
     for (const [key, value] of response.headers.entries()) {
-      if (HOP_BY_HOP_RESPONSE_HEADERS.has(key.toLowerCase())) continue;
+      const lower = key.toLowerCase();
+      if (HOP_BY_HOP_RESPONSE_HEADERS.has(lower)) continue;
+      if (lower === "set-cookie") continue;
       reply.raw.setHeader(key, value);
     }
+
+    if (setCookies.length > 0) {
+      // Node's setHeader accepts string[] for Set-Cookie and emits one line
+      // per element.
+      reply.raw.setHeader("set-cookie", setCookies);
+    }
+
     reply.raw.end(responseBuffer);
   });
 }

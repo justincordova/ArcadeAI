@@ -10,6 +10,9 @@ export function GameIframe({ code }: GameIframeProps) {
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      // Only accept messages from our own iframe — filter out anything from
+      // extensions, other iframes, or unrelated windows.
+      if (e.source !== iframeRef.current?.contentWindow) return;
       if (e.data?.type === "game-error") {
         console.error("[game-error]", e.data.message, e.data.stack);
       }

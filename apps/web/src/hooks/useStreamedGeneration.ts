@@ -55,6 +55,7 @@ export function useStreamedGeneration(): StreamedGenerationState {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buf = "";
+        let terminated = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -84,15 +85,24 @@ export function useStreamedGeneration(): StreamedGenerationState {
               } else if (event === "chunk") {
                 setCode((prev) => prev + parsed.delta);
               } else if (event === "error") {
+                terminated = true;
                 setStatus("error");
                 setError(parsed.message);
               } else if (event === "done") {
+                terminated = true;
                 setStatus("idle");
               }
             } catch {
               // ignore malformed frames
             }
           }
+        }
+
+        // Stream ended without an explicit done/error event — treat as error
+        // so the UI doesn't get stuck in the "streaming" state.
+        if (!terminated) {
+          setStatus("error");
+          setError("Stream ended unexpectedly");
         }
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
