@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { games, messages } from "@arcadeai/db";
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
@@ -15,6 +15,14 @@ const CreateGameBody = z.object({
 
 const GameIdParams = z.object({
   id: z.string().min(1),
+});
+
+const PatchGameBody = z.object({
+  title: z.string().trim().min(1).max(80),
+});
+
+const ThumbnailBody = z.object({
+  thumbnail: z.string().startsWith("data:image/png;base64,").max(350_000),
 });
 
 export async function gamesRoutes(app: FastifyInstance) {
@@ -164,6 +172,88 @@ export async function gamesRoutes(app: FastifyInstance) {
     }
 
     await db.delete(games).where(eq(games.id, id));
+
+    return reply.status(204).send();
+  });
+
+  // GET /api/games — list user's games for dashboard
+  app.get("/api/games", async (request, reply) => {
+    const userId = request.authSession.user.id;
+
+    const rows = await db
+      .select({
+        id: games.id,
+        title: games.title,
+        thumbnail: games.thumbnail,
+        updatedAt: games.updatedAt,
+      })
+      .from(games)
+      .where(eq(games.userId, userId))
+      .orderBy(desc(games.updatedAt));
+
+    return reply.send(rows);
+  });
+
+  // PATCH /api/games/:id — rename game
+  app.patch("/api/games/:id", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return reply.status(400).send({ error: "Invalid id" });
+    }
+
+    const bodyResult = PatchGameBody.safeParse(request.body);
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        error: "Validation error",
+        issues: bodyResult.error.issues,
+      });
+    }
+
+    const { id } = paramsResult.data;
+    const { title } = bodyResult.data;
+    const userId = request.authSession.user.id;
+
+    const game = await loadOwnedGame(id, userId);
+    if (!game) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    const now = Date.now();
+    await db.update(games).set({ title, updatedAt: now }).where(eq(games.id, id));
+
+    return reply.send({ id, title, updatedAt: now });
+  });
+
+  // POST /api/games/:id/thumbnail — save captured thumbnail
+  app.post("/api/games/:id/thumbnail", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return reply.status(400).send({ error: "Invalid id" });
+    }
+
+    const bodyResult = ThumbnailBody.safeParse(request.body);
+    if (!bodyResult.success) {
+      // Check if the thumbnail is too large (max string length exceeded)
+      const sizeIssue = bodyResult.error.issues.find((i) => i.code === "too_big");
+      if (sizeIssue) {
+        return reply.status(413).send({ error: "Thumbnail too large" });
+      }
+      return reply.status(400).send({
+        error: "Validation error",
+        issues: bodyResult.error.issues,
+      });
+    }
+
+    const { id } = paramsResult.data;
+    const { thumbnail } = bodyResult.data;
+    const userId = request.authSession.user.id;
+
+    const game = await loadOwnedGame(id, userId);
+    if (!game) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    await db.update(games).set({ thumbnail, updatedAt: Date.now() }).where(eq(games.id, id));
 
     return reply.status(204).send();
   });

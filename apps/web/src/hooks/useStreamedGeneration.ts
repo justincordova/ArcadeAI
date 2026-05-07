@@ -11,6 +11,7 @@ export interface StreamedGenerationState {
   error: string | null;
   start: (prompt: string) => void;
   stop: () => void;
+  attachIframe: (ref: HTMLIFrameElement | null) => void;
 }
 
 export function useStreamedGeneration(): StreamedGenerationState {
@@ -19,6 +20,11 @@ export function useStreamedGeneration(): StreamedGenerationState {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  const attachIframe = useCallback((el: HTMLIFrameElement | null) => {
+    iframeRef.current = el;
+  }, []);
 
   const start = useCallback((prompt: string) => {
     const ac = new AbortController();
@@ -91,6 +97,13 @@ export function useStreamedGeneration(): StreamedGenerationState {
               } else if (event === "done") {
                 terminated = true;
                 setStatus("idle");
+                // Schedule thumbnail capture ~500ms after done
+                setTimeout(() => {
+                  const iframe = iframeRef.current;
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+                  }
+                }, 500);
               }
             } catch {
               // ignore malformed frames
@@ -117,5 +130,5 @@ export function useStreamedGeneration(): StreamedGenerationState {
     setStatus("idle");
   }, []);
 
-  return { status, gameId, code, error, start, stop };
+  return { status, gameId, code, error, start, stop, attachIframe };
 }

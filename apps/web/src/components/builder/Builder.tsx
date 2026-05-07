@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
+import { useState } from "react";
 import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { GameIframe } from "./GameIframe.js";
 import { StatusOverlay } from "./StatusOverlay.js";
@@ -15,13 +16,19 @@ interface Message {
 interface BuilderProps {
   initialCode?: string;
   initialMessages?: Message[];
+  gameId?: string | null;
 }
 
-export function Builder({ initialCode = "", initialMessages = [] }: BuilderProps) {
-  const { status, code, error, start, stop } = useStreamedGeneration();
+export function Builder({
+  initialCode = "",
+  initialMessages = [],
+  gameId: initialGameId,
+}: BuilderProps) {
+  const { status, gameId, code, error, start, stop, attachIframe } = useStreamedGeneration();
   const [prompt, setPrompt] = useState("");
   const isStreaming = status === "streaming";
   const displayCode = code || initialCode;
+  const activeGameId = gameId || initialGameId;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -114,7 +121,7 @@ export function Builder({ initialCode = "", initialMessages = [] }: BuilderProps
 
       {/* Right panel — game iframe */}
       <div className="relative flex-1 bg-gray-950">
-        <GameIframe code={displayCode || null} />
+        <GameIframe code={displayCode || null} gameId={activeGameId} onIframeReady={attachIframe} />
         <StatusOverlay visible={isStreaming} />
         <StopButton visible={isStreaming} onStop={stop} />
       </div>

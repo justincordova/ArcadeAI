@@ -44,5 +44,7 @@ function GamePage() {
     );
   }
 
-  return <Builder initialCode={data.currentCode} initialMessages={data.messages} />;
+  return (
+    <Builder initialCode={data.currentCode} initialMessages={data.messages} gameId={data.id} />
+  );
 }
