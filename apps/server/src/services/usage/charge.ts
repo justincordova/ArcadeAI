@@ -5,8 +5,11 @@ import { randomUUID } from "node:crypto";
 import { usageLog, users } from "@arcadeai/db";
 import { CREDIT_COSTS, TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
 import { eq, sql } from "drizzle-orm";
+import type { FastifyBaseLogger } from "fastify";
 import { db } from "../../lib/db.js";
 import { applyResets } from "./reset.js";
+
+export type RefundReason = "llm_error" | "timeout" | "validation_error" | "abort";
 
 export class InsufficientCreditsError extends Error {
   resetAt: number;
@@ -85,13 +88,17 @@ export async function markSucceeded(logId: string): Promise<void> {
   await db.update(usageLog).set({ succeeded: 1 }).where(eq(usageLog.id, logId));
 }
 
-export async function refund(logId: string): Promise<void> {
+export async function refund(
+  logId: string,
+  opts?: { logger?: FastifyBaseLogger; reason?: RefundReason }
+): Promise<void> {
   // Idempotency guard: only refund if refunded_at IS NULL (SPEC §10)
   const rows = await db
     .select({
       userId: usageLog.userId,
       creditsCharged: usageLog.creditsCharged,
       refundedAt: usageLog.refundedAt,
+      action: usageLog.action,
     })
     .from(usageLog)
     .where(eq(usageLog.id, logId));
@@ -111,4 +118,15 @@ export async function refund(logId: string): Promise<void> {
   }
 
   await db.update(usageLog).set({ refundedAt: Date.now() }).where(eq(usageLog.id, logId));
+
+  // Observability log line per SPEC §10 / plan 13 §10.
+  opts?.logger?.info(
+    {
+      logId,
+      action: row.action,
+      amount: cost,
+      reason: opts?.reason ?? "llm_error",
+    },
+    "credits refunded"
+  );
 }

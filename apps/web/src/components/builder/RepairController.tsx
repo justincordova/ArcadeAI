@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ConcurrencyError, useStreamedRepair } from "../../hooks/useStreamedRepair.js";
+import { useStreamedRepair } from "../../hooks/useStreamedRepair.js";
 import { RepairFallbackDialog } from "./RepairFallbackDialog.js";
 
 interface GameError {
@@ -12,7 +12,6 @@ export type RepairStatus = "idle" | "repairing" | "fallback";
 interface RepairControllerProps {
   gameId: string;
   currentCode: string;
-  originalPrompt: string;
   iframeRef: React.RefObject<HTMLIFrameElement | null>;
   /** Called with the repaired code on a successful repair */
   onRepaired: (code: string) => void;
@@ -22,6 +21,12 @@ interface RepairControllerProps {
   onRefine: () => void;
   /** Called when a new generation or refinement starts — resets attempt counter */
   resetTrigger?: number;
+  /**
+   * Called whenever the controller's repair status changes. The parent forwards
+   * this to BuilderLayout's overlay so "Detected an error, fixing..." is shown
+   * during repair. Without this, the repairing status is invisible.
+   */
+  onStatusChange?: (status: RepairStatus) => void;
   children: React.ReactNode;
 }
 
@@ -39,6 +44,7 @@ export function RepairController({
   onTryAgain,
   onRefine,
   resetTrigger,
+  onStatusChange,
   children,
 }: RepairControllerProps) {
   const [repairAttempt, setRepairAttempt] = useState(0);
@@ -50,13 +56,17 @@ export function RepairController({
 
   const repair = useStreamedRepair(gameId);
 
+  // Notify parent of status changes so the overlay can reflect them.
+  useEffect(() => {
+    onStatusChange?.(repairStatus);
+  }, [repairStatus, onStatusChange]);
+
   // Reset attempt counter when a new generation/refinement is kicked off
   useEffect(() => {
     if (resetTrigger !== undefined) {
       setRepairAttempt(0);
       setRepairStatus("idle");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetTrigger]);
 
   // When repair stream finishes successfully, notify parent
@@ -82,18 +92,20 @@ export function RepairController({
       setBrokenCode(currentCode);
       setLastError(err);
 
-      setRepairAttempt((prev) => {
-        const next = prev + 1;
-        if (next <= 2) {
-          setRepairStatus("repairing");
-          repair.start({ error: err });
-        } else {
-          setRepairStatus("fallback");
-        }
-        return next;
-      });
+      // Compute the next attempt count BEFORE the state updater. Side effects
+      // (repair.start) must not run inside a state updater — React 18 strict
+      // mode double-invokes pure setters in development and would fire the
+      // POST /api/games/:id/repair twice, producing a 409 race.
+      const next = repairAttempt + 1;
+      setRepairAttempt(next);
+      if (next <= 2) {
+        setRepairStatus("repairing");
+        repair.start({ error: err });
+      } else {
+        setRepairStatus("fallback");
+      }
     },
-    [currentCode, repair]
+    [currentCode, repair, repairAttempt]
   );
 
   // Register window message listener for game-error events
@@ -146,5 +158,3 @@ export function RepairController({
     </>
   );
 }
-
-export type { RepairStatus as RepairControllerStatus };

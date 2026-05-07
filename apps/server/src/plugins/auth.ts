@@ -62,6 +62,29 @@ export async function authPlugin(app: FastifyInstance) {
     }
   );
 
+  // Global auth guard on all /api/* except /api/auth/* and /api/health.
+  // Registered here (inside authPlugin) so it runs BEFORE the request-context
+  // plugin's preHandler — request-context binds `userId` from
+  // `request.authSession`, so this hook must populate it first.
+  app.addHook("preHandler", async (request, reply) => {
+    const path = request.url.split("?")[0];
+
+    if (!path.startsWith("/api/") || path.startsWith("/api/auth/") || path === "/api/health") {
+      return;
+    }
+
+    try {
+      const session = await getSession(request);
+      if (!session) {
+        return reply.status(401).send({ error: "Unauthorized" });
+      }
+      // biome-ignore lint/suspicious/noExplicitAny: Better Auth session shape
+      (request as FastifyRequest & { authSession: any }).authSession = session;
+    } catch {
+      return reply.status(401).send({ error: "Unauthorized" });
+    }
+  });
+
   // Delegate all /api/auth/* requests to Better Auth
   app.all("/api/auth/*", async (request, reply) => {
     const url = buildRequestUrl(request);

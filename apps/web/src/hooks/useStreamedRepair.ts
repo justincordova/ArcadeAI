@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const API = "http://localhost:3000";
 
@@ -25,8 +25,20 @@ export function useStreamedRepair(gameId: string): StreamedRepairState {
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Abort any in-flight stream on unmount.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const start = useCallback(
     (args: { error: { message: string; stack?: string } }) => {
+      // Abort any prior in-flight stream before starting a new one.
+      // Without this, rapid re-entrant calls (e.g. React 18 strict-mode
+      // double-invoke) leak fetches and produce 409 races.
+      abortRef.current?.abort();
+
       const ac = new AbortController();
       abortRef.current = ac;
 
@@ -45,8 +57,14 @@ export function useStreamedRepair(gameId: string): StreamedRepairState {
           });
 
           if (res.status === 409) {
-            const body = (await res.json()) as { error: string };
-            throw new ConcurrencyError(body.error);
+            // Concurrency: another stream is in flight. Surface as a normal
+            // error so the controller can clear the "repairing" overlay.
+            // The iframe will re-throw if the bug persists, which advances
+            // the attempt counter naturally.
+            const body = (await res.json().catch(() => ({ error: "Busy" }))) as { error: string };
+            setStatus("error");
+            setError(body.error);
+            return;
           }
 
           if (!res.ok || !res.body) {
@@ -105,7 +123,6 @@ export function useStreamedRepair(gameId: string): StreamedRepairState {
           }
         } catch (err) {
           if ((err as Error).name === "AbortError") return;
-          if (err instanceof ConcurrencyError) throw err;
           setStatus("error");
           setError(err instanceof Error ? err.message : "Unknown error");
         }

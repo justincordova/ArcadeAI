@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
-import { authPlugin, getSession } from "./plugins/auth.js";
+import { authPlugin } from "./plugins/auth.js";
 import { corsPlugin } from "./plugins/cors.js";
 import { registerRateLimit } from "./plugins/rate-limit.js";
 import { registerRequestContext } from "./plugins/request-context.js";
@@ -9,7 +9,7 @@ import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
 
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = process.env.NODE_ENV === "development";
 
 const app = Fastify({
   logger: {
@@ -31,30 +31,30 @@ const app = Fastify({
   disableRequestLogging: true,
 });
 
-// Plugins
+// Plugins (registration order matters):
+//   1. CORS — outermost
+//   2. Rate limit — global IP cap, runs at onRequest (before auth)
+//   3. Auth — installs /api/auth/* delegate AND the preHandler that
+//      populates `request.authSession` for all other /api/* routes.
+//   4. Request context — preHandler that binds `requestId` + `userId`
+//      to the per-request child logger. Must run AFTER auth so
+//      `request.authSession` is populated.
 await app.register(corsPlugin);
 await app.register(registerRateLimit);
 await app.register(authPlugin);
 await app.register(registerRequestContext);
 
-// Global auth guard on all /api/* except /api/auth/* and /api/health
-app.addHook("preHandler", async (request, reply) => {
-  const path = request.url.split("?")[0];
-
-  if (!path.startsWith("/api/") || path.startsWith("/api/auth/") || path === "/api/health") {
-    return;
+// Global error handler — emit one structured ERROR line per uncaught
+// failure. The onResponse hook in request-context still emits the
+// per-request INFO line, so failed requests get exactly one ERROR + one
+// INFO, sharing the same requestId. SPEC §14.
+app.setErrorHandler((err: Error & { statusCode?: number }, request, reply) => {
+  request.log.error({ err }, "request failed");
+  const statusCode = err.statusCode ?? 500;
+  if (statusCode >= 500) {
+    return reply.status(statusCode).send({ error: "Internal Server Error" });
   }
-
-  try {
-    const session = await getSession(request);
-    if (!session) {
-      return reply.status(401).send({ error: "Unauthorized" });
-    }
-    // biome-ignore lint/suspicious/noExplicitAny: Better Auth session shape
-    request.authSession = session as any;
-  } catch {
-    return reply.status(401).send({ error: "Unauthorized" });
-  }
+  return reply.status(statusCode).send({ error: err.message });
 });
 
 // Routes

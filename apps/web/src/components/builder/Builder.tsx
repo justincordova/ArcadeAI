@@ -5,7 +5,7 @@ import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
 import { GAMES_QUERY_KEY, postThumbnail } from "../../lib/api/games.js";
 import { GameIframe } from "./GameIframe.js";
-import { RepairController } from "./RepairController.js";
+import { RepairController, type RepairStatus } from "./RepairController.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
 import { StopButton } from "./StopButton.js";
 
@@ -83,6 +83,7 @@ function RefinementBuilder({
   const [repairedCode, setRepairedCode] = useState<string | null>(null);
   // Increment to signal RepairController to reset its attempt counter
   const [refineTrigger, setRefineTrigger] = useState(0);
+  const [repairStatus, setRepairStatus] = useState<RepairStatus>("idle");
   const isStreaming = status === "streaming";
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
@@ -155,24 +156,34 @@ function RefinementBuilder({
     textareaRef.current?.focus();
   }
 
+  // Repair status takes precedence over refinement streaming so the overlay
+  // shows "Detected an error, fixing..." even mid-refinement-bookkeeping.
+  const overlayStatus: OverlayStatus =
+    repairStatus === "repairing" ? "repairing" : isStreaming ? "generating" : "idle";
+
   return (
     <RepairController
       gameId={gameId}
       currentCode={displayCode}
-      originalPrompt={initialMessages.find((m) => m.kind === "prompt")?.content ?? ""}
       iframeRef={iframeRef}
       onRepaired={handleRepaired}
       onTryAgain={() => {
-        // Re-generate from original prompt
+        // Plan §13 specifies a fresh generation against game.original_prompt.
+        // The prototype has no "regenerate against existing game id" endpoint,
+        // so we run the original prompt through the refinement pipeline. This
+        // produces fresh code from the LLM (charging refinement cost rather
+        // than generation cost) — a documented deviation from the plan.
         const original = initialMessages.find((m) => m.kind === "prompt")?.content ?? "";
         if (original) refine(original);
       }}
       onRefine={focusPromptInput}
       resetTrigger={refineTrigger}
+      onStatusChange={setRepairStatus}
     >
       <BuilderLayout
         messages={localMessages}
         isStreaming={isStreaming}
+        overlayStatus={overlayStatus}
         displayCode={displayCode}
         error={error}
         prompt={prompt}

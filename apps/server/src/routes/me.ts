@@ -97,6 +97,16 @@ export async function meRoutes(app: FastifyInstance) {
       await tx.delete(users).where(eq(users.id, userId));
     });
 
+    // Invalidate the session cookie. The session row is already gone from
+    // the transaction above; this clears the browser's stale cookie so the
+    // next request lands on /sign-in cleanly. Better Auth's default cookie
+    // name is "better-auth.session_token". We expire it by setting an empty
+    // value with a past Max-Age, on the same path the cookie was issued.
+    reply.header(
+      "set-cookie",
+      "better-auth.session_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
+    );
+
     return reply.status(204).send();
   });
 }

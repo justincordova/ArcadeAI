@@ -33,6 +33,16 @@ export const auth = betterAuth({
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
     },
   },
+  // Enable /api/auth/link-social so the Settings → Connected Accounts
+  // "Connect" buttons can attach a second provider to an existing user
+  // (SPEC §11, plan 12 §4). trustedProviders ensures the user lands back
+  // on the web origin after the OAuth dance.
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google", "github"],
+    },
+  },
   user: {
     additionalFields: {
       displayName: {

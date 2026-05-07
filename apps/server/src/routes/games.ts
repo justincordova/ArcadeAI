@@ -53,11 +53,16 @@ const RepairBody = z.object({
   }),
 });
 
-// Per-user rate limit for streaming endpoints: 10 req/min (SPEC §14)
+// Per-user rate limit for streaming endpoints: 10 req/min (SPEC §14).
+// Override the global `onRequest` hook with `preHandler` so the
+// keyGenerator runs AFTER the auth preHandler has populated
+// `request.authSession`. Without this, the keyGenerator falls back to
+// `req.ip` for every authenticated request, defeating per-user keying.
 const perUser10PerMin = {
   rateLimit: {
     max: 10,
     timeWindow: "1 minute",
+    hook: "preHandler" as const,
     keyGenerator: (req: import("fastify").FastifyRequest) =>
       (req as import("fastify").FastifyRequest & { authSession?: { user?: { id?: string } } })
         .authSession?.user?.id ?? req.ip,
@@ -257,7 +262,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       // Finalize: markSucceeded or refund (mutually exclusive, each runs once)
       if (streamError) {
         // Server-side error: refund credits
-        await refund(logId).catch(() => {});
+        await refund(logId, { logger: request.log, reason: "llm_error" }).catch(() => {});
       } else {
         // Success (including user-cancel per SPEC §14: credits not refunded on cancel)
         await markSucceeded(logId).catch(() => {});
@@ -512,7 +517,7 @@ export async function gamesRoutes(app: FastifyInstance) {
           logger: request.log,
         }));
       } catch (err) {
-        await refund(logId).catch(() => {});
+        await refund(logId, { logger: request.log, reason: "validation_error" }).catch(() => {});
         throw err;
       }
 
@@ -563,7 +568,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
       // Finalize credits
       if (streamError) {
-        await refund(logId).catch(() => {});
+        await refund(logId, { logger: request.log, reason: "llm_error" }).catch(() => {});
       } else {
         await markSucceeded(logId).catch(() => {});
       }

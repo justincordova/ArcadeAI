@@ -1,9 +1,14 @@
 export const WRAPPER_SCRIPT = `
 window.addEventListener('error', function(e) {
-  parent.postMessage({type:'game-error', message: e.message, stack: e.error ? e.error.stack : ''}, '*');
+  var payload = {type:'game-error', message: e.message};
+  if (e.error && e.error.stack) payload.stack = e.error.stack;
+  parent.postMessage(payload, '*');
 });
 window.addEventListener('unhandledrejection', function(e) {
-  parent.postMessage({type:'game-error', message: String(e.reason)}, '*');
+  var reason = e.reason;
+  var payload = {type:'game-error', message: reason && reason.message ? reason.message : String(reason)};
+  if (reason && reason.stack) payload.stack = reason.stack;
+  parent.postMessage(payload, '*');
 });
 window.addEventListener('message', function(e) {
   if (e.data && e.data.type === 'capture-thumbnail') {
