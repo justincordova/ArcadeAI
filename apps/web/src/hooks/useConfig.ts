@@ -27,7 +27,7 @@ export function useConfig() {
  * or null if everything looks good.
  */
 export function getMissingKeyError(config: AppConfig | undefined): string | null {
-  if (!config) return null;
+  if (!config) return "Checking AI provider configuration...";
   if (!config.hasAnthropicKey && !config.hasOpenAiKey) {
     return "No AI provider key is configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in the server .env file.";
   }

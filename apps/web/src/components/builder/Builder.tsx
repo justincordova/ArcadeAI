@@ -220,27 +220,27 @@ function SendIcon() {
 }
 
 function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
-  const isPrompt = msg.kind === "prompt";
+  const isUser = msg.kind === "prompt" || msg.kind === "feedback";
   return (
     <div
       style={{
         marginBottom: isLast ? 0 : 16,
         display: "flex",
         flexDirection: "column",
-        alignItems: isPrompt ? "flex-end" : "flex-start",
+        alignItems: isUser ? "flex-end" : "flex-start",
       }}
     >
       <div
         style={{
           maxWidth: "85%",
           padding: "10px 14px",
-          borderRadius: isPrompt ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+          borderRadius: isUser ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
           fontSize: 13,
           lineHeight: 1.55,
-          background: isPrompt
+          background: isUser
             ? "linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(6,182,212,0.2) 100%)"
             : "var(--color-surface-raised)",
-          border: isPrompt ? "1px solid rgba(124,58,237,0.3)" : "1px solid var(--color-border)",
+          border: isUser ? "1px solid rgba(124,58,237,0.3)" : "1px solid var(--color-border)",
           color: "var(--color-text-primary)",
           wordBreak: "break-word",
         }}
@@ -255,7 +255,7 @@ function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
           letterSpacing: "0.02em",
         }}
       >
-        {isPrompt ? "You" : "Feedback"}
+        {isUser ? "You" : "AI"}
       </span>
     </div>
   );
