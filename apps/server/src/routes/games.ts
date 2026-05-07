@@ -9,6 +9,9 @@ import { db } from "../lib/db.js";
 import { loadOwnedGame } from "../lib/ownership.js";
 import { endSSE, writeSSE, writeSSEHeaders } from "../lib/sse.js";
 import { streamGame, streamRefinement } from "../services/llm/client.js";
+import { embedPrompt } from "../services/llm/embed.js";
+import { buildGenerationSystemPrompt } from "../services/llm/prompts/generation.js";
+import { retrieveExample } from "../services/rag/retrieve.js";
 import { buildRefinementContext } from "../services/refinement/context.js";
 import {
   InsufficientCreditsError,
@@ -147,11 +150,33 @@ export async function gamesRoutes(app: FastifyInstance) {
         ac.abort();
       });
 
+      // Pre-LLM parallel fanout per SPEC §7. Today this is just the prompt
+      // embedding; step 10 will add a classify call as a sibling promise
+      // without restructuring this block. `null` is the graceful-degrade
+      // signal for both legs (retrieval falls back to no few-shot).
+      const [embedding] = await Promise.all([
+        embedPrompt(prompt).catch((err) => {
+          request.log.warn(
+            { err: err instanceof Error ? err.message : String(err) },
+            "embedPrompt failed; continuing without RAG retrieval"
+          );
+          return null;
+        }),
+        // step 10: classifyGenre(prompt),
+      ]);
+      const genre = "other"; // step 10 replaces this with classifier output
+      const ragHtml = await retrieveExample({ embedding, genre });
+      const system = buildGenerationSystemPrompt({ ragExample: ragHtml });
+
       let accumulatedCode = "";
       let streamError: Error | null = null;
 
       try {
-        const result = await streamGame({ prompt, signal: ac.signal });
+        const result = await streamGame({
+          system,
+          prompt,
+          signal: ac.signal,
+        });
 
         for await (const delta of result.textStream) {
           accumulatedCode += delta;

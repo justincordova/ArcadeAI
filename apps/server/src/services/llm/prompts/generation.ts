@@ -29,3 +29,22 @@ ERROR REPORTING:
 - And: window.addEventListener('unhandledrejection', e => parent.postMessage({type:'game-error', message: String(e.reason)}, '*'));
 
 Make the game fun, polished, and immediately playable. Use smooth animation and good game feel.`;
+
+const RAG_FRAMING =
+  "Reference example — build something in this style. Match its structural pattern (init/update/render/gameLoop, title screen, key state map, procedural assets, self-contained single file). Do NOT copy its game mechanics; produce the game described by the user prompt.";
+
+/**
+ * Build the system prompt for a generation request, optionally appending
+ * a single RAG few-shot example as a structural reference.
+ *
+ * If `ragExample` is `null`, returns the base contract verbatim (preserves
+ * step-4 behavior — safe degrade when retrieval is empty or fails).
+ */
+export function buildGenerationSystemPrompt({
+  ragExample,
+}: {
+  ragExample: string | null;
+}): string {
+  if (!ragExample) return GENERATION_SYSTEM_PROMPT;
+  return `${GENERATION_SYSTEM_PROMPT}\n\n---\n\n${RAG_FRAMING}\n\n${ragExample}`;
+}
