@@ -61,6 +61,7 @@ export async function billingRoutes(app: FastifyInstance) {
       email: user.email,
       displayName: u.displayName ?? user.name ?? "",
       tier,
+      theme: (u.theme ?? "dark") as string,
       creditsRemainingDaily: limits.daily,
       creditsRemainingMonthly: limits.monthly,
       dailyResetAt,

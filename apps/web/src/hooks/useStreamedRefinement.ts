@@ -108,6 +108,8 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
                   terminated = true;
                   setStatus("error");
                   setError(parsed.message);
+                  // Server-side error refunds credits (SPEC §10) — refresh bars
+                  queryClient.invalidateQueries({ queryKey: ["me"] });
                 } else if (event === "done") {
                   terminated = true;
                   setStatus("idle");
@@ -125,10 +127,10 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
                     }
                   }, 500);
 
-                  // Invalidate game query so messages refetch
-                  queryClient.invalidateQueries({
-                    queryKey: ["game", gameId],
-                  });
+                  // Invalidate game query so messages refetch, and me query
+                  // so the user dropdown's credit bars update (plan 7 §11)
+                  queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+                  queryClient.invalidateQueries({ queryKey: ["me"] });
                 }
               } catch {
                 // ignore malformed frames

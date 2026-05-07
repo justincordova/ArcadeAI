@@ -92,18 +92,22 @@ export const messages = sqliteTable(
   (table) => [index("idx_messages_game_id").on(table.gameId)]
 );
 
-export const usageLog = sqliteTable("usage_log", {
-  id: text("id").primaryKey(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  gameId: text("game_id").references(() => games.id, { onDelete: "set null" }),
-  action: text("action").notNull(), // 'generation' | 'refinement' | 'repair'
-  creditsCharged: integer("credits_charged").notNull(),
-  succeeded: integer("succeeded").notNull().default(0), // 0 or 1
-  refundedAt: integer("refunded_at"),
-  createdAt: integer("created_at").notNull(),
-});
+export const usageLog = sqliteTable(
+  "usage_log",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    gameId: text("game_id").references(() => games.id, { onDelete: "set null" }),
+    action: text("action").notNull(), // 'generation' | 'refinement' | 'repair'
+    creditsCharged: integer("credits_charged").notNull(),
+    succeeded: integer("succeeded").notNull().default(0), // 0 or 1
+    refundedAt: integer("refunded_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [index("idx_usage_log_user_id_created_at").on(table.userId, table.createdAt)]
+);
 
 export const ragExamples = sqliteTable("rag_examples", {
   id: text("id").primaryKey(),

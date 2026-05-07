@@ -5,6 +5,7 @@ export interface MeResponse {
   email: string;
   displayName: string;
   tier: string;
+  theme: string;
   creditsRemainingDaily: number;
   creditsRemainingMonthly: number;
   dailyResetAt: number;

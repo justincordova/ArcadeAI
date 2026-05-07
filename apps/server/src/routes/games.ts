@@ -19,7 +19,7 @@ import {
 import { applyResets } from "../services/usage/reset.js";
 
 const CreateGameBody = z.object({
-  prompt: z.string().min(1).max(2000),
+  prompt: z.string().trim().min(1).max(2000),
 });
 
 const GameIdParams = z.object({
@@ -35,7 +35,7 @@ const ThumbnailBody = z.object({
 });
 
 const RefineBody = z.object({
-  feedback: z.string().min(1).max(2000),
+  feedback: z.string().trim().min(1).max(2000),
 });
 
 export async function gamesRoutes(app: FastifyInstance) {
@@ -112,8 +112,27 @@ export async function gamesRoutes(app: FastifyInstance) {
         });
       });
 
-      // Deduct credits (game row now exists for the FK reference)
-      const { logId } = await deduct(userId, "generation", id);
+      // Deduct credits (game row now exists for the FK reference).
+      // The upfront 402 check above prevents the common "no credits" case.
+      // This catch handles TOCTOU (counters drained between check and deduct)
+      // and any other unexpected pre-stream failure — clean up the empty
+      // game row and return a real status code instead of 500.
+      let logId: string;
+      try {
+        ({ logId } = await deduct(userId, "generation", id));
+      } catch (err) {
+        await db
+          .delete(games)
+          .where(eq(games.id, id))
+          .catch(() => {});
+        if (err instanceof InsufficientCreditsError) {
+          return reply.status(402).send({
+            error: "insufficient_credits",
+            resetAt: err.resetAt,
+          });
+        }
+        throw err;
+      }
 
       // Hijack response for SSE
       reply.hijack();
@@ -363,38 +382,57 @@ export async function gamesRoutes(app: FastifyInstance) {
     }
 
     try {
-      // Deduct credits
-      const { logId } = await deduct(userId, "refinement", id);
+      // Deduct credits. Same TOCTOU/refund considerations as POST /api/games.
+      let logId: string;
+      try {
+        ({ logId } = await deduct(userId, "refinement", id));
+      } catch (err) {
+        if (err instanceof InsufficientCreditsError) {
+          return reply.status(402).send({
+            error: "insufficient_credits",
+            resetAt: err.resetAt,
+          });
+        }
+        throw err;
+      }
 
-      const now = Date.now();
-      const feedbackId = randomUUID();
+      // Pre-stream setup: persist feedback row, load history, build context.
+      // If any of this fails before we hijack the response, refund the
+      // deduction and surface a proper status code instead of a 500 with no
+      // record of the request.
+      let system: string;
+      let refinementPrompt: string;
+      try {
+        const now = Date.now();
+        const feedbackId = randomUUID();
 
-      // Persist the feedback message
-      await db.insert(messages).values({
-        id: feedbackId,
-        gameId: id,
-        kind: "feedback",
-        content: feedback,
-        createdAt: now,
-      });
+        await db.insert(messages).values({
+          id: feedbackId,
+          gameId: id,
+          kind: "feedback",
+          content: feedback,
+          createdAt: now,
+        });
 
-      // Load past feedback messages for context (all messages before the one just inserted)
-      const pastRows = await db
-        .select({ content: messages.content, id: messages.id, kind: messages.kind })
-        .from(messages)
-        .where(eq(messages.gameId, id))
-        .orderBy(asc(messages.createdAt));
+        const pastRows = await db
+          .select({ content: messages.content, id: messages.id, kind: messages.kind })
+          .from(messages)
+          .where(eq(messages.gameId, id))
+          .orderBy(asc(messages.createdAt));
 
-      // Past feedback = all feedback messages except the one we just inserted
-      const pastFeedback = pastRows
-        .filter((r) => r.kind === "feedback" && r.id !== feedbackId)
-        .map((r) => r.content);
+        const pastFeedback = pastRows
+          .filter((r) => r.kind === "feedback" && r.id !== feedbackId)
+          .map((r) => r.content);
 
-      const { system, prompt: refinementPrompt } = await buildRefinementContext({
-        game,
-        feedback,
-        pastFeedback,
-      });
+        ({ system, prompt: refinementPrompt } = await buildRefinementContext({
+          game,
+          feedback,
+          pastFeedback,
+        }));
+      } catch (err) {
+        await refund(logId).catch(() => {});
+        throw err;
+      }
 
       reply.hijack();
       writeSSEHeaders(reply);
