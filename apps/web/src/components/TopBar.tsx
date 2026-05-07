@@ -1,22 +1,13 @@
+import { TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useSession } from "../hooks/useSession.js";
 import { signOut } from "../lib/auth.js";
 import { PlanBadge } from "./topbar/PlanBadge.js";
 
-// Tier credit limits mirrored from @arcadeai/shared — kept in sync with packages/shared/src/plans.ts
-const TIER_DAILY: Record<string, number> = {
-  free: 500,
-  creator: 20000,
-  pro: 50000,
-  admin: Number.MAX_SAFE_INTEGER,
-};
-const TIER_MONTHLY: Record<string, number> = {
-  free: 3000,
-  creator: 20000,
-  pro: 50000,
-  admin: Number.MAX_SAFE_INTEGER,
-};
+function isKnownTier(t: string): t is Tier {
+  return t === "free" || t === "creator" || t === "pro" || t === "admin";
+}
 
 interface UsageBarProps {
   label: string;
@@ -54,10 +45,12 @@ export function TopBar() {
   const { data: me } = useSession();
   const [open, setOpen] = useState(false);
 
-  const tier = me?.tier ?? "free";
+  const rawTier = me?.tier ?? "free";
+  const tier: Tier = isKnownTier(rawTier) ? rawTier : "free";
   const isAdmin = tier === "admin";
-  const dailyTotal = TIER_DAILY[tier] ?? 500;
-  const monthlyTotal = TIER_MONTHLY[tier] ?? 3000;
+  const limits = TIER_CREDIT_LIMITS[tier];
+  const dailyTotal = limits.daily;
+  const monthlyTotal = limits.monthly;
 
   return (
     <header className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-6 py-3">
@@ -108,13 +101,13 @@ export function TopBar() {
               )}
             </div>
 
-            <a
-              href="/pricing"
+            <Link
+              to="/pricing"
               className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800"
               onClick={() => setOpen(false)}
             >
               ⬆ Upgrade plan
-            </a>
+            </Link>
             <button
               type="button"
               onClick={() => {

@@ -75,7 +75,7 @@ function RefinementBuilder({
   gameId,
 }: BuilderProps & { gameId: string }) {
   const queryClient = useQueryClient();
-  const { status, streamingCode, error, refine, stop, attachIframe } =
+  const { status, streamingCode, finalCode, error, refine, stop, attachIframe } =
     useStreamedRefinement(gameId);
   const [prompt, setPrompt] = useState("");
   const [localMessages, setLocalMessages] = useState<Message[]>(initialMessages);
@@ -95,7 +95,10 @@ function RefinementBuilder({
     setLocalMessages(initialMessages);
   }, [initialMessages]);
 
-  const displayCode = streamingCode || initialCode;
+  // Display priority: live stream > last refinement's final code > server-loaded code.
+  // finalCode covers the gap between SSE 'done' and the parent's game refetch
+  // landing — without it the iframe would briefly flash back to pre-refinement.
+  const displayCode = streamingCode || finalCode || initialCode;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {

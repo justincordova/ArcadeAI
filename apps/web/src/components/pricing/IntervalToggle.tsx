@@ -1,4 +1,4 @@
-import type { BillingInterval } from "../../lib/plans.js";
+import type { BillingInterval } from "@arcadeai/shared";
 
 interface IntervalToggleProps {
   value: BillingInterval;

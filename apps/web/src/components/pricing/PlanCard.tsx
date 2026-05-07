@@ -1,5 +1,9 @@
-import type { BillingInterval, PlanCopy } from "../../lib/plans.js";
-import { PLAN_PRICES, TIER_CREDITS } from "../../lib/plans.js";
+import {
+  type BillingInterval,
+  PLAN_PRICES,
+  type PlanCopy,
+  TIER_CREDIT_LIMITS,
+} from "@arcadeai/shared";
 
 interface PlanCardProps {
   plan: PlanCopy;
@@ -9,7 +13,8 @@ interface PlanCardProps {
 
 export function PlanCard({ plan, interval, isActive }: PlanCardProps) {
   const prices = PLAN_PRICES[plan.id];
-  const credits = TIER_CREDITS[plan.id];
+  // Enterprise is a display-only DisplayTier — no Tier row in TIER_CREDIT_LIMITS.
+  const credits = plan.id === "enterprise" ? null : TIER_CREDIT_LIMITS[plan.id];
 
   const priceDisplay =
     prices === null ? "Custom" : prices[interval] === 0 ? "$0" : `$${prices[interval]}/mo`;

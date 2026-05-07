@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useSession } from "../../hooks/useSession.js";
 
 const TIER_STYLES: Record<string, { label: string; className: string }> = {
@@ -32,11 +33,11 @@ export function PlanBadge() {
   const style = TIER_STYLES[tier] ?? TIER_STYLES.free;
 
   return (
-    <a
-      href="/pricing"
+    <Link
+      to="/pricing"
       className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-xs font-bold tracking-wide transition-opacity hover:opacity-80 ${style.className}`}
     >
       {style.label}
-    </a>
+    </Link>
   );
 }

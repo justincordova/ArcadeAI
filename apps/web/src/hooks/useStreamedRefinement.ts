@@ -1,6 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
-import { GAMES_QUERY_KEY, postThumbnail } from "../lib/api/games.js";
 
 const API = "http://localhost:3000";
 
@@ -8,7 +7,12 @@ export type RefinementStatus = "idle" | "streaming" | "error";
 
 export interface StreamedRefinementState {
   status: RefinementStatus;
+  // In-flight accumulated text while `status === 'streaming'`. Cleared on done.
   streamingCode: string;
+  // Final code from the last successful refinement. Persists after streamingCode
+  // clears so the iframe doesn't briefly flash back to pre-refinement code while
+  // the parent's game query is being refetched.
+  finalCode: string | null;
   error: string | null;
   refine: (feedback: string) => void;
   stop: () => void;
@@ -18,6 +22,7 @@ export interface StreamedRefinementState {
 export function useStreamedRefinement(gameId: string): StreamedRefinementState {
   const [status, setStatus] = useState<RefinementStatus>("idle");
   const [streamingCode, setStreamingCode] = useState("");
+  const [finalCode, setFinalCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -35,6 +40,8 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
       setStatus("streaming");
       setStreamingCode("");
       setError(null);
+      // Note: finalCode is intentionally NOT cleared here — keep the previous
+      // refinement's code visible until the new stream produces enough chunks.
 
       (async () => {
         try {
@@ -104,6 +111,10 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
                 } else if (event === "done") {
                   terminated = true;
                   setStatus("idle");
+                  // Promote accumulated streaming text into finalCode so the
+                  // iframe keeps showing the refined game while the parent's
+                  // ['game', id] query refetches. Then clear streamingCode.
+                  setFinalCode(accumulated);
                   setStreamingCode("");
 
                   // Trigger thumbnail capture after ~500ms
@@ -145,23 +156,5 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
     setStreamingCode("");
   }, []);
 
-  // Handle thumbnail postMessage from the iframe
-  const handleThumbnailMessage = useCallback(
-    (dataUrl: string) => {
-      postThumbnail(gameId, dataUrl)
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY });
-        })
-        .catch((err) => {
-          console.warn("[thumbnail] upload failed:", err);
-        });
-    },
-    [gameId, queryClient]
-  );
-
-  // Expose the handler so GameIframe can call it (via the existing message listener)
-  // The actual wiring happens in the component layer.
-  void handleThumbnailMessage; // referenced to avoid lint unused warning
-
-  return { status, streamingCode, error, refine, stop, attachIframe };
+  return { status, streamingCode, finalCode, error, refine, stop, attachIframe };
 }

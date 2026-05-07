@@ -8,6 +8,5 @@
       "@arcadeai/shared/*": ["../../packages/shared/src/*"]
     }
   },
-  "references": [{ "path": "../../packages/shared" }],
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "../../packages/shared/src/**/*"]
 }

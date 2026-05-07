@@ -1,6 +1,7 @@
 // Pricing page — auth optional (SPEC §12)
 // CTA buttons are intentional no-ops in this prototype.
 // Do not "fix" the empty onClick handlers — they are correct per spec.
+import { type BillingInterval, PLANS } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -8,7 +9,6 @@ import { AdminBanner } from "../components/pricing/AdminBanner.js";
 import { IntervalToggle } from "../components/pricing/IntervalToggle.js";
 import { PlanCard } from "../components/pricing/PlanCard.js";
 import { fetchMe } from "../lib/auth.js";
-import { type BillingInterval, PLANS } from "../lib/plans.js";
 
 export const Route = createFileRoute("/pricing")({
   component: PricingPage,

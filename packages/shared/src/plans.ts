@@ -50,7 +50,11 @@ export const PLAN_PRICES: Record<DisplayTier, { monthly: number; yearly: number 
 export interface PlanCopy {
   id: DisplayTier;
   name: string;
-  accent: string; // Tailwind color class for the neon border
+  // Tailwind utility classes for the plan's neon-accent treatment.
+  // Split into border + text so consumers can apply each independently
+  // (border for card outline + CTA outline, text for headings + accents).
+  accentBorder: string;
+  accentText: string;
   features: string[];
   ctaLabel: string;
 }
@@ -62,7 +66,8 @@ export const PLANS: PlanCopy[] = [
   {
     id: "free",
     name: "Free",
-    accent: "border-green-500",
+    accentBorder: "border-green-500",
+    accentText: "text-green-400",
     features: [
       "3,000 credits / month",
       "500 credits / day cap",
@@ -74,7 +79,8 @@ export const PLANS: PlanCopy[] = [
   {
     id: "creator",
     name: "Creator",
-    accent: "border-orange-400",
+    accentBorder: "border-orange-400",
+    accentText: "text-orange-400",
     features: [
       "20,000 credits / month",
       "No daily cap",
@@ -86,7 +92,8 @@ export const PLANS: PlanCopy[] = [
   {
     id: "pro",
     name: "Pro",
-    accent: "border-yellow-400",
+    accentBorder: "border-yellow-400",
+    accentText: "text-yellow-400",
     features: [
       "50,000 credits / month",
       "No daily cap",
@@ -99,7 +106,8 @@ export const PLANS: PlanCopy[] = [
   {
     id: "enterprise",
     name: "Enterprise",
-    accent: "border-purple-500",
+    accentBorder: "border-purple-500",
+    accentText: "text-purple-400",
     features: [
       "Custom credit volume",
       "Dedicated support",
