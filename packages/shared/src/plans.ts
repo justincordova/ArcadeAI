@@ -21,3 +21,10 @@ export const TIER_CREDIT_LIMITS: Record<
     dailyEnforced: false,
   },
 } as const;
+
+// Per-action credit costs (SPEC §10)
+export const CREDIT_COSTS = {
+  generation: 200,
+  refinement: 150,
+  repair: 0,
+} as const;

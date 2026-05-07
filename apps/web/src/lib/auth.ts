@@ -5,6 +5,10 @@ export interface MeResponse {
   email: string;
   displayName: string;
   tier: string;
+  creditsRemainingDaily: number;
+  creditsRemainingMonthly: number;
+  dailyResetAt: number;
+  monthlyResetAt: number;
 }
 
 export async function fetchMe(): Promise<MeResponse | null> {

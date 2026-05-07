@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { games, messages } from "@arcadeai/db";
+import { CREDIT_COSTS, TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import { asc, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -9,6 +10,13 @@ import { loadOwnedGame } from "../lib/ownership.js";
 import { endSSE, writeSSE, writeSSEHeaders } from "../lib/sse.js";
 import { streamGame, streamRefinement } from "../services/llm/client.js";
 import { buildRefinementContext } from "../services/refinement/context.js";
+import {
+  InsufficientCreditsError,
+  deduct,
+  markSucceeded,
+  refund,
+} from "../services/usage/charge.js";
+import { applyResets } from "../services/usage/reset.js";
 
 const CreateGameBody = z.object({
   prompt: z.string().min(1).max(2000),
@@ -43,6 +51,27 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     const { prompt } = parseResult.data;
     const userId = request.authSession.user.id;
+
+    // Upfront credit check (before creating game row per SPEC §11)
+    const userState = await applyResets(userId);
+    if (!userState) return reply.status(404).send({ error: "User not found" });
+
+    const cost = CREDIT_COSTS.generation;
+    const limits = TIER_CREDIT_LIMITS[userState.tier as keyof typeof TIER_CREDIT_LIMITS];
+    if (userState.tier !== "admin") {
+      if (limits.dailyEnforced && userState.creditsRemainingDaily < cost) {
+        return reply.status(402).send({
+          error: "insufficient_credits",
+          resetAt: userState.dailyResetAt,
+        });
+      }
+      if (userState.creditsRemainingMonthly < cost) {
+        return reply.status(402).send({
+          error: "insufficient_credits",
+          resetAt: userState.monthlyResetAt,
+        });
+      }
+    }
 
     // Concurrency cap: 1 active stream per user
     try {
@@ -83,6 +112,9 @@ export async function gamesRoutes(app: FastifyInstance) {
         });
       });
 
+      // Deduct credits (game row now exists for the FK reference)
+      const { logId } = await deduct(userId, "generation", id);
+
       // Hijack response for SSE
       reply.hijack();
       writeSSEHeaders(reply);
@@ -112,16 +144,23 @@ export async function gamesRoutes(app: FastifyInstance) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
-      // Persist whatever we have. If the client closed mid-stream we still
-      // save the partial code so the user doesn't lose it on a tab-close race.
+      // Persist whatever we have
       try {
         await db
           .update(games)
           .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
           .where(eq(games.id, id));
       } catch {
-        // Persistence failure is logged-and-swallowed; we still need to close
-        // the SSE stream cleanly. The client already has the code via chunks.
+        // Persistence failure is logged-and-swallowed
+      }
+
+      // Finalize: markSucceeded or refund (mutually exclusive, each runs once)
+      if (streamError) {
+        // Server-side error: refund credits
+        await refund(logId).catch(() => {});
+      } else {
+        // Success (including user-cancel per SPEC §14: credits not refunded on cancel)
+        await markSucceeded(logId).catch(() => {});
       }
 
       if (!clientClosed) {
@@ -291,6 +330,28 @@ export async function gamesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "Game has no code to refine" });
     }
 
+    // Upfront credit check before SSE (402 before any bytes emitted per SPEC §11)
+    const refineUserState = await applyResets(userId);
+    if (!refineUserState) return reply.status(404).send({ error: "User not found" });
+
+    const refineCost = CREDIT_COSTS.refinement;
+    const refineLimits =
+      TIER_CREDIT_LIMITS[refineUserState.tier as keyof typeof TIER_CREDIT_LIMITS];
+    if (refineUserState.tier !== "admin") {
+      if (refineLimits.dailyEnforced && refineUserState.creditsRemainingDaily < refineCost) {
+        return reply.status(402).send({
+          error: "insufficient_credits",
+          resetAt: refineUserState.dailyResetAt,
+        });
+      }
+      if (refineUserState.creditsRemainingMonthly < refineCost) {
+        return reply.status(402).send({
+          error: "insufficient_credits",
+          resetAt: refineUserState.monthlyResetAt,
+        });
+      }
+    }
+
     // Concurrency cap: 1 active stream per user
     try {
       acquire(userId);
@@ -302,6 +363,9 @@ export async function gamesRoutes(app: FastifyInstance) {
     }
 
     try {
+      // Deduct credits
+      const { logId } = await deduct(userId, "refinement", id);
+
       const now = Date.now();
       const feedbackId = randomUUID();
 
@@ -314,27 +378,19 @@ export async function gamesRoutes(app: FastifyInstance) {
         createdAt: now,
       });
 
-      // Load past feedback messages (excluding the current one) for context
+      // Load past feedback messages for context (all messages before the one just inserted)
       const pastRows = await db
-        .select({ content: messages.content })
+        .select({ content: messages.content, id: messages.id, kind: messages.kind })
         .from(messages)
         .where(eq(messages.gameId, id))
         .orderBy(asc(messages.createdAt));
 
+      // Past feedback = all feedback messages except the one we just inserted
       const pastFeedback = pastRows
-        .filter((r) => r.content !== feedback)
-        .filter((_, i) => {
-          // exclude the last row (the one we just inserted)
-          return i < pastRows.length - 1;
-        })
-        .filter((r) => {
-          // only feedback rows (not the initial prompt)
-          const idx = pastRows.findIndex((pr) => pr.content === r.content);
-          return idx > 0; // skip the first message (the prompt)
-        })
+        .filter((r) => r.kind === "feedback" && r.id !== feedbackId)
         .map((r) => r.content);
 
-      const { system, prompt } = await buildRefinementContext({
+      const { system, prompt: refinementPrompt } = await buildRefinementContext({
         game,
         feedback,
         pastFeedback,
@@ -356,7 +412,11 @@ export async function gamesRoutes(app: FastifyInstance) {
       let streamError: Error | null = null;
 
       try {
-        const result = await streamRefinement({ system, prompt, signal: ac.signal });
+        const result = await streamRefinement({
+          system,
+          prompt: refinementPrompt,
+          signal: ac.signal,
+        });
 
         for await (const delta of result.textStream) {
           accumulatedCode += delta;
@@ -368,7 +428,7 @@ export async function gamesRoutes(app: FastifyInstance) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
-      // Persist refined code (only on clean completion, not on error or abort)
+      // Persist refined code (only on clean completion)
       if (!streamError && !clientClosed && accumulatedCode) {
         try {
           await db
@@ -376,8 +436,15 @@ export async function gamesRoutes(app: FastifyInstance) {
             .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
             .where(eq(games.id, id));
         } catch {
-          // persistence failure is non-fatal; client already has code via chunks
+          // persistence failure is non-fatal
         }
+      }
+
+      // Finalize credits
+      if (streamError) {
+        await refund(logId).catch(() => {});
+      } else {
+        await markSucceeded(logId).catch(() => {});
       }
 
       if (!clientClosed) {

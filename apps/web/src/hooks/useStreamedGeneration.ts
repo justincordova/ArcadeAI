@@ -52,6 +52,14 @@ export function useStreamedGeneration(): StreamedGenerationState {
           return;
         }
 
+        if (res.status === 402) {
+          const body = (await res.json()) as { error: string; resetAt: number };
+          const resetDate = new Date(body.resetAt).toLocaleDateString();
+          setStatus("error");
+          setError(`Out of credits — resets ${resetDate}. Upgrade on /pricing.`);
+          return;
+        }
+
         if (!res.ok || !res.body) {
           setStatus("error");
           setError("Request failed");
