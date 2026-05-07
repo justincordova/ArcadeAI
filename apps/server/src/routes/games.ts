@@ -165,7 +165,11 @@ export async function gamesRoutes(app: FastifyInstance) {
         // step 10: classifyGenre(prompt),
       ]);
       const genre = "other"; // step 10 replaces this with classifier output
-      const ragHtml = await retrieveExample({ embedding, genre });
+      const ragHtml = await retrieveExample({
+        embedding,
+        genre,
+        log: request.log,
+      });
       const system = buildGenerationSystemPrompt({ ragExample: ragHtml });
 
       let accumulatedCode = "";

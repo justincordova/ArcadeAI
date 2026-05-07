@@ -26,12 +26,14 @@
   const CELL = 30;
   const BOARD_X = 30;
   const BOARD_Y = 60;
-  const COLORS = [null, "#7df9ff", "#ffae3b", "#3bff7a", "#ff5d6c", "#a23bff", "#ffe83b", "#3b6cff"];
+  // Standard Tetris piece colors: I=cyan, L=orange, J=blue, O=yellow,
+  // S=green, Z=red, T=purple.
+  const COLORS = [null, "#7df9ff", "#ffae3b", "#3b6cff", "#ffe83b", "#3bff7a", "#ff5d6c", "#a23bff"];
   const SHAPES = [
     [],
     [[1, 1, 1, 1]],                    // I
-    [[2, 0, 0], [2, 2, 2]],            // L
-    [[0, 0, 3], [3, 3, 3]],            // J  (note: actually J vs L flipped — fine)
+    [[0, 0, 2], [2, 2, 2]],            // L
+    [[3, 0, 0], [3, 3, 3]],            // J
     [[4, 4], [4, 4]],                  // O
     [[0, 5, 5], [5, 5, 0]],            // S
     [[6, 6, 0], [0, 6, 6]],            // Z

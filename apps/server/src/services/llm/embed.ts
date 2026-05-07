@@ -2,7 +2,18 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { EMBEDDING } from "@arcadeai/shared";
 import { embed } from "ai";
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
+// Fail-fast at module load if the embedding provider is misconfigured —
+// otherwise a missing key silently disables RAG retrieval on every request
+// (the route's `.catch(→null)` graceful-degrade hides the configuration
+// bug behind a per-request WARN).
+const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey) {
+  throw new Error(
+    "OPENAI_API_KEY is required for RAG embedding (services/llm/embed.ts). " +
+      "Set it in .env or unset RAG features explicitly."
+  );
+}
+const openai = createOpenAI({ apiKey });
 
 /**
  * Embed a runtime prompt with text-embedding-3-small for RAG retrieval

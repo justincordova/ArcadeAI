@@ -12,9 +12,13 @@
  *   rag_examples     (id, genre, prompt, html, created_at)
  *   rag_embeddings   (id, genre, embedding)  — vec0 virtual table
  *
- * Idempotent: rows are upserted by `id` via INSERT OR REPLACE. Re-running
- * after a curated edit re-seeds in place. This script does NOT delete rows
- * whose ids no longer appear in `rag-prompts.ts`; remove those manually.
+ * Idempotent: rows are upserted by `id` inside a single transaction.
+ *   - `rag_examples` uses `INSERT OR REPLACE`.
+ *   - `rag_embeddings` is a vec0 virtual table that does NOT support
+ *     `OR REPLACE`, so each row is `DELETE`d then `INSERT`ed.
+ * Re-running after a curated edit re-seeds in place. This script does NOT
+ * delete rows whose ids no longer appear in `rag-prompts.ts`; remove those
+ * manually.
  */
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";

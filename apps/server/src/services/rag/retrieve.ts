@@ -15,6 +15,10 @@ const GENRE_BUCKETS = new Set([
   "other",
 ]);
 
+interface Logger {
+  warn: (obj: unknown, msg?: string) => void;
+}
+
 /**
  * Retrieve the single nearest curated reference game (SPEC §8) for a
  * runtime prompt embedding, optionally filtered by classified genre.
@@ -35,13 +39,19 @@ const GENRE_BUCKETS = new Set([
  *  - `genre === 'other'` (or any value outside the 8 buckets) — the
  *    inner query is unfiltered (global nearest-neighbor fallback per
  *    SPEC §6 / §8).
+ *
+ * `bun:sqlite` calls are synchronous; the function is async only for
+ * forward-compat with the route's awaited shape (and possible swap to
+ * a remote vector store later).
  */
 export async function retrieveExample({
   embedding,
   genre,
+  log,
 }: {
   embedding: number[] | null;
   genre: string;
+  log?: Logger;
 }): Promise<string | null> {
   if (!embedding) return null;
 
@@ -63,9 +73,12 @@ export async function retrieveExample({
     if (!row) return null;
     return (row as { html: string }).html;
   } catch (err) {
-    console.warn(
-      `rag retrieveExample failed (genre=${genre}): ${err instanceof Error ? err.message : String(err)}`
-    );
+    const msg = err instanceof Error ? err.message : String(err);
+    if (log) {
+      log.warn({ err: msg, genre }, "rag retrieveExample failed");
+    } else {
+      console.warn(`rag retrieveExample failed (genre=${genre}): ${msg}`);
+    }
     return null;
   }
 }
