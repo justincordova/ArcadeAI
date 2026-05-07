@@ -36,10 +36,13 @@ database.
       are up to date.
 - [ ] **Env vars present.** `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`
       are set in `.env` and listed in `.env.example` (SPEC §15).
-      Build-time scripts read both.
+      `OPENAI_API_KEY` is read by the build-time embedding script;
+      `ANTHROPIC_API_KEY` is read by the runtime Sonnet calls
+      (Workstream B).
 - [ ] **Model id constants.** `packages/shared/src/models.ts`
-      exports the Sonnet id (from step 4). Add the Opus 4.7 and
-      embedding model ids if they are not already listed (SPEC §3).
+      exports the Sonnet id (from step 4). Add the embedding model
+      id if not already listed (SPEC §3). Opus 4.7 is NOT added —
+      reference games are generated manually, not via build-time script.
 - [ ] **`genre` column on `rag_embeddings` is resolved in SPEC.**
       SPEC §5 declares `rag_embeddings` as
       `vec0(id text primary key, genre text, embedding float[1536])`
@@ -51,11 +54,12 @@ database.
 
 ### Workstream A — Library creation (build-time)
 
-1. **Add Opus 4.7 + embedding model id constants.**
-   `packages/shared/src/models.ts` — export `OPUS = 'claude-opus-4-7'`
-   and `EMBEDDING = 'text-embedding-3-small'`. Both are imported only
-   by build-time scripts; nothing in `apps/server/src/services/`
-   imports `OPUS`. Per SPEC §3 model ids live in this single file.
+1. **Add embedding model id constant.**
+   `packages/shared/src/models.ts` — export
+   `EMBEDDING = 'text-embedding-3-small'`. Imported only by build-time
+   scripts. Per SPEC §3 model ids live in this single file. Opus 4.7
+   is NOT added — reference games are generated manually by the
+   development team, not via a build-time API script.
 
 2. **Curated prompt list.**
    `apps/server/scripts/rag-prompts.ts` — export an array of
@@ -64,72 +68,43 @@ database.
    platformer, puzzle, runner, other`). Hand-written. This file is
    the editorial source of truth and is committed.
 
-3. **Reference draft system prompt.**
-   `apps/server/scripts/rag-draft-prompt.ts` — export
-   `REFERENCE_DRAFT_SYSTEM_PROMPT`. This is the prompt given to
-   Opus during drafting. Restates the SPEC §13 base contract verbatim
-   so drafts already mostly conform: single complete HTML file, no
-   markdown fences, `<canvas>` + `init`/`update`/`render`/`gameLoop`,
-   title screen + game over, key state map, procedural assets,
-   self-contained, try/catch + `parent.postMessage` errors. Mention
-   that the output will be hand-edited and used as a few-shot
-   reference for other models — the draft should optimize for
-   structural clarity over cleverness.
+3. **Generate reference games manually.**
+   Using a strong LLM (Claude Opus, Sonnet, or equivalent) directly
+   in this conversation or a separate LLM session, generate ~20
+   games — one per entry in `rag-prompts.ts`. For each game:
 
-4. **`scripts/draft-rag-examples.ts`.** Bun script.
-   - Imports `OPUS` from `@arcadeai/shared`.
-   - `import Anthropic from '@ai-sdk/anthropic'` (or the existing
-     server-side wrapper, but read directly from env to keep this
-     script self-contained).
-   - Reads `apps/server/scripts/rag-prompts.ts`.
-   - For each entry, calls `streamText` (or `generateText` —
-     streaming is unnecessary for a build-time script) with model
-     `OPUS`, system `REFERENCE_DRAFT_SYSTEM_PROMPT`, prompt
-     `entry.prompt`. Writes the raw HTML to
-     `apps/server/scripts/rag-drafts/<id>.html`.
-   - Sequential, not parallel — Anthropic rate limits at low
-     concurrency are fine for 20 calls.
-   - Logs per-entry: id, genre, byte size, elapsed ms.
-   - **Build-time only.** Never imported by runtime code.
+   - Prompt the LLM with the entry's prompt text + the SPEC §13 base
+     contract (single complete HTML file, `<canvas>` +
+     `init`/`update`/`render`/`gameLoop`, title screen + game over,
+     key state map, procedural assets, self-contained, try/catch +
+     `parent.postMessage` errors).
+   - Copy the LLM output into
+     `apps/server/scripts/rag-curated/<id>.html`.
+   - Open the file in a browser. Confirm: title screen appears,
+     key press starts the game, gameplay runs without errors, game
+     over state is reachable, restart works.
+   - Inspect the source. Confirm: single HTML file, no markdown
+     fences, no external `<script src>` / `<link>` / fonts (SPEC §13),
+     `<canvas>` element present, `init` / `update(dt)` / `render` /
+     `gameLoop` functions present, `requestAnimationFrame` driving
+     the loop, input via keydown/keyup state map (not direct event
+     handlers), procedural assets only, try/catch +
+     `parent.postMessage` error wrapper.
+   - Trim / fix anything the LLM got wrong. Common fixes: dt-driven
+     physics that's actually frame-driven; missing
+     restart-on-keypress; visible score; legible colors in dark mode.
+   - Save. The curated copy is the artifact that will be embedded
+     and seeded.
 
-5. **Gitignore the drafts dir.** Add
-   `apps/server/scripts/rag-drafts/` to the repo `.gitignore`
-   (alongside the existing entries from SPEC §4). Drafts are raw
-   model output, not authoritative; only the curated copies are
-   committed.
+   There is NO `scripts/draft-rag-examples.ts` script. The generation
+   is manual — the developer uses an LLM in a chat session, copies
+   the output, and hand-edits it.
 
-6. **Editorial review checklist.** This is a manual step performed
-   by the developer between draft and embed/seed. Documented in
-   the script header comment of `seed-rag-examples.ts` so future
-   re-curation follows the same procedure:
-
-   - [ ] Copy `rag-drafts/<id>.html` to
-         `apps/server/scripts/rag-curated/<id>.html`.
-   - [ ] Open the file in a browser. Confirm: title screen
-         appears, key press starts the game, gameplay runs
-         without errors in the console, game over state is
-         reachable, restart works.
-   - [ ] Inspect the source. Confirm: single HTML file, no
-         markdown fences, no external `<script src>` / `<link>`
-         / fonts (SPEC §13), `<canvas>` element present,
-         `init` / `update(dt)` / `render` / `gameLoop` functions
-         present, `requestAnimationFrame` driving the loop,
-         input via keydown/keyup state map (not direct event
-         handlers), procedural assets only (no data URLs of
-         pre-baked images), try/catch + `parent.postMessage`
-         error wrapper.
-   - [ ] Trim / fix anything Opus got wrong. Common fixes:
-         dt-driven physics that's actually frame-driven; missing
-         restart-on-keypress; visible score; legible colors in
-         dark mode.
-   - [ ] Save. The curated copy is the artifact that will be
-         embedded and seeded.
-
-7. **Curated dir is committed.** `apps/server/scripts/rag-curated/`
+4. **Curated dir is committed.** `apps/server/scripts/rag-curated/`
    is NOT gitignored. The curated HTML files are the highest-leverage
    asset in the system (SPEC §8) and live in source control.
 
-8. **`scripts/embed-rag-examples.ts`.** Bun script.
+5. **`scripts/embed-rag-examples.ts`.** Bun script.
    - Imports `EMBEDDING` from `@arcadeai/shared`.
    - `import { openai } from '@ai-sdk/openai'`; uses the AI SDK
      `embed` (or `embedMany`) helper.
@@ -144,41 +119,41 @@ database.
    - Logs per-entry: id, vector norm sanity check (non-zero,
      finite).
 
-9. **Gitignore the embeddings dir.**
+6. **Gitignore the embeddings dir.**
    `apps/server/scripts/rag-embeddings/` added to `.gitignore`.
    Cheap to regenerate; not the authoritative artifact.
 
-10. **`scripts/seed-rag-examples.ts`.** Bun script.
-    - Imports the shared db client from `@arcadeai/db` (this
-      triggers the `db.loadExtension()` call from Workstream B
-      task 11; if Workstream B has not landed yet, this script
-      blocks on it — see "Coordination" below).
-    - Reads `rag-prompts.ts`, `rag-curated/<id>.html`,
-      `rag-embeddings/<id>.json`.
-    - Verifies counts match across all three sources.
-    - In a single transaction:
-      - For each entry:
-        ```
-        INSERT OR REPLACE INTO rag_examples
-          (id, genre, prompt, html, created_at)
-          VALUES (?, ?, ?, ?, ?)
-        INSERT OR REPLACE INTO rag_embeddings (id, genre, embedding)
-          VALUES (?, ?, ?)
-        ```
-        `genre` on `rag_embeddings` is denormalized from
-        `rag_examples.genre` per SPEC §5 / §8. The `embedding`
-        parameter is bound as the binary format produced by the
-        `sqlite-vec` package's helper (see Workstream B task 11).
-    - Logs per-genre counts after seeding (sanity check that all
-      8 buckets are represented).
-    - Idempotent: re-running replaces rows by `id`. Does NOT
-      delete rows that no longer appear in `rag-prompts.ts` — if
-      the curated set shrinks, the developer manually removes
-      stale ids (rare; surfaced by the per-genre count log).
+7. **`scripts/seed-rag-examples.ts`.** Bun script.
+   - Imports the shared db client from `@arcadeai/db` (this
+     triggers the `db.loadExtension()` call from Workstream B
+     task 8; if Workstream B has not landed yet, this script
+     blocks on it — see "Coordination" below).
+   - Reads `rag-prompts.ts`, `rag-curated/<id>.html`,
+     `rag-embeddings/<id>.json`.
+   - Verifies counts match across all three sources.
+   - In a single transaction:
+     - For each entry:
+       ```
+       INSERT OR REPLACE INTO rag_examples
+         (id, genre, prompt, html, created_at)
+         VALUES (?, ?, ?, ?, ?)
+       INSERT OR REPLACE INTO rag_embeddings (id, genre, embedding)
+         VALUES (?, ?, ?)
+       ```
+       `genre` on `rag_embeddings` is denormalized from
+       `rag_examples.genre` per SPEC §5 / §8. The `embedding`
+       parameter is bound as the binary format produced by the
+       `sqlite-vec` package's helper (see Workstream B task 8).
+   - Logs per-genre counts after seeding (sanity check that all
+     8 buckets are represented).
+   - Idempotent: re-running replaces rows by `id`. Does NOT
+     delete rows that no longer appear in `rag-prompts.ts` — if
+     the curated set shrinks, the developer manually removes
+     stale ids (rare; surfaced by the per-genre count log).
 
 ### Workstream B — Runtime integration
 
-11. **Load `sqlite-vec` at db client init.**
+8. **Load `sqlite-vec` at db client init.**
     `packages/db/src/client.ts` — `bun add sqlite-vec` (in
     `packages/db`). Immediately after the SQLite handle is
     constructed and before any query runs, call:
@@ -193,7 +168,7 @@ database.
     Run a `SELECT vec_version()` smoke check on startup and fail
     fast if the extension is not actually usable.
 
-12. **Verify post-migrate vec0 table matches SPEC §5.**
+9. **Verify post-migrate vec0 table matches SPEC §5.**
     `packages/db/src/post-migrate.ts` — confirm the existing CREATE
     statement (owned by step 1 per SPEC §19) is exactly:
     `CREATE VIRTUAL TABLE IF NOT EXISTS rag_embeddings USING vec0(id text primary key, genre text, embedding float[1536])`.
@@ -203,7 +178,7 @@ database.
     a step-9 file. Re-run migrations on a fresh db file to confirm
     `rag_embeddings` exposes all three columns.
 
-13. **Retrieval service module.**
+10. **Retrieval service module.**
     `apps/server/src/services/rag/retrieve.ts` — export
     `retrieveExample({ embedding, genre }): Promise<string | null>`.
     - Input types: `{ embedding: number[] | null; genre: string }`.
@@ -227,7 +202,7 @@ database.
       pipeline degrades gracefully (matches SPEC §6's failure
       stance for classification).
 
-14. **Embedding helper.**
+11. **Embedding helper.**
     `apps/server/src/services/llm/embed.ts` — export
     `embedPrompt(prompt: string): Promise<number[]>`. Wraps the
     AI SDK's `embed` against `openai.embedding(EMBEDDING)`.
@@ -235,7 +210,7 @@ database.
     route (and reusable by step 10 if classification ends up
     needing embeddings, though it doesn't per SPEC §6).
 
-15. **RAG-augmented prompt builder.**
+12. **RAG-augmented prompt builder.**
     `apps/server/src/services/llm/prompts/generation.ts` —
     keep `GENERATION_SYSTEM_PROMPT` (the base contract) as a
     constant. Add `buildGenerationSystemPrompt({ ragExample }: { ragExample: string | null }): string`:
@@ -259,7 +234,7 @@ database.
       shape is "delimiter, framing instruction, full HTML, end".
       Full code, not a skeleton (SPEC §8).
 
-16. **Wire retrieval into the generation route.**
+13. **Wire retrieval into the generation route.**
     `apps/server/src/routes/games.ts` — in `POST /api/games`,
     after row insertion and SSE `meta` write, before the
     `streamText` call:
@@ -273,7 +248,7 @@ database.
     using the new `system`. Step 4's existing AbortController +
     activeStreams + db-update-on-completion logic is unchanged.
 
-17. **Parallel fanout shape (forward-compatible).**
+14. **Parallel fanout shape (forward-compatible).**
     The SPEC §7 pipeline runs embed + classify + title in
     parallel. Title generation is already deferred; classify
     lands in step 10. For now, only the embed call is async
@@ -288,7 +263,7 @@ database.
       ])
     ```
 
-18. **Remove or downgrade the hardcoded prompt path.**
+15. **Remove or downgrade the hardcoded prompt path.**
     The hardcoded `GENERATION_SYSTEM_PROMPT` constant remains
     (used as the base inside `buildGenerationSystemPrompt`).
     No callsite outside the prompt builder should import it
@@ -297,22 +272,22 @@ database.
 
 ## Coordination between workstreams
 
-Workstream B task 11 (`sqlite-vec` load at client init) must land
-before Workstream A task 10 (seed script) runs, because the seed
+Workstream B task 8 (`sqlite-vec` load at client init) must land
+before Workstream A task 7 (seed script) runs, because the seed
 script uses the shared db client and writes to the `rag_embeddings`
 vec0 table, which requires the extension to be loaded. Order of
 landing:
 
-1. B-11, B-12 (load extension, verify post-migrate). Server still
+1. B-8, B-9 (load extension, verify post-migrate). Server still
    starts; nothing exercises the extension yet.
-2. A-1 through A-9 (constants, prompts, draft, editorial pass,
+2. A-1 through A-6 (constants, prompts, manual generation,
    embed). No db writes yet.
-3. A-10 (seed). Database now populated.
-4. B-13 through B-18 (retrieval service, embed helper, prompt
+3. A-7 (seed). Database now populated.
+4. B-10 through B-15 (retrieval service, embed helper, prompt
    builder, route wiring).
 
-Tasks A-1 through A-9 can run in parallel with B-11 and B-12 since
-they don't share files. The seed (A-10) is the synchronization
+Tasks A-1 through A-6 can run in parallel with B-8 and B-9 since
+they don't share files. The seed (A-7) is the synchronization
 point.
 
 ## Verification steps
@@ -322,26 +297,25 @@ Run scripts with `bun run apps/server/scripts/<script>.ts`.
 
 ### Workstream A verification
 
-1. **Draft script.**
-   - `bun run apps/server/scripts/draft-rag-examples.ts`
-   - Observe: 20 calls to Opus 4.7 complete; per-call log lines
-     show id, genre, byte size, elapsed.
-   - Files appear in `apps/server/scripts/rag-drafts/`.
-   - Spot-check: open one in a browser; it loads (may have
-     bugs — that's what the editorial pass fixes).
+1. **Manual game generation.**
+   - For each entry in `rag-prompts.ts`, a curated HTML file
+     exists in `apps/server/scripts/rag-curated/<id>.html`.
+   - Spot-check: open each in a browser; title screen appears,
+     key press starts the game, gameplay runs without errors,
+     game over state is reachable, restart works.
+   - Source inspection: single HTML file, no markdown fences,
+     no external resources, `<canvas>` present, `init`/`update`/
+     `render`/`gameLoop` functions present, keydown/keyup state
+     map, procedural assets only, try/catch + `parent.postMessage`
+     error wrapper (SPEC §13 base contract).
 
-2. **Editorial pass.**
-   - For each draft, copy to `rag-curated/`, run the checklist
-     (task 6), edit until it passes.
-   - All 20 curated files exist and play correctly.
-
-3. **Embed script.**
+2. **Embed script.**
    - `bun run apps/server/scripts/embed-rag-examples.ts`
    - Observe: 20 embed calls; each writes a JSON file with a
      1536-element array.
    - Sanity check: every vector has finite, non-zero values.
 
-4. **Seed script.**
+3. **Seed script.**
    - `bun run apps/server/scripts/seed-rag-examples.ts`
    - Observe: per-genre counts log shows all 8 buckets covered.
    - SQLite check: `SELECT count(*) FROM rag_examples` = 20.
@@ -350,14 +324,14 @@ Run scripts with `bun run apps/server/scripts/<script>.ts`.
 
 ### Workstream B verification
 
-5. **Extension load.**
+4. **Extension load.**
    - Restart `bun run dev`.
    - Server log shows `db: sqlite-vec loaded` and a version
      string.
    - SQLite check from a Bun REPL or a one-off script:
      `SELECT vec_version()` returns a string.
 
-6. **Retrieval service — global fallback.**
+5. **Retrieval service — global fallback.**
    - One-off script or test harness:
      ```ts
       const embedding = await embedPrompt('a fast paced shooter with neon visuals')
@@ -366,18 +340,18 @@ Run scripts with `bun run apps/server/scripts/<script>.ts`.
    - `html` is a non-empty string.
    - Cross-check the chosen example by looking up its id manually.
 
-7. **Retrieval service — genre-filtered.**
+6. **Retrieval service — genre-filtered.**
    - Same harness, with `genre: 'shooter'`.
    - `html` is non-empty and corresponds to one of the
      curated shooter examples (not a paddle, snake, etc.).
 
-8. **Empty-table degrade.**
+7. **Empty-table degrade.**
    - On a fresh db (or after `DELETE FROM rag_examples;
      DELETE FROM rag_embeddings;`):
      `retrieveExample` returns `null` without throwing.
    - Re-seed before continuing.
 
-9. **End-to-end generation with RAG.**
+8. **End-to-end generation with RAG.**
    - Sign in via the web app.
    - `/game/new`, prompt: "a top-down shooter with falling
      enemies and a power-up that doubles fire rate".
@@ -388,19 +362,19 @@ Run scripts with `bun run apps/server/scripts/<script>.ts`.
      — this is qualitative; the harder check is that the
      pipeline doesn't regress.
 
-10. **No Opus at runtime.**
+9. **No Opus at runtime.**
     - Search server logs across several generations:
-      `grep claude-opus-4-7` returns nothing for runtime calls.
-    - The Opus model id appears only in the build-time draft
-      script. SPEC §3 / §8 contract upheld.
+      `grep claude-opus-4-7` returns nothing.
+    - Opus is not called from this codebase at all — reference
+      games are generated manually. SPEC §3 / §8 contract upheld.
 
-11. **Step-10 readiness.**
+10. **Step-10 readiness.**
     - Manually edit `routes/games.ts` to pass `genre: 'flappy'`
       instead of `'other'`. Rerun a flappy-style prompt.
     - Server log shows the genre-filtered query path.
     - Revert the literal back to `'other'` before committing.
 
-12. **Build & lint** (per `AGENTS.md` pre-commit gate).
+11. **Build & lint** (per `AGENTS.md` pre-commit gate).
     - `bun run build` (typecheck across workspaces).
     - `bun run check` (Biome).
     - Both pass.
@@ -456,12 +430,12 @@ Includes: retrieval service, prompt assembly updates, and the wiring that inject
 - The committed files in `apps/server/scripts/rag-curated/` and
   `apps/server/scripts/rag-prompts.ts` can stay in place — they
   are inert unless the seed script runs.
-- `apps/server/scripts/rag-drafts/` and
-  `apps/server/scripts/rag-embeddings/` are gitignored; deleting
-  the dirs is harmless.
-- The Opus 4.7 and embedding model id constants in
-  `packages/shared/src/models.ts` are inert if no callsite
-  imports them; safe to leave or remove.
+- `apps/server/scripts/rag-embeddings/` is gitignored; deleting
+  the dir is harmless.
+- The embedding model id constant in
+  `packages/shared/src/models.ts` is inert if no callsite
+  imports it; safe to leave or remove. No Opus model id constant
+  exists (reference games are generated manually, not via script).
 
 ### Workstream B rollback
 

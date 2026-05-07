@@ -72,9 +72,10 @@ This is a local prototype. No production deployment, no real billing, no externa
 | Model | Role |
 |---|---|
 | Claude Sonnet 4.6 (`claude-sonnet-4-6`) | **Runtime:** game generation, refinement, auto-repair (anything where output quality determines whether the game is fun) |
-| Claude Opus 4.7 (`claude-opus-4-7`) | **Build-time only:** drafting the RAG reference library (~20 hand-curated games). Not used at runtime. See §8. |
 | GPT-4.1-mini (`gpt-4.1-mini`) | Genre classification, style tag extraction, code summarization, error categorization, game title generation |
 | text-embedding-3-small | Prompt embeddings for RAG retrieval |
+
+The RAG reference library (~20 hand-curated games — see §8) is generated **manually by the development team using an external LLM session**, not via a build-time API call from this codebase. No model id for the reference-drafting step appears anywhere in the runtime or build pipeline; the curated HTML is the editorial source of truth.
 
 Model IDs are pinned in `packages/shared/src/models.ts` so they're swappable in one place.
 
@@ -360,20 +361,20 @@ Auto-repair is **free** — credits are not charged. The model failed, not the u
 
 ### Sourcing
 
-**Generate-then-curate, build-time only.** Target ~20 games at launch (~2–3 per genre bucket).
+**Manually authored, build-time only.** Target ~20 games at launch (~2–3 per genre bucket).
 
 The reference library is the highest-leverage code in the entire system — every runtime generation retrieves one of these examples and shows it to Sonnet as a "build something like this" reference. A 5% better reference compounds across thousands of generations.
 
-**Model requirement: Claude Opus 4.7 (NOT Sonnet) for drafting reference games.**
+**The reference games are authored by the development team in this conversation (or a separate LLM session), not by an automated script.**
 
-- Opus produces meaningfully better long-form code coherence, subtle correctness, and structural faithfulness than Sonnet — exactly the qualities that matter for a reference asset.
-- Cost is trivial: ~$0.25 per game × 20 games = **~$5 one-time**, since this runs once at build time, not in user-facing runtime.
-- Each draft is then hand-edited until it cleanly satisfies the system prompt's structural rules (canvas, gameLoop, title screen, etc.) and plays well.
+- We (the developers) generate ~20 games using a strong LLM — directly in this conversation or in a separate LLM session — and copy the output into the repo. There is NO build-time script in `apps/server/scripts/` that calls any LLM API to produce reference games. Drafts are produced in the LLM chat session, copied into the repo, then edited and verified.
+- Each draft is then hand-edited until it cleanly satisfies the system prompt's structural rules (canvas, gameLoop, title screen, etc.) and plays well in a browser.
+- The committed, hand-curated HTML files in `apps/server/scripts/rag-curated/` are the editorial source of truth.
 - Runtime model selection is unaffected: Sonnet remains the runtime model for all user-facing generation, refinement, and repair.
 
 ### Implementation note (separate doc)
 
-The reference library has its own scope — a build-time script, an editorial process, embedding generation, and seeding the database. **It will be planned and executed in its own design doc** (`docs/designs/rag-library.md` or similar) separately from the main app. The main app's build order assumes the seeded library exists by step 8.
+The reference library has its own scope — a manual generation + editorial process, plus embedding and seeding scripts to populate the database. **It is planned and executed in its own design doc** (`docs/designs/09-rag-library.md`) separately from the main app. The embedding (`text-embedding-3-small`) and seed steps are scripted and idempotent; only the upstream "produce the HTML" step is manual. The main app's build order assumes the seeded library exists by step 9.
 
 ### Retrieval
 
@@ -867,7 +868,7 @@ Each step is independently shippable and testable.
 6. **Refinement** — `/api/games/:id/refine` endpoint with full context strategy.
 7. **Credit model + usage tracking** — usage_log table, deduction/refund logic, usage bars in user dropdown, daily/monthly resets.
 8. **Pricing page + plan tiers** — pricing route, plan badge in top bar, billing endpoint (no-op).
-9. **RAG library** — install sqlite-vec extension and load via `db.loadExtension()`, wire retrieval into generation. **Reference game creation is a separate workstream with its own design doc — drafted with Claude Opus 4.7, hand-curated, embedded with text-embedding-3-small, seeded into `rag_examples` + `rag_embeddings` vec0 tables.** This step covers the integration; the library itself is built in parallel via its own plan.
+9. **RAG library** — install sqlite-vec extension and load via `db.loadExtension()`, wire retrieval into generation. **Reference game creation is a separate workstream with its own design doc — generated manually by the development team in an external LLM session, hand-curated, then embedded with text-embedding-3-small and seeded into `rag_examples` + `rag_embeddings` vec0 tables via build-time scripts.** This step covers the integration; the library itself is built in parallel via its own plan.
 10. **Genre classification + style tags + title generation** — GPT-4.1-mini classification step with structured output, fallback to `other`/empty on failure, genre-filtered RAG retrieval, prompt variants. Also lands the parallel GPT-4.1-mini title-generation call (PATCH `/api/games/:id` when complete) per §7. Until this step ships, games keep their placeholder title (first 40 chars of the prompt).
 11. **Auto-repair loop** — iframe error postMessage, repair endpoint, "fixing..." indicator, 2-attempt cap with fallback UI.
 12. **Settings page + theme toggle** — display name editing, connected accounts management (link/unlink Google/GitHub with last-provider guard), dark/light mode.
