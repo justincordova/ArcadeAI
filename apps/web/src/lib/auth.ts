@@ -1,16 +1,8 @@
-const API = "http://localhost:3000";
+import type { MeResponse } from "@arcadeai/shared";
 
-export interface MeResponse {
-  id: string;
-  email: string;
-  displayName: string;
-  tier: string;
-  theme: string;
-  creditsRemainingDaily: number;
-  creditsRemainingMonthly: number;
-  dailyResetAt: number;
-  monthlyResetAt: number;
-}
+export type { MeResponse };
+
+const API = "http://localhost:3000";
 
 export async function fetchMe(): Promise<MeResponse | null> {
   try {

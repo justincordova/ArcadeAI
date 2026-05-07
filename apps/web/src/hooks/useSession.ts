@@ -1,5 +1,6 @@
+import type { MeResponse } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
-import { type MeResponse, fetchMe } from "../lib/auth.js";
+import { fetchMe } from "../lib/auth.js";
 
 export function useSession() {
   return useQuery<MeResponse | null>({

@@ -1,0 +1,32 @@
+import type { MeResponse, Theme } from "@arcadeai/shared";
+
+const API = "http://localhost:3000";
+
+export async function fetchMe(): Promise<MeResponse> {
+  const res = await fetch(`${API}/api/me`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch user");
+  return res.json() as Promise<MeResponse>;
+}
+
+export async function patchMe(body: { display_name?: string; theme?: Theme }): Promise<MeResponse> {
+  const res = await fetch(`${API}/api/me`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Failed to update profile");
+  return res.json() as Promise<MeResponse>;
+}
+
+export async function deleteMe(): Promise<void> {
+  const res = await fetch(`${API}/api/me`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to delete account");
+}
+
+export function linkProviderUrl(provider: "google" | "github"): string {
+  return `${API}/api/auth/link/${provider}`;
+}
