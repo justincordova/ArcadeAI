@@ -10,8 +10,16 @@ declare module "fastify" {
  * Attaches per-request structured logging context per SPEC §14:
  * - requestId and userId are bound as child logger fields.
  * - Emits a single INFO line per completed request: route, method, status, duration_ms.
+ *
+ * Called as a plain function (not via `app.register`) so its hooks attach
+ * to the root encapsulation context and apply to every route — including
+ * plugin-registered ones. Fastify plugins encapsulate by default, which is
+ * why this isn't an `await app.register(...)` callback.
+ *
+ * Must be invoked AFTER the auth guard so `request.authSession.user.id`
+ * is populated when the preHandler reads it.
  */
-export async function registerRequestContext(app: FastifyInstance) {
+export function registerRequestContext(app: FastifyInstance) {
   app.addHook("onRequest", async (request: FastifyRequest) => {
     request.startTime = Date.now();
   });

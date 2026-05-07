@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
-import { authPlugin } from "./plugins/auth.js";
+import { authPlugin, registerAuthGuard } from "./plugins/auth.js";
 import { corsPlugin } from "./plugins/cors.js";
 import { registerRateLimit } from "./plugins/rate-limit.js";
 import { registerRequestContext } from "./plugins/request-context.js";
@@ -31,18 +31,24 @@ const app = Fastify({
   disableRequestLogging: true,
 });
 
-// Plugins (registration order matters):
-//   1. CORS — outermost
-//   2. Rate limit — global IP cap, runs at onRequest (before auth)
-//   3. Auth — installs /api/auth/* delegate AND the preHandler that
-//      populates `request.authSession` for all other /api/* routes.
-//   4. Request context — preHandler that binds `requestId` + `userId`
-//      to the per-request child logger. Must run AFTER auth so
-//      `request.authSession` is populated.
+// Plugins and hooks. Encapsulation note: hooks added inside
+// `app.register(plugin)` only apply within that plugin's scope. The auth
+// guard and request-context hooks need to apply to ALL routes (including
+// those registered later via plugins), so they're attached directly to
+// the app via `registerAuthGuard` / `registerRequestContext`, which
+// internally call `app.addHook` at the root scope.
+//
+// Order:
+//   1. CORS — outermost.
+//   2. Rate limit — global IP cap, runs at onRequest (before auth).
+//   3. Auth /api/auth/* delegate plugin (Better Auth handler).
+//   4. Auth guard hook — populates `request.authSession` for /api/*.
+//   5. Request-context hook — must run AFTER auth so it can bind userId.
 await app.register(corsPlugin);
 await app.register(registerRateLimit);
 await app.register(authPlugin);
-await app.register(registerRequestContext);
+registerAuthGuard(app);
+registerRequestContext(app);
 
 // Global error handler — emit one structured ERROR line per uncaught
 // failure. The onResponse hook in request-context still emits the

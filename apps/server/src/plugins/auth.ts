@@ -49,23 +49,20 @@ export async function getSession(request: FastifyRequest): Promise<AuthSession> 
   return auth.api.getSession({ headers });
 }
 
-export async function authPlugin(app: FastifyInstance) {
-  // Capture form-encoded bodies as raw Buffers (Fastify only auto-parses
-  // application/json out of the box). Better Auth needs to receive these
-  // verbatim so it can parse them itself. JSON bodies are still parsed by
-  // Fastify's default parser; we re-stringify them when forwarding.
-  app.addContentTypeParser(
-    "application/x-www-form-urlencoded",
-    { parseAs: "buffer" },
-    (_request, payload, done) => {
-      done(null, payload);
-    }
-  );
-
-  // Global auth guard on all /api/* except /api/auth/* and /api/health.
-  // Registered here (inside authPlugin) so it runs BEFORE the request-context
-  // plugin's preHandler — request-context binds `userId` from
-  // `request.authSession`, so this hook must populate it first.
+/**
+ * Top-level preHandler that gates `/api/*` (except `/api/auth/*` and
+ * `/api/health`) on a valid Better Auth session. Populates
+ * `request.authSession` for downstream handlers.
+ *
+ * Registered directly on the app instance (not inside a plugin) so the hook
+ * applies to ALL routes, including those registered later via plugins.
+ * Fastify plugins encapsulate hooks added inside them — that encapsulation
+ * is why this hook used to silently no-op when registered inside authPlugin.
+ *
+ * Must register BEFORE `request-context`, which reads `request.authSession`
+ * to bind `userId` on the per-request child logger.
+ */
+export function registerAuthGuard(app: FastifyInstance) {
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0];
 
@@ -84,6 +81,20 @@ export async function authPlugin(app: FastifyInstance) {
       return reply.status(401).send({ error: "Unauthorized" });
     }
   });
+}
+
+export async function authPlugin(app: FastifyInstance) {
+  // Capture form-encoded bodies as raw Buffers (Fastify only auto-parses
+  // application/json out of the box). Better Auth needs to receive these
+  // verbatim so it can parse them itself. JSON bodies are still parsed by
+  // Fastify's default parser; we re-stringify them when forwarding.
+  app.addContentTypeParser(
+    "application/x-www-form-urlencoded",
+    { parseAs: "buffer" },
+    (_request, payload, done) => {
+      done(null, payload);
+    }
+  );
 
   // Delegate all /api/auth/* requests to Better Auth
   app.all("/api/auth/*", async (request, reply) => {
