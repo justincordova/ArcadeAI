@@ -1,21 +1,108 @@
 import { Link } from "@tanstack/react-router";
+import type React from "react";
 
 export function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl border border-gray-700 bg-gray-800/50">
-        <span className="text-3xl">🕹</span>
-      </div>
-      <h2 className="mb-2 font-mono text-xl font-semibold text-white">No games yet.</h2>
-      <p className="mb-8 max-w-xs text-sm text-gray-500">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingTop: 96,
+        paddingBottom: 96,
+        textAlign: "center",
+      }}
+    >
+      <h2
+        style={{
+          fontSize: 24,
+          fontWeight: 800,
+          letterSpacing: "-0.02em",
+          color: "var(--color-text-primary)",
+          marginBottom: 10,
+        }}
+      >
+        No games yet
+      </h2>
+      <p
+        style={{
+          fontSize: 14,
+          color: "var(--color-text-secondary)",
+          maxWidth: 320,
+          lineHeight: 1.65,
+          marginBottom: 32,
+        }}
+      >
         Describe any 2D arcade game and watch it come to life in seconds.
       </p>
+
       <Link
         to="/game/new"
-        className="inline-flex items-center gap-2 rounded-lg border border-indigo-500 bg-indigo-600/20 px-6 py-3 font-mono text-sm font-medium text-indigo-300 transition-colors hover:bg-indigo-600/40"
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "11px 24px",
+          borderRadius: 11,
+          fontSize: 14,
+          fontWeight: 700,
+          fontFamily: "inherit",
+          textDecoration: "none",
+          background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
+          color: "#fff",
+          boxShadow: "0 4px 20px rgba(124,58,237,0.35)",
+          transition: "opacity 0.15s, transform 0.15s",
+        }}
+        onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
+          (e.currentTarget as HTMLAnchorElement).style.opacity = "0.88";
+          (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(-1px)";
+        }}
+        onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
+          (e.currentTarget as HTMLAnchorElement).style.opacity = "1";
+          (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(0)";
+        }}
       >
-        <span>+</span> Create your first game
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+          <path
+            d="M7 1.5v11M1.5 7h11"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        </svg>
+        Create your first game
       </Link>
+
+      {/* Suggestion pills */}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          justifyContent: "center",
+          marginTop: 28,
+          maxWidth: 480,
+        }}
+      >
+        {["Snake", "Breakout", "Flappy Bird clone", "Asteroids", "Pong with AI", "Pac-Man"].map(
+          (label) => (
+            <span
+              key={label}
+              style={{
+                padding: "4px 12px",
+                borderRadius: 9999,
+                fontSize: 12,
+                color: "var(--color-text-muted)",
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface)",
+              }}
+            >
+              {label}
+            </span>
+          )
+        )}
+      </div>
     </div>
   );
 }

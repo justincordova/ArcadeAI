@@ -1,1 +1,99 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+
+@theme {
+  /* ── Color tokens ── */
+  --color-bg: #09090f;
+  --color-surface: #111118;
+  --color-surface-raised: #18181f;
+  --color-surface-overlay: #1f1f2e;
+  --color-border: #252535;
+  --color-border-subtle: #1a1a28;
+
+  --color-text-primary: #e8e8f0;
+  --color-text-secondary: #7878a0;
+  --color-text-muted: #4a4a68;
+  --color-text-accent: #a78bfa;
+
+  /* Accent — violet → cyan */
+  --color-accent-violet: #7c3aed;
+  --color-accent-violet-light: #a78bfa;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-cyan-light: #67e8f9;
+
+  /* Status */
+  --color-success: #22d3a0;
+  --color-warning: #f59e0b;
+  --color-danger: #f43f5e;
+  --color-danger-muted: #4c1a28;
+}
+
+/* ── Base resets ── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  /* Display font for headings, mono for code/UI labels */
+  font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Mono elements keep Geist Mono */
+code,
+pre,
+kbd,
+samp,
+.font-mono,
+[style*="font-family: inherit"] {
+  font-family: "Geist Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+/* ── Route fade-in animation ── */
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.route-enter {
+  animation: route-fade-in 0.18s ease-out both;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* ── Selection ── */
+::selection {
+  background: rgba(124, 58, 237, 0.35);
+  color: var(--color-text-primary);
+}
+
+/* ── Focus ── */
+:focus-visible {
+  outline: 2px solid var(--color-accent-violet);
+  outline-offset: 2px;
+}

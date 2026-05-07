@@ -5,6 +5,20 @@ import { patchMe } from "../../lib/api/me.js";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 360,
+  borderRadius: 8,
+  border: "1px solid var(--color-border)",
+  background: "var(--color-surface-raised)",
+  padding: "9px 12px",
+  fontSize: 13,
+  color: "var(--color-text-primary)",
+  fontFamily: "inherit",
+  outline: "none",
+  transition: "border-color 0.15s",
+};
+
 export function DisplayName() {
   const queryClient = useQueryClient();
   const { data: me } = useQuery<MeResponse | null>({ queryKey: ["me"] });
@@ -12,7 +26,6 @@ export function DisplayName() {
   const [status, setStatus] = useState<SaveStatus>("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Initialize once me loads
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional initialization only on first load
   useEffect(() => {
     if (me?.displayName && !value) setValue(me.displayName);
@@ -49,30 +62,39 @@ export function DisplayName() {
     if (e.key === "Enter") e.currentTarget.blur();
   }
 
+  const statusColor =
+    status === "saving"
+      ? "var(--color-text-muted)"
+      : status === "saved"
+        ? "var(--color-success)"
+        : status === "error"
+          ? "var(--color-danger)"
+          : "";
+
   const statusLabel =
     status === "saving"
       ? "Saving..."
       : status === "saved"
-        ? "Saved ✓"
+        ? "Saved"
         : status === "error"
-          ? "Couldn't save"
+          ? "Could not save"
           : null;
-
-  const statusColor =
-    status === "saving"
-      ? "text-gray-400"
-      : status === "saved"
-        ? "text-green-400"
-        : status === "error"
-          ? "text-red-400"
-          : "";
 
   return (
     <div>
-      <label htmlFor="display-name" className="mb-1 block text-sm font-medium text-gray-300">
+      <label
+        htmlFor="display-name"
+        style={{
+          display: "block",
+          fontSize: 12,
+          fontWeight: 600,
+          color: "var(--color-text-secondary)",
+          marginBottom: 6,
+        }}
+      >
         Display name
       </label>
-      <div className="flex items-center gap-3">
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <input
           id="display-name"
           type="text"
@@ -80,10 +102,14 @@ export function DisplayName() {
           onChange={(e) => setValue(e.target.value)}
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
+          onFocus={(e) => {
+            (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(124,58,237,0.5)";
+          }}
           maxLength={80}
-          className="w-full max-w-sm rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-gray-500 focus:outline-none"
+          style={inputStyle}
+          placeholder="Your display name"
         />
-        {statusLabel && <span className={`text-xs ${statusColor}`}>{statusLabel}</span>}
+        {statusLabel && <span style={{ fontSize: 11, color: statusColor }}>{statusLabel}</span>}
       </div>
     </div>
   );

@@ -26,9 +26,17 @@ export const Route = createFileRoute("/_authed")({
 
 function AuthedLayout() {
   return (
-    <div className="flex min-h-screen flex-col bg-gray-950 text-white">
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "100vh",
+        background: "var(--color-bg)",
+        color: "var(--color-text-primary)",
+      }}
+    >
       <TopBar />
-      <main className="flex-1">
+      <main style={{ flex: 1 }} className="route-enter">
         <Outlet />
       </main>
     </div>

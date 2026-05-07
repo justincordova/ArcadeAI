@@ -6,9 +6,20 @@ export function Email() {
 
   return (
     <div>
-      <p className="mb-1 text-sm font-medium text-gray-300">Email</p>
-      <p className="text-sm text-gray-200">{me?.email ?? "—"}</p>
-      <p className="mt-0.5 text-xs text-gray-500">Sourced from your sign-in provider.</p>
+      <p
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: "var(--color-text-secondary)",
+          marginBottom: 4,
+        }}
+      >
+        Email
+      </p>
+      <p style={{ fontSize: 13, color: "var(--color-text-primary)" }}>{me?.email ?? "—"}</p>
+      <p style={{ marginTop: 4, fontSize: 11, color: "var(--color-text-muted)" }}>
+        Sourced from your sign-in provider.
+      </p>
     </div>
   );
 }

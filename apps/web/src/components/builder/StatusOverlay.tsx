@@ -5,7 +5,7 @@ interface StatusOverlayProps {
 }
 
 const LABEL: Record<OverlayStatus, string | null> = {
-  generating: "Generating…",
+  generating: "Generating...",
   repairing: "Detected an error, fixing...",
   idle: null,
 };
@@ -13,11 +13,55 @@ const LABEL: Record<OverlayStatus, string | null> = {
 export function StatusOverlay({ status }: StatusOverlayProps) {
   const label = LABEL[status];
   if (!label) return null;
+
   return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60">
-      <div className="flex items-center gap-3 rounded-lg bg-gray-900 px-5 py-3 text-sm text-gray-200 shadow-xl">
-        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-gray-400 border-t-white" />
-        {label}
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        paddingBottom: 48,
+        pointerEvents: "none",
+        background: "rgba(9,9,15,0.5)",
+        backdropFilter: "blur(2px)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "10px 18px",
+          borderRadius: 12,
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+        }}
+      >
+        {/* Spinner */}
+        <div
+          style={{
+            width: 14,
+            height: 14,
+            borderRadius: "50%",
+            border: "2px solid var(--color-border)",
+            borderTopColor: "var(--color-accent-violet)",
+            animation: "overlay-spin 0.7s linear infinite",
+            flexShrink: 0,
+          }}
+        />
+        <span
+          style={{
+            fontSize: 13,
+            color: "var(--color-text-secondary)",
+            fontWeight: 500,
+          }}
+        >
+          {label}
+        </span>
+        <style>{"@keyframes overlay-spin { to { transform: rotate(360deg); } }"}</style>
       </div>
     </div>
   );

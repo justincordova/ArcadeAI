@@ -14,35 +14,75 @@ export function ConnectedAccounts() {
   const linked = new Set(me?.linkedProviders ?? []);
 
   function handleConnect(provider: "google" | "github") {
-    // Navigate to Better Auth's link endpoint; on return, /settings will
-    // refetch /api/me and update the row.
     const callbackUrl = `${window.location.origin}/settings`;
     window.location.href = `${linkProviderUrl(provider)}?callbackURL=${encodeURIComponent(callbackUrl)}`;
-    // Pre-invalidate so the query refetches on next focus/mount
     queryClient.invalidateQueries({ queryKey: ["me"] });
   }
 
   return (
-    <div>
-      <p className="mb-3 text-sm font-medium text-gray-300">Connected accounts</p>
-      <div className="space-y-3">
-        {PROVIDERS.map((p) => (
-          <div key={p.id} className="flex items-center justify-between">
-            <span className="text-sm text-gray-200">{p.label}</span>
-            {linked.has(p.id) ? (
-              <span className="text-xs font-medium text-green-400">✓ Linked</span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handleConnect(p.id)}
-                className="rounded-md border border-gray-600 bg-gray-800 px-3 py-1 text-xs text-white hover:bg-gray-700"
-              >
-                Connect
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {PROVIDERS.map((p) => (
+        <div
+          key={p.id}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span style={{ fontSize: 13, color: "var(--color-text-primary)" }}>{p.label}</span>
+          {linked.has(p.id) ? (
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--color-success)",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                <path
+                  d="M2 6.5l2.5 2.5 5.5-5.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Linked
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleConnect(p.id)}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 7,
+                border: "1px solid var(--color-border)",
+                background: "var(--color-surface-raised)",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition: "all 0.12s",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.4)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
+                (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-secondary)";
+              }}
+            >
+              Connect
+            </button>
+          )}
+        </div>
+      ))}
     </div>
   );
 }

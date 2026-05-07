@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { getMissingKeyError, useConfig } from "../../hooks/useConfig.js";
 import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
 import { GAMES_QUERY_KEY, postThumbnail } from "../../lib/api/games.js";
@@ -63,7 +64,7 @@ function GenerationBuilder({ initialCode = "", initialMessages = [] }: BuilderPr
       gameId={gameId}
       onIframeReady={attachIframe}
       onThumbnail={handleThumbnail}
-      streamLabel="Generating…"
+      streamLabel="Generating..."
       submitLabel="Generate"
     />
   );
@@ -81,19 +82,16 @@ function RefinementBuilder({
   const [prompt, setPrompt] = useState("");
   const [localMessages, setLocalMessages] = useState<Message[]>(initialMessages);
   const [repairedCode, setRepairedCode] = useState<string | null>(null);
-  // Increment to signal RepairController to reset its attempt counter
   const [refineTrigger, setRefineTrigger] = useState(0);
   const [repairStatus, setRepairStatus] = useState<RepairStatus>("idle");
   const isStreaming = status === "streaming";
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  // Combined attach: pass iframe ref to both refinement hook and RepairController
   function handleIframeReady(el: HTMLIFrameElement | null) {
     iframeRef.current = el;
     attachIframe(el);
   }
 
-  // When refine completes, invalidate to reload messages
   const prevStatus = useRef(status);
   useEffect(() => {
     if (prevStatus.current === "streaming" && status === "idle") {
@@ -102,12 +100,10 @@ function RefinementBuilder({
     prevStatus.current = status;
   }, [status, gameId, queryClient]);
 
-  // Keep local messages in sync with prop updates
   useEffect(() => {
     setLocalMessages(initialMessages);
   }, [initialMessages]);
 
-  // Display priority: live stream > repaired code > last refinement's final code > server-loaded code.
   const displayCode = streamingCode || repairedCode || finalCode || initialCode;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -120,7 +116,6 @@ function RefinementBuilder({
     const trimmed = prompt.trim();
     if (!trimmed || isStreaming) return;
 
-    // Optimistic: add pending feedback message to local state
     const optimisticMsg: Message = {
       id: `optimistic-${Date.now()}`,
       kind: "feedback",
@@ -129,7 +124,7 @@ function RefinementBuilder({
     };
     setLocalMessages((prev) => [...prev, optimisticMsg]);
 
-    setRefineTrigger((n) => n + 1); // reset repair attempt counter
+    setRefineTrigger((n) => n + 1);
     refine(trimmed);
     setPrompt("");
   }
@@ -142,13 +137,11 @@ function RefinementBuilder({
 
   function handleRepaired(code: string) {
     setRepairedCode(code);
-    // Trigger thumbnail recapture after repair
     setTimeout(() => {
       if (iframeRef.current?.contentWindow) {
         iframeRef.current.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
       }
     }, 500);
-    // Invalidate game query so the DB-persisted code is in sync
     queryClient.invalidateQueries({ queryKey: ["game", gameId] });
   }
 
@@ -156,8 +149,6 @@ function RefinementBuilder({
     textareaRef.current?.focus();
   }
 
-  // Repair status takes precedence over refinement streaming so the overlay
-  // shows "Detected an error, fixing..." even mid-refinement-bookkeeping.
   const overlayStatus: OverlayStatus =
     repairStatus === "repairing" ? "repairing" : isStreaming ? "generating" : "idle";
 
@@ -168,11 +159,6 @@ function RefinementBuilder({
       iframeRef={iframeRef}
       onRepaired={handleRepaired}
       onTryAgain={() => {
-        // Plan §13 specifies a fresh generation against game.original_prompt.
-        // The prototype has no "regenerate against existing game id" endpoint,
-        // so we run the original prompt through the refinement pipeline. This
-        // produces fresh code from the LLM (charging refinement cost rather
-        // than generation cost) — a documented deviation from the plan.
         const original = initialMessages.find((m) => m.kind === "prompt")?.content ?? "";
         if (original) refine(original);
       }}
@@ -194,7 +180,7 @@ function RefinementBuilder({
         gameId={gameId}
         onIframeReady={handleIframeReady}
         onThumbnail={handleThumbnail}
-        streamLabel="Refining…"
+        streamLabel="Refining..."
         submitLabel="Refine"
       />
     </RepairController>
@@ -219,6 +205,103 @@ interface BuilderLayoutProps {
   submitLabel: string;
 }
 
+function SendIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <path
+        d="M1.5 7.5h12M8.5 2.5l5 5-5 5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
+  const isPrompt = msg.kind === "prompt";
+  return (
+    <div
+      style={{
+        marginBottom: isLast ? 0 : 16,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: isPrompt ? "flex-end" : "flex-start",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: "85%",
+          padding: "10px 14px",
+          borderRadius: isPrompt ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+          fontSize: 13,
+          lineHeight: 1.55,
+          background: isPrompt
+            ? "linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(6,182,212,0.2) 100%)"
+            : "var(--color-surface-raised)",
+          border: isPrompt ? "1px solid rgba(124,58,237,0.3)" : "1px solid var(--color-border)",
+          color: "var(--color-text-primary)",
+          wordBreak: "break-word",
+        }}
+      >
+        {msg.content}
+      </div>
+      <span
+        style={{
+          marginTop: 4,
+          fontSize: 10,
+          color: "var(--color-text-muted)",
+          letterSpacing: "0.02em",
+        }}
+      >
+        {isPrompt ? "You" : "Feedback"}
+      </span>
+    </div>
+  );
+}
+
+function StreamingIndicator({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "10px 14px",
+        borderRadius: "14px 14px 14px 4px",
+        background: "var(--color-surface-raised)",
+        border: "1px solid var(--color-border)",
+        width: "fit-content",
+        marginBottom: 16,
+      }}
+    >
+      <span style={{ display: "flex", gap: 3 }}>
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            style={{
+              width: 5,
+              height: 5,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #a78bfa, #06b6d4)",
+              animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
+            }}
+          />
+        ))}
+      </span>
+      <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{label}</span>
+      <style>
+        {
+          "@keyframes pulse-dot { 0%,80%,100%{opacity:0.3;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }"
+        }
+      </style>
+    </div>
+  );
+}
+
+const SUGGESTIONS = ["A simple snake game", "Asteroids with power-ups", "Pong with AI opponent"];
+
 function BuilderLayout({
   messages,
   isStreaming,
@@ -237,90 +320,408 @@ function BuilderLayout({
   submitLabel,
 }: BuilderLayoutProps) {
   const resolvedOverlay: OverlayStatus = overlayStatus ?? (isStreaming ? "generating" : "idle");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isNewGame = submitLabel === "Generate";
+  const { data: config } = useConfig();
+  const missingKeyError = getMissingKeyError(config);
+
+  // Auto-scroll to bottom when messages change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — scroll on messages or streaming state change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isStreaming]);
+
+  const canSubmit = !isStreaming && prompt.trim().length > 0 && !missingKeyError;
+
+  function handleSuggestionClick(text: string) {
+    setPrompt(text);
+    // Auto-submit after state flushes
+    setTimeout(() => {
+      const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
+      // We have to call onSubmit with the text directly since state may not have flushed
+      // Instead, set then trigger via a form submit
+      textareaRef.current?.form?.requestSubmit();
+    }, 0);
+  }
+
   return (
-    <div className="flex h-[calc(100vh-53px)] overflow-hidden">
-      {/* Left panel — chat */}
-      <div className="flex w-[35%] min-w-[280px] flex-col border-r border-gray-800 bg-gray-900">
-        <div className="flex items-center gap-3 border-b border-gray-800 px-4 py-3">
-          <Link to="/" className="text-xs text-gray-500 hover:text-gray-300">
-            ← Dashboard
+    <div
+      style={{
+        display: "flex",
+        height: "calc(100vh - 56px)",
+        overflow: "hidden",
+        background: "var(--color-bg)",
+      }}
+    >
+      {/* ── Left panel: chat ── */}
+      <div
+        style={{
+          width: 340,
+          minWidth: 280,
+          maxWidth: 400,
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--color-surface)",
+          borderRight: "1px solid var(--color-border)",
+          flexShrink: 0,
+        }}
+      >
+        {/* Panel header */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px 16px",
+            borderBottom: "1px solid var(--color-border)",
+            flexShrink: 0,
+          }}
+        >
+          <Link
+            to="/"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              fontSize: 12,
+              color: "var(--color-text-muted)",
+              textDecoration: "none",
+              transition: "color 0.15s",
+            }}
+            onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
+              (e.currentTarget as HTMLAnchorElement).style.color = "var(--color-text-secondary)";
+            }}
+            onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
+              (e.currentTarget as HTMLAnchorElement).style.color = "var(--color-text-muted)";
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path
+                d="M8 10L4 6l4-4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Dashboard
           </Link>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              color: "var(--color-text-muted)",
+              textTransform: "uppercase",
+            }}
+          >
+            {isNewGame ? "New Game" : "Refine"}
+          </span>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4">
-          {messages.map((msg) => (
-            <div key={msg.id} className="mb-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                {msg.kind === "prompt" ? "Prompt" : "Feedback"}
+        {/* Missing key banner */}
+        {missingKeyError && (
+          <div
+            style={{
+              margin: "12px 12px 0",
+              padding: "10px 14px",
+              borderRadius: 10,
+              border: "1px solid rgba(245,158,11,0.35)",
+              background: "rgba(245,158,11,0.08)",
+              fontSize: 12,
+              color: "#fbbf24",
+              lineHeight: 1.55,
+              flexShrink: 0,
+            }}
+          >
+            <strong style={{ display: "block", marginBottom: 3 }}>Setup required</strong>
+            {missingKeyError}
+          </div>
+        )}
+
+        {/* Messages */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
+          {messages.length === 0 && !isStreaming && (
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                gap: 12,
+                textAlign: "center",
+                padding: "0 8px",
+              }}
+            >
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  background:
+                    "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.15) 100%)",
+                  border: "1px solid rgba(124,58,237,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path
+                    d="M9 2.5v13M2.5 9h13"
+                    stroke="url(#builder-plus)"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <defs>
+                    <linearGradient id="builder-plus" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#a78bfa" />
+                      <stop offset="100%" stopColor="#06b6d4" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
+                Describe the game you want to build. Be as specific or vague as you like.
               </p>
-              <p className="mt-1 text-sm text-gray-200">{msg.content}</p>
-            </div>
-          ))}
-          {isStreaming && (
-            <div className="mb-4">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                {streamLabel}
-              </p>
-              {displayCode && (
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-400">
-                    Show code ({displayCode.length} chars)
-                  </summary>
-                  <pre className="mt-2 max-h-48 overflow-auto rounded bg-gray-800 p-2 text-xs text-gray-300">
-                    {displayCode.slice(0, 2000)}
-                    {displayCode.length > 2000 ? "…" : ""}
-                  </pre>
-                </details>
+              {!missingKeyError && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
+                  {SUGGESTIONS.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      disabled={isStreaming}
+                      style={{
+                        padding: "7px 12px",
+                        borderRadius: 8,
+                        border: "1px solid var(--color-border)",
+                        background: "transparent",
+                        fontSize: 12,
+                        color: "var(--color-text-secondary)",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        textAlign: "left",
+                        transition: "all 0.12s",
+                      }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background =
+                          "var(--color-surface-raised)";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor =
+                          "rgba(124,58,237,0.3)";
+                        (e.currentTarget as HTMLButtonElement).style.color =
+                          "var(--color-text-primary)";
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                        (e.currentTarget as HTMLButtonElement).style.borderColor =
+                          "var(--color-border)";
+                        (e.currentTarget as HTMLButtonElement).style.color =
+                          "var(--color-text-secondary)";
+                      }}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           )}
+
+          {messages.map((msg, i) => (
+            <MessageBubble
+              key={msg.id}
+              msg={msg}
+              isLast={i === messages.length - 1 && !isStreaming}
+            />
+          ))}
+
+          {isStreaming && <StreamingIndicator label={streamLabel} />}
+
           {error && (
-            <div className="mb-4 rounded-lg border border-red-800 bg-red-950 p-3 text-sm text-red-300">
+            <div
+              style={{
+                padding: "10px 14px",
+                borderRadius: 10,
+                border: "1px solid rgba(244,63,94,0.3)",
+                background: "rgba(244,63,94,0.08)",
+                fontSize: 13,
+                color: "var(--color-danger)",
+                marginTop: 8,
+              }}
+            >
               {error}
             </div>
           )}
+
+          <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={onSubmit} className="border-t border-gray-800 p-4">
-          <textarea
-            ref={textareaRef}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                onSubmit(e as unknown as React.FormEvent);
-              }
+        {/* Input area */}
+        <form
+          onSubmit={onSubmit}
+          style={{
+            flexShrink: 0,
+            padding: 12,
+            borderTop: "1px solid var(--color-border)",
+            background: "var(--color-surface)",
+          }}
+        >
+          <div
+            style={{
+              position: "relative",
+              borderRadius: 12,
+              border: "1px solid var(--color-border)",
+              background: "var(--color-surface-raised)",
+              transition: "border-color 0.15s",
             }}
-            disabled={isStreaming}
-            rows={3}
-            placeholder={
-              submitLabel === "Refine"
-                ? "Describe a change…"
-                : "Describe the game you want to build…"
-            }
-            className="w-full resize-none rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-gray-500 focus:outline-none disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={isStreaming || !prompt.trim()}
-            className="mt-2 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            onFocusCapture={(e) => {
+              (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(124,58,237,0.4)";
+            }}
+            onBlurCapture={(e) => {
+              (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-border)";
+            }}
           >
-            {isStreaming ? streamLabel : submitLabel}
-          </button>
+            <textarea
+              ref={textareaRef}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  onSubmit(e as unknown as React.FormEvent);
+                }
+              }}
+              disabled={isStreaming || Boolean(missingKeyError)}
+              rows={3}
+              placeholder={
+                missingKeyError
+                  ? "Configure API keys to enable generation..."
+                  : submitLabel === "Refine"
+                    ? "Describe a change..."
+                    : "Describe the game you want to build..."
+              }
+              style={{
+                width: "100%",
+                resize: "none",
+                border: "none",
+                background: "transparent",
+                padding: "12px 12px 8px",
+                fontSize: 13,
+                color: "var(--color-text-primary)",
+                fontFamily: "inherit",
+                outline: "none",
+                lineHeight: 1.5,
+                opacity: missingKeyError ? 0.5 : 1,
+              }}
+            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "6px 8px 8px",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  color: "var(--color-text-muted)",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {isStreaming ? streamLabel : "⌘↵ to send"}
+              </span>
+              <button
+                type="submit"
+                disabled={!canSubmit}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  border: "none",
+                  background: canSubmit
+                    ? "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)"
+                    : "var(--color-border)",
+                  color: canSubmit ? "#fff" : "var(--color-text-muted)",
+                  cursor: canSubmit ? "pointer" : "not-allowed",
+                  transition: "all 0.15s",
+                  flexShrink: 0,
+                }}
+              >
+                <SendIcon />
+              </button>
+            </div>
+          </div>
         </form>
       </div>
 
-      {/* Right panel — game iframe */}
-      <div className="relative flex-1 bg-gray-950">
-        <GameIframe
-          code={displayCode || null}
-          gameId={gameId}
-          onIframeReady={onIframeReady}
-          onThumbnail={onThumbnail}
-        />
-        <StatusOverlay status={resolvedOverlay} />
-        <StopButton visible={resolvedOverlay === "generating"} onStop={onStop} />
+      {/* ── Right panel: game preview ── */}
+      <div
+        style={{
+          flex: 1,
+          position: "relative",
+          display: "flex",
+          flexDirection: "column",
+          background: "var(--color-bg)",
+          overflow: "hidden",
+        }}
+      >
+        {/* Preview header bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 16px",
+            height: 40,
+            borderBottom: "1px solid var(--color-border)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: "50%",
+                background: displayCode ? "var(--color-success)" : "var(--color-text-muted)",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--color-text-muted)",
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+              }}
+            >
+              {displayCode ? "Live Preview" : "Preview"}
+            </span>
+          </div>
+          {gameId && (
+            <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
+              ID: {gameId.slice(0, 8)}
+            </span>
+          )}
+        </div>
+
+        {/* Game area */}
+        <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+          <GameIframe
+            code={displayCode || null}
+            gameId={gameId}
+            onIframeReady={onIframeReady}
+            onThumbnail={onThumbnail}
+          />
+          <StatusOverlay status={resolvedOverlay} />
+          <StopButton visible={resolvedOverlay === "generating"} onStop={onStop} />
+        </div>
       </div>
     </div>
   );

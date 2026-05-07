@@ -1,133 +1,263 @@
-import { TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
 import { Link } from "@tanstack/react-router";
+import type React from "react";
 import { useState } from "react";
 import { useSession } from "../hooks/useSession.js";
 import { signOut } from "../lib/auth.js";
-import { ThemeToggle } from "./theme-toggle.js";
+import { LogoFull } from "./Logo.js";
 import { PlanBadge } from "./topbar/PlanBadge.js";
-
-function isKnownTier(t: string): t is Tier {
-  return t === "free" || t === "creator" || t === "pro" || t === "admin";
-}
-
-interface UsageBarProps {
-  label: string;
-  remaining: number;
-  total: number;
-}
-
-function UsageBar({ label, remaining, total }: UsageBarProps) {
-  const pct = total > 0 ? Math.min(remaining / total, 1) : 0;
-  const pctDisplay = Math.round(pct * 100);
-
-  let barColor = "bg-green-500";
-  if (pct <= 0.1) barColor = "bg-red-500";
-  else if (pct <= 0.3) barColor = "bg-yellow-500";
-
-  return (
-    <div className="mb-3">
-      <div className="mb-1 flex items-center justify-between text-xs text-gray-400">
-        <span>{label}</span>
-        <span>
-          {remaining.toLocaleString()} / {total.toLocaleString()} ({pctDisplay}%)
-        </span>
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-700">
-        <div
-          className={`h-full rounded-full transition-all ${barColor}`}
-          style={{ width: `${pctDisplay}%` }}
-        />
-      </div>
-    </div>
-  );
-}
 
 export function TopBar() {
   const { data: me } = useSession();
   const [open, setOpen] = useState(false);
 
-  const rawTier = me?.tier ?? "free";
-  const tier: Tier = isKnownTier(rawTier) ? rawTier : "free";
-  const isAdmin = tier === "admin";
-  const limits = TIER_CREDIT_LIMITS[tier];
-  const dailyTotal = limits.daily;
-  const monthlyTotal = limits.monthly;
+  const initial = me?.displayName?.[0]?.toUpperCase() ?? "?";
 
   return (
-    <header className="flex items-center justify-between border-b border-gray-800 bg-gray-900 px-6 py-3">
-      <div className="flex items-center gap-3">
-        <Link to="/" className="font-mono text-lg font-bold tracking-tight text-white">
-          ArcadeAI
-        </Link>
+    <header
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        height: 56,
+        padding: "0 24px",
+        background: "var(--color-surface)",
+        borderBottom: "1px solid var(--color-border)",
+        position: "sticky",
+        top: 0,
+        zIndex: 50,
+        backdropFilter: "blur(12px)",
+      }}
+    >
+      {/* Left: Logo */}
+      <Link to="/" style={{ textDecoration: "none" }} aria-label="ArcadeAI home">
+        <LogoFull />
+      </Link>
+
+      {/* Right: PlanBadge + User */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <PlanBadge />
-      </div>
-      <div className="flex items-center gap-2">
-        <ThemeToggle />
-        <div className="relative">
+
+        {/* User avatar + dropdown */}
+        <div style={{ position: "relative" }}>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-gray-800"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "5px 10px 5px 6px",
+              borderRadius: 10,
+              background: "transparent",
+              border: "1px solid transparent",
+              cursor: "pointer",
+              transition: "all 0.15s",
+              color: "var(--color-text-secondary)",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "var(--color-surface-raised)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "transparent";
+            }}
+            aria-label="User menu"
           >
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gray-700 text-xs font-medium text-white">
-              {me?.displayName?.[0]?.toUpperCase() ?? "?"}
+            {/* Avatar */}
+            <span
+              style={{
+                display: "inline-flex",
+                width: 28,
+                height: 28,
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
+                fontFamily: "inherit",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#fff",
+                flexShrink: 0,
+              }}
+            >
+              {initial}
             </span>
-            <span className="hidden sm:block">{me?.displayName ?? "..."}</span>
-            <span className="text-xs">▾</span>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                color: "var(--color-text-primary)",
+                maxWidth: 120,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              className="hidden sm:block"
+            >
+              {me?.displayName ?? "..."}
+            </span>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+              style={{
+                transform: open ? "rotate(180deg)" : "none",
+                transition: "transform 0.15s",
+                opacity: 0.5,
+              }}
+            >
+              <path
+                d="M2 4.5l4 3 4-3"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
 
           {open && (
-            <div className="absolute right-0 top-full mt-1 w-64 rounded-lg border border-gray-700 bg-gray-900 py-1 shadow-xl">
-              <div className="border-b border-gray-700 px-4 py-3">
-                <p className="font-mono text-sm font-medium text-white">{me?.displayName}</p>
-                <p className="truncate text-xs text-gray-400">{me?.email}</p>
-                <p className="mt-0.5 text-xs capitalize text-gray-500">{tier} plan</p>
-              </div>
-
-              {/* Usage bars */}
-              <div className="border-b border-gray-700 px-4 py-3">
-                {isAdmin ? (
-                  <p className="text-xs text-gray-400">Admin — unlimited</p>
-                ) : (
-                  <>
-                    <UsageBar
-                      label="Daily credits"
-                      remaining={me?.creditsRemainingDaily ?? 0}
-                      total={dailyTotal}
-                    />
-                    <UsageBar
-                      label="Monthly credits"
-                      remaining={me?.creditsRemainingMonthly ?? 0}
-                      total={monthlyTotal}
-                    />
-                  </>
-                )}
-              </div>
-
-              <Link
-                to="/settings"
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800"
-                onClick={() => setOpen(false)}
-              >
-                ⚙ Settings
-              </Link>
-              <Link
-                to="/pricing"
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800"
-                onClick={() => setOpen(false)}
-              >
-                ⬆ Upgrade plan
-              </Link>
-              <button
-                type="button"
-                onClick={() => {
-                  setOpen(false);
-                  signOut();
+            <div
+              style={{
+                position: "absolute",
+                right: 0,
+                top: "calc(100% + 8px)",
+                width: 220,
+                background: "var(--color-surface)",
+                border: "1px solid var(--color-border)",
+                borderRadius: 14,
+                boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
+                overflow: "hidden",
+                zIndex: 100,
+              }}
+            >
+              {/* User info */}
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderBottom: "1px solid var(--color-border)",
                 }}
-                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-gray-800"
               >
-                ⏻ Sign out
-              </button>
+                <p
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--color-text-primary)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {me?.displayName}
+                </p>
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "var(--color-text-muted)",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    marginTop: 2,
+                  }}
+                >
+                  {me?.email}
+                </p>
+              </div>
+
+              {/* Nav links */}
+              <div style={{ padding: "6px 0" }}>
+                <Link
+                  to="/settings"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 14px",
+                    fontSize: 13,
+                    color: "var(--color-text-secondary)",
+                    textDecoration: "none",
+                    transition: "all 0.12s",
+                  }}
+                  onClick={() => setOpen(false)}
+                  onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                    (e.currentTarget as HTMLAnchorElement).style.background =
+                      "var(--color-surface-raised)";
+                    (e.currentTarget as HTMLAnchorElement).style.color =
+                      "var(--color-text-primary)";
+                  }}
+                  onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
+                    (e.currentTarget as HTMLAnchorElement).style.background = "transparent";
+                    (e.currentTarget as HTMLAnchorElement).style.color =
+                      "var(--color-text-secondary)";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5" />
+                    <path
+                      d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.1 3.1l1.1 1.1M11.8 11.8l1.1 1.1M3.1 12.9l1.1-1.1M11.8 4.2l1.1-1.1"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  Settings
+                </Link>
+
+                <div
+                  style={{
+                    height: 1,
+                    margin: "6px 14px",
+                    background: "var(--color-border)",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    signOut();
+                  }}
+                  style={{
+                    display: "flex",
+                    width: "100%",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 14px",
+                    fontSize: 13,
+                    color: "var(--color-text-muted)",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    textAlign: "left",
+                    transition: "all 0.12s",
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background =
+                      "var(--color-surface-raised)";
+                    (e.currentTarget as HTMLButtonElement).style.color = "var(--color-danger)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+                    (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-muted)";
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path
+                      d="M10 11l3-3-3-3M13 8H6M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Sign out
+                </button>
+              </div>
             </div>
           )}
         </div>

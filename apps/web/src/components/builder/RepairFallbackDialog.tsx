@@ -23,50 +23,227 @@ export function RepairFallbackDialog({
   return (
     <dialog
       open
-      className="fixed inset-0 z-50 m-0 flex h-full w-full items-center justify-center bg-black/70 p-0"
       aria-modal="true"
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 50,
+        margin: 0,
+        padding: 0,
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "rgba(0,0,0,0.7)",
+        backdropFilter: "blur(4px)",
+        border: "none",
+        maxWidth: "none",
+        maxHeight: "none",
+      }}
     >
-      <div className="mx-4 w-full max-w-lg rounded-lg border border-gray-700 bg-gray-900 shadow-2xl">
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 480,
+          margin: "0 16px",
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-border)",
+          borderRadius: 16,
+          overflow: "hidden",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
+        }}
+      >
         {/* Header */}
-        <div className="border-b border-gray-700 px-6 py-4">
-          <h2 className="text-base font-semibold text-white">
-            We couldn't fix this game automatically.
+        <div
+          style={{
+            padding: "16px 20px",
+            borderBottom: "1px solid var(--color-border)",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 8,
+              background: "rgba(244,63,94,0.1)",
+              border: "1px solid rgba(244,63,94,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path
+                d="M7 4v3M7 10h.01"
+                stroke="var(--color-danger)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <circle
+                cx="7"
+                cy="7"
+                r="5.5"
+                stroke="var(--color-danger)"
+                strokeWidth="1.2"
+                opacity="0.6"
+              />
+            </svg>
+          </div>
+          <h2
+            style={{
+              fontSize: 14,
+              fontWeight: 700,
+              color: "var(--color-text-primary)",
+              margin: 0,
+            }}
+          >
+            Could not fix this game automatically
           </h2>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-4">
-          <p className="mb-3 font-mono text-sm text-red-300">{truncatedMessage}</p>
-          <details className="group">
-            <summary className="cursor-pointer text-xs text-gray-500 hover:text-gray-400">
+        <div style={{ padding: "16px 20px" }}>
+          <p
+            style={{
+              fontSize: 12,
+              color: "var(--color-danger)",
+              fontFamily: "'Geist Mono', monospace",
+              background: "rgba(244,63,94,0.06)",
+              border: "1px solid rgba(244,63,94,0.15)",
+              borderRadius: 8,
+              padding: "10px 12px",
+              marginBottom: 12,
+              lineHeight: 1.5,
+              wordBreak: "break-word",
+            }}
+          >
+            {truncatedMessage}
+          </p>
+          <details style={{ cursor: "pointer" }}>
+            <summary
+              style={{
+                fontSize: 11,
+                color: "var(--color-text-muted)",
+                listStyle: "none",
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                <path
+                  d="M3 4l2 2 2-2"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
               Show broken code
             </summary>
-            <pre className="mt-2 max-h-48 overflow-auto rounded border border-gray-700 bg-gray-950 p-3 text-xs text-gray-300">
+            <pre
+              style={{
+                marginTop: 8,
+                maxHeight: 180,
+                overflowY: "auto",
+                borderRadius: 8,
+                border: "1px solid var(--color-border)",
+                background: "var(--color-bg)",
+                padding: "10px 12px",
+                fontSize: 11,
+                color: "var(--color-text-secondary)",
+                lineHeight: 1.55,
+              }}
+            >
               <code>{brokenCode}</code>
             </pre>
           </details>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 border-t border-gray-700 px-6 py-4">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 8,
+            padding: "12px 20px",
+            borderTop: "1px solid var(--color-border)",
+          }}
+        >
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200"
+            style={{
+              padding: "7px 14px",
+              borderRadius: 8,
+              border: "none",
+              background: "transparent",
+              fontSize: 13,
+              color: "var(--color-text-muted)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "color 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-secondary)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-muted)";
+            }}
           >
             Close
           </button>
           <button
             type="button"
             onClick={onRefine}
-            className="rounded-md border border-gray-600 bg-gray-800 px-4 py-1.5 text-sm text-white hover:bg-gray-700"
+            style={{
+              padding: "7px 14px",
+              borderRadius: 8,
+              border: "1px solid var(--color-border)",
+              background: "var(--color-surface-raised)",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--color-text-primary)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "all 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.4)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
+            }}
           >
             Refine
           </button>
           <button
             type="button"
             onClick={onTryAgain}
-            className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            style={{
+              padding: "7px 16px",
+              borderRadius: 8,
+              border: "none",
+              background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "#fff",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "opacity 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.opacity = "0.85";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.opacity = "1";
+            }}
           >
             Try again
           </button>

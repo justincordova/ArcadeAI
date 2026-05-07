@@ -7,26 +7,59 @@ interface IntervalToggleProps {
 
 export function IntervalToggle({ value, onChange }: IntervalToggleProps) {
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-gray-700 bg-gray-900 p-1">
-      <button
-        type="button"
-        onClick={() => onChange("monthly")}
-        className={`rounded-md px-4 py-1.5 font-mono text-sm transition-all ${
-          value === "monthly" ? "bg-gray-700 text-white" : "text-gray-500 hover:text-gray-300"
-        }`}
-      >
-        Monthly
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("yearly")}
-        className={`flex items-center gap-2 rounded-md px-4 py-1.5 font-mono text-sm transition-all ${
-          value === "yearly" ? "bg-gray-700 text-white" : "text-gray-500 hover:text-gray-300"
-        }`}
-      >
-        Yearly
-        <span className="rounded bg-green-900 px-1.5 py-0.5 text-xs text-green-400">-15%</span>
-      </button>
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 2,
+        padding: 4,
+        borderRadius: 10,
+        background: "var(--color-surface)",
+        border: "1px solid var(--color-border)",
+      }}
+    >
+      {(["monthly", "yearly"] as BillingInterval[]).map((interval) => (
+        <button
+          key={interval}
+          type="button"
+          onClick={() => onChange(interval)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "7px 18px",
+            borderRadius: 7,
+            fontSize: 13,
+            fontWeight: 600,
+            fontFamily: "inherit",
+            cursor: "pointer",
+            border: "none",
+            transition: "all 0.15s",
+            background:
+              value === interval
+                ? "linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(6,182,212,0.25) 100%)"
+                : "transparent",
+            color: value === interval ? "var(--color-text-primary)" : "var(--color-text-muted)",
+          }}
+        >
+          {interval.charAt(0).toUpperCase() + interval.slice(1)}
+          {interval === "yearly" && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "2px 6px",
+                borderRadius: 4,
+                background: "rgba(34,211,160,0.15)",
+                color: "var(--color-success)",
+                letterSpacing: "0.04em",
+              }}
+            >
+              -15%
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   );
 }

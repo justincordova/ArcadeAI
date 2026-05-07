@@ -3,7 +3,7 @@
 // Do not "fix" the empty onClick handlers — they are correct per spec.
 import { type BillingInterval, PLANS } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AdminBanner } from "../components/pricing/AdminBanner.js";
 import { IntervalToggle } from "../components/pricing/IntervalToggle.js";
@@ -26,29 +26,97 @@ function PricingPage() {
 
   const isAdmin = me?.tier === "admin";
 
-  // Compute active tier only when me is loaded; avoid flicker per design doc
   const activeTier =
     me && !isAdmin && ["free", "creator", "pro"].includes(me.tier) ? me.tier : null;
 
   return (
-    <div className="min-h-screen bg-gray-950 px-6 py-16">
-      <div className="mx-auto max-w-5xl">
-        {/* Page heading */}
-        <div className="mb-12 text-center">
-          <h1 className="font-mono text-3xl font-bold text-white">Plans &amp; Pricing</h1>
-          <p className="mt-3 text-sm text-gray-500">Upgrade any time. Credits reset monthly.</p>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "var(--color-bg)",
+        padding: "64px 24px",
+        position: "relative",
+      }}
+    >
+      {/* Background grid */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          backgroundImage:
+            "linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div style={{ maxWidth: 960, margin: "0 auto", position: "relative" }}>
+        {/* Back link (if not authed, show standalone header; if authed, top bar handles nav) */}
+        {!me && (
+          <div style={{ marginBottom: 32 }}>
+            <Link
+              to="/sign-in"
+              style={{
+                fontSize: 13,
+                color: "var(--color-text-muted)",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path
+                  d="M9 11L5 7l4-4"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Back to sign in
+            </Link>
+          </div>
+        )}
+
+        {/* Heading */}
+        <div style={{ textAlign: "center", marginBottom: 48 }}>
+          <h1
+            style={{
+              fontSize: 36,
+              fontWeight: 800,
+              letterSpacing: "-0.02em",
+              marginBottom: 12,
+              background: "linear-gradient(135deg, #e8e8f0 0%, #7878a0 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
+            Plans &amp; Pricing
+          </h1>
+          <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>
+            Upgrade any time. Credits reset monthly.
+          </p>
         </div>
 
-        {/* Admin banner */}
         {isAdmin && <AdminBanner />}
 
         {/* Interval toggle */}
-        <div className="mb-10 flex justify-center">
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}>
           <IntervalToggle value={interval} onChange={setInterval} />
         </div>
 
-        {/* Plan cards grid */}
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Plan cards */}
+        <div
+          style={{
+            display: "grid",
+            gap: 16,
+            gridTemplateColumns: "repeat(1, 1fr)",
+          }}
+          className="sm:grid-cols-2 lg:grid-cols-4"
+        >
           {PLANS.map((plan) => (
             <PlanCard
               key={plan.id}
