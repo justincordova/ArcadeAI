@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { authPlugin, registerAuthGuard } from "./plugins/auth.js";
-import { corsPlugin } from "./plugins/cors.js";
+import { registerCors } from "./plugins/cors.js";
 import { registerRateLimit } from "./plugins/rate-limit.js";
 import { registerRequestContext } from "./plugins/request-context.js";
 import { billingRoutes } from "./routes/billing.js";
@@ -44,8 +44,8 @@ const app = Fastify({
 //   3. Auth /api/auth/* delegate plugin (Better Auth handler).
 //   4. Auth guard hook — populates `request.authSession` for /api/*.
 //   5. Request-context hook — must run AFTER auth so it can bind userId.
-await app.register(corsPlugin);
-await app.register(registerRateLimit);
+await registerCors(app);
+await registerRateLimit(app);
 await app.register(authPlugin);
 registerAuthGuard(app);
 registerRequestContext(app);

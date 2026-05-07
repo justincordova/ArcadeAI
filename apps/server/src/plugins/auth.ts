@@ -96,8 +96,15 @@ export async function authPlugin(app: FastifyInstance) {
     }
   );
 
-  // Delegate all /api/auth/* requests to Better Auth
-  app.all("/api/auth/*", async (request, reply) => {
+  // Delegate /api/auth/* to Better Auth. Enumerate methods explicitly
+  // (omit OPTIONS) so @fastify/cors can install its own OPTIONS handler
+  // for preflight. Using app.all(...) here would shadow CORS' OPTIONS
+  // route and cause every cross-origin preflight to 404, which then
+  // blocks /api/auth/sign-in/social and other POSTs from the web app.
+  const authHandler = async (
+    request: import("fastify").FastifyRequest,
+    reply: import("fastify").FastifyReply
+  ) => {
     const url = buildRequestUrl(request);
     const headers = buildHeaders(request, HOP_BY_HOP_REQUEST_HEADERS);
 
@@ -152,5 +159,9 @@ export async function authPlugin(app: FastifyInstance) {
     }
 
     reply.raw.end(responseBuffer);
-  });
+  };
+
+  for (const method of ["GET", "POST", "PUT", "DELETE", "PATCH"] as const) {
+    app.route({ method, url: "/api/auth/*", handler: authHandler });
+  }
 }
