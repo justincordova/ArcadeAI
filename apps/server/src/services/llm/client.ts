@@ -41,3 +41,21 @@ export async function streamRefinement({
     maxOutputTokens: 8192,
   });
 }
+
+export async function streamRepair({
+  system,
+  userMessage,
+  signal,
+}: {
+  system: string;
+  userMessage: string;
+  signal: AbortSignal;
+}) {
+  return streamText({
+    model: anthropic(SONNET),
+    system,
+    messages: [{ role: "user", content: userMessage }],
+    abortSignal: signal,
+    maxOutputTokens: 8192,
+  });
+}

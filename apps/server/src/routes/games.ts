@@ -8,10 +8,12 @@ import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
 import { db } from "../lib/db.js";
 import { loadOwnedGame } from "../lib/ownership.js";
 import { endSSE, writeSSE, writeSSEHeaders } from "../lib/sse.js";
+import { categorizeError } from "../services/llm/categorize-error.js";
 import { classifyPrompt } from "../services/llm/classify.js";
-import { streamGame, streamRefinement } from "../services/llm/client.js";
+import { streamGame, streamRefinement, streamRepair } from "../services/llm/client.js";
 import { embedPrompt } from "../services/llm/embed.js";
 import { buildGenerationSystemPrompt } from "../services/llm/prompts/generation/index.js";
+import { REPAIR_SYSTEM_PROMPT, buildRepairUserMessage } from "../services/llm/prompts/repair.js";
 import { generateTitle } from "../services/llm/title.js";
 import { retrieveExample } from "../services/rag/retrieve.js";
 import { buildRefinementContext } from "../services/refinement/context.js";
@@ -21,6 +23,7 @@ import {
   markSucceeded,
   refund,
 } from "../services/usage/charge.js";
+import { logRepair, markRepairSucceeded } from "../services/usage/repair-log.js";
 import { applyResets } from "../services/usage/reset.js";
 
 const CreateGameBody = z.object({
@@ -41,6 +44,13 @@ const ThumbnailBody = z.object({
 
 const RefineBody = z.object({
   feedback: z.string().trim().min(1).max(2000),
+});
+
+const RepairBody = z.object({
+  error: z.object({
+    message: z.string().min(1).max(2048),
+    stack: z.string().max(16384).optional(),
+  }),
 });
 
 export async function gamesRoutes(app: FastifyInstance) {
@@ -542,6 +552,113 @@ export async function gamesRoutes(app: FastifyInstance) {
         await refund(logId).catch(() => {});
       } else {
         await markSucceeded(logId).catch(() => {});
+      }
+
+      if (!clientClosed) {
+        if (streamError) {
+          writeSSE(reply, "error", { message: streamError.message });
+        } else {
+          writeSSE(reply, "done", {});
+        }
+        endSSE(reply);
+      }
+    } finally {
+      release(userId);
+    }
+  });
+
+  // POST /api/games/:id/repair — auto-repair loop (SPEC §9, §11)
+  app.post("/api/games/:id/repair", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return reply.status(400).send({ error: "Invalid id" });
+    }
+
+    const bodyResult = RepairBody.safeParse(request.body);
+    if (!bodyResult.success) {
+      return reply.status(400).send({
+        error: "Validation error",
+        issues: bodyResult.error.issues,
+      });
+    }
+
+    const { id } = paramsResult.data;
+    const { error: gameError } = bodyResult.data;
+    const userId = request.authSession.user.id;
+
+    const game = await loadOwnedGame(id, userId);
+    if (!game) {
+      return reply.status(404).send({ error: "Not found" });
+    }
+
+    // Concurrency cap: repair counts against the same 1-stream-per-user limit
+    try {
+      acquire(userId);
+    } catch (err) {
+      if (err instanceof ConcurrencyError) {
+        return reply.status(409).send({ error: err.message });
+      }
+      throw err;
+    }
+
+    try {
+      // Open SSE before log insert so the client gets meta promptly
+      reply.hijack();
+      writeSSEHeaders(reply);
+      writeSSE(reply, "meta", { gameId: game.id, placeholderTitle: game.title });
+
+      // Insert observability row (credits_charged=0 per SPEC §10)
+      const { logId } = await logRepair(userId, game.id);
+
+      // Categorize error (soft-fail per plan §3)
+      const { category } = await categorizeError(gameError, request.log);
+
+      const userMessage = buildRepairUserMessage({
+        originalPrompt: game.originalPrompt ?? "",
+        category,
+        message: gameError.message,
+        stack: gameError.stack,
+        code: game.currentCode ?? "",
+      });
+
+      const ac = new AbortController();
+      let clientClosed = false;
+      request.raw.on("close", () => {
+        clientClosed = true;
+        ac.abort();
+      });
+
+      let accumulated = "";
+      let streamError: Error | null = null;
+
+      try {
+        const result = await streamRepair({
+          system: REPAIR_SYSTEM_PROMPT,
+          userMessage,
+          signal: ac.signal,
+        });
+
+        for await (const delta of result.textStream) {
+          accumulated += delta;
+          if (!clientClosed) {
+            writeSSE(reply, "chunk", { delta });
+          }
+        }
+      } catch (err) {
+        streamError = err instanceof Error ? err : new Error("Unknown error");
+      }
+
+      if (!streamError && accumulated) {
+        // Persist repaired code
+        try {
+          await db
+            .update(games)
+            .set({ currentCode: accumulated, updatedAt: Date.now() })
+            .where(eq(games.id, id));
+        } catch {
+          // persistence failure is non-fatal
+        }
+        await markRepairSucceeded(logId).catch(() => {});
       }
 
       if (!clientClosed) {

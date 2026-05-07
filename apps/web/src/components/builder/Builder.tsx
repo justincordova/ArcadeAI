@@ -5,7 +5,8 @@ import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
 import { GAMES_QUERY_KEY, postThumbnail } from "../../lib/api/games.js";
 import { GameIframe } from "./GameIframe.js";
-import { StatusOverlay } from "./StatusOverlay.js";
+import { RepairController } from "./RepairController.js";
+import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
 import { StopButton } from "./StopButton.js";
 
 interface Message {
@@ -79,7 +80,17 @@ function RefinementBuilder({
     useStreamedRefinement(gameId);
   const [prompt, setPrompt] = useState("");
   const [localMessages, setLocalMessages] = useState<Message[]>(initialMessages);
+  const [repairedCode, setRepairedCode] = useState<string | null>(null);
+  // Increment to signal RepairController to reset its attempt counter
+  const [refineTrigger, setRefineTrigger] = useState(0);
   const isStreaming = status === "streaming";
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Combined attach: pass iframe ref to both refinement hook and RepairController
+  function handleIframeReady(el: HTMLIFrameElement | null) {
+    iframeRef.current = el;
+    attachIframe(el);
+  }
 
   // When refine completes, invalidate to reload messages
   const prevStatus = useRef(status);
@@ -95,10 +106,8 @@ function RefinementBuilder({
     setLocalMessages(initialMessages);
   }, [initialMessages]);
 
-  // Display priority: live stream > last refinement's final code > server-loaded code.
-  // finalCode covers the gap between SSE 'done' and the parent's game refetch
-  // landing — without it the iframe would briefly flash back to pre-refinement.
-  const displayCode = streamingCode || finalCode || initialCode;
+  // Display priority: live stream > repaired code > last refinement's final code > server-loaded code.
+  const displayCode = streamingCode || repairedCode || finalCode || initialCode;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -119,6 +128,7 @@ function RefinementBuilder({
     };
     setLocalMessages((prev) => [...prev, optimisticMsg]);
 
+    setRefineTrigger((n) => n + 1); // reset repair attempt counter
     refine(trimmed);
     setPrompt("");
   }
@@ -129,29 +139,61 @@ function RefinementBuilder({
       .catch((err) => console.warn("[thumbnail]", err));
   }
 
+  function handleRepaired(code: string) {
+    setRepairedCode(code);
+    // Trigger thumbnail recapture after repair
+    setTimeout(() => {
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+      }
+    }, 500);
+    // Invalidate game query so the DB-persisted code is in sync
+    queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+  }
+
+  function focusPromptInput() {
+    textareaRef.current?.focus();
+  }
+
   return (
-    <BuilderLayout
-      messages={localMessages}
-      isStreaming={isStreaming}
-      displayCode={displayCode}
-      error={error}
-      prompt={prompt}
-      setPrompt={setPrompt}
-      onSubmit={handleSubmit}
-      onStop={stop}
-      textareaRef={textareaRef}
+    <RepairController
       gameId={gameId}
-      onIframeReady={attachIframe}
-      onThumbnail={handleThumbnail}
-      streamLabel="Refining…"
-      submitLabel="Refine"
-    />
+      currentCode={displayCode}
+      originalPrompt={initialMessages.find((m) => m.kind === "prompt")?.content ?? ""}
+      iframeRef={iframeRef}
+      onRepaired={handleRepaired}
+      onTryAgain={() => {
+        // Re-generate from original prompt
+        const original = initialMessages.find((m) => m.kind === "prompt")?.content ?? "";
+        if (original) refine(original);
+      }}
+      onRefine={focusPromptInput}
+      resetTrigger={refineTrigger}
+    >
+      <BuilderLayout
+        messages={localMessages}
+        isStreaming={isStreaming}
+        displayCode={displayCode}
+        error={error}
+        prompt={prompt}
+        setPrompt={setPrompt}
+        onSubmit={handleSubmit}
+        onStop={stop}
+        textareaRef={textareaRef}
+        gameId={gameId}
+        onIframeReady={handleIframeReady}
+        onThumbnail={handleThumbnail}
+        streamLabel="Refining…"
+        submitLabel="Refine"
+      />
+    </RepairController>
   );
 }
 
 interface BuilderLayoutProps {
   messages: Message[];
   isStreaming: boolean;
+  overlayStatus?: OverlayStatus;
   displayCode: string;
   error: string | null;
   prompt: string;
@@ -169,6 +211,7 @@ interface BuilderLayoutProps {
 function BuilderLayout({
   messages,
   isStreaming,
+  overlayStatus,
   displayCode,
   error,
   prompt,
@@ -182,6 +225,7 @@ function BuilderLayout({
   streamLabel,
   submitLabel,
 }: BuilderLayoutProps) {
+  const resolvedOverlay: OverlayStatus = overlayStatus ?? (isStreaming ? "generating" : "idle");
   return (
     <div className="flex h-[calc(100vh-53px)] overflow-hidden">
       {/* Left panel — chat */}
@@ -264,8 +308,8 @@ function BuilderLayout({
           onIframeReady={onIframeReady}
           onThumbnail={onThumbnail}
         />
-        <StatusOverlay visible={isStreaming} />
-        <StopButton visible={isStreaming} onStop={onStop} />
+        <StatusOverlay status={resolvedOverlay} />
+        <StopButton visible={resolvedOverlay === "generating"} onStop={onStop} />
       </div>
     </div>
   );
