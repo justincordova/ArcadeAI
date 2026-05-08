@@ -459,7 +459,7 @@ Items **#91-93** (PostHog analytics, conversion funnel, feedback widget) and **#
 
 ---
 
-### 10. Milestone I — Comprehensive Test Coverage Pass
+### 10. Milestone I — Comprehensive Test Coverage Pass (shipped)
 
 The previous milestones each shipped tests **alongside** their refactors. This milestone is a deliberate sweep to fill gaps and lock in coverage before public launch.
 
