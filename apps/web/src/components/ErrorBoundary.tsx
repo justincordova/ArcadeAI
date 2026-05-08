@@ -34,7 +34,6 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Surface render errors in dev so they're not swallowed by the fallback.
     if (import.meta.env.DEV) {
-      // biome-ignore lint/suspicious/noConsole: development-only diagnostic
       console.error("ErrorBoundary caught:", error, info);
     }
   }

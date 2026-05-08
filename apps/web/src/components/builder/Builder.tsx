@@ -1,10 +1,16 @@
 import { getMissingKeyError, useConfig } from "@/hooks/useConfig.js";
+import { useSession } from "@/hooks/useSession.js";
 import { useStreamedGeneration } from "@/hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "@/hooks/useStreamedRefinement.js";
 import { GAMES_QUERY_KEY, postThumbnail } from "@/lib/api/games.js";
+import {
+  CREDIT_COSTS,
+  ENFORCE_LIFETIME_LIMITS_FOR_FREE,
+  FREE_TIER_LIFETIME_LIMITS,
+} from "@arcadeai/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { ErrorBanner } from "./ErrorBanner.js";
@@ -13,7 +19,6 @@ import { type Message, MessageBubble } from "./MessageBubble.js";
 import { RepairController, type RepairStatus } from "./RepairController.js";
 import { ShareButton } from "./ShareButton.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
-import { StopButton } from "./StopButton.js";
 import { StreamingIndicator } from "./StreamingIndicator.js";
 
 interface BuilderProps {
@@ -243,6 +248,26 @@ function BuilderLayout({
   const isNewGame = submitLabel === "Generate";
   const { data: config } = useConfig();
   const missingKeyError = getMissingKeyError(config);
+  const { data: me } = useSession();
+
+  // Cost preview text (#44). Free + lifetime cap on shows trial counters;
+  // everyone else sees credit cost vs remaining monthly balance. Admin
+  // skips this — unlimited credits make the line meaningless.
+  const action = isNewGame ? "generation" : "refinement";
+  const cost = CREDIT_COSTS[action];
+  let costLine: string | null = null;
+  if (me && me.tier !== "admin") {
+    if (me.tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE) {
+      const used = isNewGame ? me.lifetimeGenerationsUsed : me.lifetimeRefinementsUsed;
+      const total = isNewGame
+        ? FREE_TIER_LIFETIME_LIMITS.generations
+        : FREE_TIER_LIFETIME_LIMITS.refinements;
+      const remaining = Math.max(0, total - used);
+      costLine = `${submitLabel} (${remaining} of ${total} remaining)`;
+    } else {
+      costLine = `${submitLabel} (${cost} credits) — you have ${me.creditsRemainingMonthly.toLocaleString()}`;
+    }
+  }
 
   // Auto-scroll to bottom when messages change
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — scroll on messages or streaming state change
@@ -526,30 +551,54 @@ function BuilderLayout({
                   letterSpacing: "0.02em",
                 }}
               >
-                {isStreaming ? streamLabel : "⌘↵ to send"}
+                {isStreaming ? streamLabel : (costLine ?? "⌘↵ to send")}
               </span>
-              <button
-                type="submit"
-                disabled={!canSubmit}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  border: "none",
-                  background: canSubmit
-                    ? "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)"
-                    : "var(--color-border)",
-                  color: canSubmit ? "#fff" : "var(--color-text-muted)",
-                  cursor: canSubmit ? "pointer" : "not-allowed",
-                  transition: "all 0.15s",
-                  flexShrink: 0,
-                }}
-              >
-                <SendIcon />
-              </button>
+              {isStreaming ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  aria-label="Stop generation"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    border: "none",
+                    background: "var(--color-danger)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Square size={12} fill="currentColor" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!canSubmit}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 30,
+                    height: 30,
+                    borderRadius: 8,
+                    border: "none",
+                    background: canSubmit
+                      ? "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)"
+                      : "var(--color-border)",
+                    color: canSubmit ? "#fff" : "var(--color-text-muted)",
+                    cursor: canSubmit ? "pointer" : "not-allowed",
+                    transition: "all 0.15s",
+                    flexShrink: 0,
+                  }}
+                >
+                  <SendIcon />
+                </button>
+              )}
             </div>
           </div>
         </form>
@@ -611,7 +660,6 @@ function BuilderLayout({
             onThumbnail={onThumbnail}
           />
           <StatusOverlay status={resolvedOverlay} />
-          <StopButton visible={resolvedOverlay === "generating"} onStop={onStop} />
         </div>
       </div>
     </div>

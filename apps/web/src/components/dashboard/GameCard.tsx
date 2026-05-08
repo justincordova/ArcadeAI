@@ -1,4 +1,10 @@
-import { GAMES_QUERY_KEY, type GameSummary, deleteGame, patchGame } from "@/lib/api/games.js";
+import {
+  GAMES_QUERY_KEY,
+  type GameSummary,
+  deleteGame,
+  fetchGame,
+  patchGame,
+} from "@/lib/api/games.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -95,6 +101,15 @@ export function GameCard({ game, view }: GameCardProps) {
   function handleCardClick() {
     if (renaming || menuOpen) return;
     navigate({ to: "/game/$id", params: { id: game.id } });
+  }
+
+  // Prefetch on hover (#15) so navigation feels instant. The query has no
+  // staleTime override, so a navigation right after the prefetch will hit
+  // the cache; if the game has been refreshed elsewhere, the next visit
+  // refetches as normal.
+  function handlePrefetch() {
+    setHovered(true);
+    queryClient.prefetchQuery({ queryKey: ["game", game.id], queryFn: () => fetchGame(game.id) });
   }
 
   const kebab = (
@@ -227,7 +242,7 @@ export function GameCard({ game, view }: GameCardProps) {
             transition: "all 0.15s",
             position: "relative",
           }}
-          onMouseEnter={() => setHovered(true)}
+          onMouseEnter={handlePrefetch}
           onMouseLeave={() => setHovered(false)}
         >
           <button
@@ -389,7 +404,7 @@ export function GameCard({ game, view }: GameCardProps) {
           transition: "all 0.2s",
           overflow: "hidden",
         }}
-        onMouseEnter={() => setHovered(true)}
+        onMouseEnter={handlePrefetch}
         onMouseLeave={() => setHovered(false)}
       >
         <button

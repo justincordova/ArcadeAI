@@ -1,23 +1,8 @@
 import { Builder } from "@/components/builder/Builder.js";
-import { API_BASE } from "@/lib/api/client.js";
+import { fetchGame } from "@/lib/api/games.js";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
-
-const API = API_BASE;
-
-interface GameData {
-  id: string;
-  title: string;
-  currentCode: string;
-  messages: Array<{ id: string; kind: string; content: string; createdAt: number }>;
-}
-
-async function fetchGame(id: string): Promise<GameData> {
-  const res = await fetch(`${API}/api/games/${id}`, { credentials: "include" });
-  if (!res.ok) throw new Error("Game not found");
-  return res.json() as Promise<GameData>;
-}
 
 export const Route = createFileRoute("/_authed/game/$id")({
   component: GamePage,

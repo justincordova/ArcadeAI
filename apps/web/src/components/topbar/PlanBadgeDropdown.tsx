@@ -9,6 +9,44 @@ import { ENFORCE_LIFETIME_LIMITS_FOR_FREE, FREE_TIER_LIFETIME_LIMITS } from "@ar
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import type React from "react";
+import { useEffect, useState } from "react";
+
+/**
+ * Format milliseconds-from-now as a short countdown ("4h 23m", "12m", "47s").
+ * Returns null once the deadline has passed so the caller can hide the row.
+ */
+function formatCountdown(ms: number): string | null {
+  if (ms <= 0) return null;
+  const totalSec = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${totalSec}s`;
+}
+
+/** Display "Resets in Xh Ym", refreshing once per minute. */
+function ResetCountdown({ resetAt, label }: { resetAt: number; label: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const text = formatCountdown(resetAt - now);
+  if (!text) return null;
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        color: "var(--color-text-muted)",
+        marginTop: -6,
+        marginBottom: 8,
+      }}
+    >
+      {label} resets in {text}
+    </div>
+  );
+}
 
 interface TierStyle {
   label: string;
@@ -93,12 +131,18 @@ export function PlanBadgeDropdown({
               label="Daily credits"
               remaining={me?.creditsRemainingDaily ?? 0}
               total={dailyTotal}
+              tooltip="Per-day cap on free generations. Refills at midnight UTC; doesn't carry over."
             />
+            {me?.dailyResetAt ? <ResetCountdown resetAt={me.dailyResetAt} label="Daily" /> : null}
             <UsageBar
               label="Monthly credits"
               remaining={me?.creditsRemainingMonthly ?? 0}
               total={monthlyTotal}
+              tooltip="Total credits per billing month. Includes generations and refinements; resets on the 1st."
             />
+            {me?.monthlyResetAt ? (
+              <ResetCountdown resetAt={me.monthlyResetAt} label="Monthly" />
+            ) : null}
           </>
         )}
       </div>
@@ -145,10 +189,12 @@ function UsageBar({
   label,
   remaining,
   total,
+  tooltip,
 }: {
   label: string;
   remaining: number;
   total: number;
+  tooltip?: string;
 }) {
   const pct = total > 0 ? Math.min(remaining / total, 1) : 0;
   const pctDisplay = Math.round(pct * 100);
@@ -158,7 +204,7 @@ function UsageBar({
   else if (pct <= 0.3) barColor = "var(--color-warning)";
 
   return (
-    <div style={{ marginBottom: 12 }}>
+    <div style={{ marginBottom: 12 }} title={tooltip}>
       <div
         style={{
           display: "flex",
@@ -212,7 +258,7 @@ function LifetimeUsage({
   const refColor = refLeft === 0 ? "var(--color-danger)" : "var(--color-text-primary)";
 
   return (
-    <div>
+    <div title={`Free trial: ${genTotal} game + ${refTotal} refinements, lifetime.`}>
       <p
         style={{
           fontSize: 11,

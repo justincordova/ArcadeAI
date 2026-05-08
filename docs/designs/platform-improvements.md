@@ -373,54 +373,23 @@ Addresses **#13** (streaming code preview), **#14** (skeletons), **#15** (prefet
 
 Items **#20** (chat bubbles refactor) and **#23** (game state persistence in iframe wrapper) are **dropped** from this milestone — the bubble alignment fix from a prior commit is sufficient, and #23 touches the system prompt, which means re-curating RAG examples for a cosmetic feature.
 
-**Streaming code preview (#13):**
-- Below `StreamingIndicator`, render a collapsible `<pre>` showing the last ~30 lines of streaming HTML, auto-scrolling
-- Default collapsed; expand-on-click; state persisted to localStorage
+**Shipped:**
 
-**Loading skeletons (#14):**
-- Dashboard: render N skeleton cards matching `view` mode while `isLoading`
-- Game page: skeleton chat panel + iframe placeholder
+- **#21 Stop button (shipped):** the chat-input send button becomes a red stop button while streaming; the floating overlay button is removed.
+- **#44 Cost preview (shipped):** prompt textarea footer reads "Generate (200 credits) — you have 800" or, in free + lifetime-cap mode, "Generate (1 of 1 remaining)".
+- **#43 Reset countdown (shipped):** plan dropdown shows "Daily resets in Xh Ym" / "Monthly resets in Xh Ym", refreshing each minute.
+- **#45 Free-tier explainer (shipped):** tooltips on usage bars and the lifetime-mode block.
+- **#15 Prefetch on hover (shipped):** GameCard prefetches `["game", id]` on `mouseenter` so navigation feels instant.
+- **#14 Loading skeletons (shipped):** dashboard renders N skeleton cards (matching `view` mode) instead of a spinner. Game-page skeleton deferred — the route already has a focused loading state.
 
-**Prefetch on hover (#15):**
-- `GameCard` `onMouseEnter`: `queryClient.prefetchQuery(["game", id], ...)`
+**Deferred:**
 
-**Mobile builder (#16):**
-- At `< 768px`, switch to a tab toggle ("Chat / Game") showing one panel at a time
-- **Acceptance criterion:** tested on real iPhone Safari at < 768px
-
-**Keyboard shortcuts (#17):**
-- Install `react-hotkeys-hook`
-- `Cmd+K` / `Ctrl+K`: focus prompt input
-- `Cmd+B`: toggle chat panel
-- `Esc`: close any open dialog (uniformly)
-- `?`: show shortcuts overlay
-
-**Code reveal (#18):**
-- After generation/refinement completes, message bubble has a "Show generated code" disclosure
-- Render syntax-highlighted HTML with `shiki` (or `prism-react-renderer`)
-
-**Empty state on `/game/new` (#19):**
-- Replace the 3 hardcoded suggestions with genre cards (4-up grid) showing thumbnails of `rag_examples`
-- Click → prefills the prompt with that genre name as a starter
-
-**Stop button (#21):**
-- During streaming, the chat-input send button BECOMES the stop button (red, square icon)
-- Remove the floating overlay stop button entirely
-
-**Adaptive suggestions (#24):**
-- Move suggestion list to `packages/shared/src/suggestions.ts` (genre-categorized)
-- Pick 3 randomly per page load, weighted toward genres the current user hasn't tried (when signed in)
-
-**Cost preview (#44):**
-- Below the prompt textarea: "Generate (200 credits) — you have 800"
-- Free + flag-on: "Generate (1 of 1 remaining)"
-
-**Free tier explainer (#45):**
-- Tooltip on `PlanBadge` bars explains the daily/monthly relationship
-- Lifetime mode tooltip: "Free trial: 1 game + 3 refinements"
-
-**Reset countdown (#43):**
-- Plan dropdown shows "Resets in 4h 23m" using a relative-time component that updates each minute
+- **#13 Streaming code preview** — collapsible last-30-lines `<pre>`. Niche; revisit when there's a clear ask.
+- **#18 Code reveal disclosure** — adding `shiki` would inflate the bundle ~1MB for a feature most users won't use. Skip until there's a clear demand.
+- **#17 Keyboard shortcuts** — needs an overlay + careful keybinding design across mobile/desktop. Not deploy-blocking.
+- **#16 Mobile builder** — explicit acceptance is "tested on real iPhone Safari at < 768px"; can't be implemented blind.
+- **#19 Genre cards** — depends on `rag_examples` thumbnails which the curated library doesn't carry yet.
+- **#24 Adaptive suggestions** — needs telemetry to track "tried genres" per user; circle back once the analytics path is in place.
 
 ---
 

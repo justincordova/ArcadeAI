@@ -1,4 +1,5 @@
 import { EmptyState } from "@/components/dashboard/EmptyState.js";
+import { GameCardSkeletons } from "@/components/dashboard/GameCardSkeleton.js";
 import { GameGrid } from "@/components/dashboard/GameGrid.js";
 import { GAMES_QUERY_KEY, listGames } from "@/lib/api/games.js";
 import { useQuery } from "@tanstack/react-query";
@@ -278,27 +279,7 @@ function Dashboard() {
 
         {/* Content */}
         {isLoading ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minHeight: 320,
-              gap: 12,
-            }}
-          >
-            <div
-              style={{
-                width: 20,
-                height: 20,
-                borderRadius: "50%",
-                border: "2px solid var(--color-border)",
-                borderTopColor: "var(--color-accent-violet)",
-                animation: "spin 0.8s linear infinite",
-              }}
-            />
-            <style>{"@keyframes spin { to { transform: rotate(360deg); } }"}</style>
-          </div>
+          <GameCardSkeletons view={view} />
         ) : games.length === 0 ? (
           <EmptyState />
         ) : (

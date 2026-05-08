@@ -34,10 +34,23 @@ export interface RemixResponse {
 
 export const GAMES_QUERY_KEY = ["games"] as const;
 
+export interface GameDetail {
+  id: string;
+  title: string;
+  currentCode: string;
+  messages: Array<{ id: string; kind: string; content: string; createdAt: number }>;
+}
+
 export async function listGames(): Promise<GameSummary[]> {
   const res = await fetch(`${API}/api/games`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch games");
   return res.json() as Promise<GameSummary[]>;
+}
+
+export async function fetchGame(id: string): Promise<GameDetail> {
+  const res = await fetch(`${API}/api/games/${id}`, { credentials: "include" });
+  if (!res.ok) throw new Error("Game not found");
+  return res.json() as Promise<GameDetail>;
 }
 
 export async function patchGame(id: string, update: { title: string }): Promise<GameSummary> {
