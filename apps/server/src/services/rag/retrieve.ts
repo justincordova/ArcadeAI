@@ -17,6 +17,7 @@ const GENRE_BUCKETS = new Set([
 
 interface Logger {
   warn: (obj: unknown, msg?: string) => void;
+  info: (obj: unknown, msg?: string) => void;
 }
 
 /**
@@ -40,6 +41,12 @@ interface Logger {
  *    inner query is unfiltered (global nearest-neighbor fallback per
  *    SPEC §6 / §8).
  *
+ * Logging: every successful retrieval emits a structured INFO line with
+ * `{ ragExampleId, similarity, genreFilter, fellBackToGlobal }`. This is
+ * the foundation every subsequent RAG decision depends on (multi-example
+ * A/B testing, prompt-summarization quality assessment, editorial library
+ * tuning) — the logs are the data source. Failures emit WARN.
+ *
  * `bun:sqlite` calls are synchronous; the function is async only for
  * forward-compat with the route's awaited shape (and possible swap to
  * a remote vector store later).
@@ -53,7 +60,13 @@ export async function retrieveExample({
   genre: string;
   log?: Logger;
 }): Promise<string | null> {
-  if (!embedding) return null;
+  if (!embedding) {
+    log?.info(
+      { genre, fellBackToGlobal: false, ragExampleId: null, reason: "no_embedding" },
+      "rag retrieveExample skipped"
+    );
+    return null;
+  }
 
   const useGenreFilter = GENRE_BUCKETS.has(genre) && genre !== "other";
 
@@ -63,15 +76,50 @@ export async function retrieveExample({
   const vec = new Float32Array(embedding);
 
   try {
-    // Single SQL query per SPEC §8 — filter and rank in one statement.
+    // Pull id + raw cosine distance alongside the html so we can log how
+    // close the chosen example was. distance ∈ [0, 2] for unit vectors;
+    // similarity = 1 - distance is the more intuitive number to log.
     const sql = useGenreFilter
-      ? "SELECT html FROM rag_examples WHERE id IN (SELECT id FROM rag_embeddings WHERE genre = ? ORDER BY vec_distance_cosine(embedding, ?) LIMIT 1)"
-      : "SELECT html FROM rag_examples WHERE id IN (SELECT id FROM rag_embeddings ORDER BY vec_distance_cosine(embedding, ?) LIMIT 1)";
+      ? `SELECT e.id AS id, e.html AS html, m.distance AS distance
+           FROM rag_examples e
+           JOIN (
+             SELECT id, vec_distance_cosine(embedding, ?) AS distance
+               FROM rag_embeddings
+              WHERE genre = ?
+              ORDER BY distance
+              LIMIT 1
+           ) m ON m.id = e.id`
+      : `SELECT e.id AS id, e.html AS html, m.distance AS distance
+           FROM rag_examples e
+           JOIN (
+             SELECT id, vec_distance_cosine(embedding, ?) AS distance
+               FROM rag_embeddings
+              ORDER BY distance
+              LIMIT 1
+           ) m ON m.id = e.id`;
 
     const stmt = sqlite.prepare(sql);
-    const row = useGenreFilter ? stmt.get(genre, vec) : stmt.get(vec);
-    if (!row) return null;
-    return (row as { html: string }).html;
+    const row = useGenreFilter ? stmt.get(vec, genre) : stmt.get(vec);
+    if (!row) {
+      log?.info(
+        { genre, fellBackToGlobal: !useGenreFilter, ragExampleId: null, reason: "no_match" },
+        "rag retrieveExample empty"
+      );
+      return null;
+    }
+
+    const r = row as { id: string; html: string; distance: number };
+    const similarity = 1 - r.distance;
+    log?.info(
+      {
+        ragExampleId: r.id,
+        similarity,
+        genreFilter: useGenreFilter ? genre : null,
+        fellBackToGlobal: !useGenreFilter,
+      },
+      "rag retrieveExample hit"
+    );
+    return r.html;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     log?.warn({ err: msg, genre }, "rag retrieveExample failed");

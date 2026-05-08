@@ -347,11 +347,8 @@ Original plan was to extract the 770-line `routes/games.ts` into `services/gener
 
 **RAG improvements:**
 
-- **#8 — Retrieval logging:** `services/rag/retrieve.ts` logs `{ ragExampleId, similarity, genreFilter, fellBackToGlobal }` on every retrieval. **Ship this first** — every other RAG decision benefits from this data.
-- **#7 — Multi-example A/B test:** feature flag `RAG_NUM_EXAMPLES` (default 1, can set 2). Inject N examples; log which N was used. Compare success rates after 100+ generations.
-- **#9 — Prompt rewriting before embedding:** new step in parallel fanout — `summarizePromptForEmbedding(prompt)` produces a canonical "Genre: X. Style: tags. Mechanic: Y." sentence. Embed THAT, not the raw prompt.
-- **#10 — Failed-generation feedback signals:** new table `rag_quality_signals (id, rag_example_id, signal_type, game_id, created_at)`. Signals: `repair_required`, `refinement_count_high`, `user_remixed_immediately`. Use for offline RAG library editorial decisions, not runtime weighting.
-- **#11 — Style-tag retrieval:** new column on `rag_embeddings` (JSON array). Filter/rank by overlap. **Defer to a separate sub-task** if Milestone E is getting too large.
+- **#8 — Retrieval logging (shipped):** `services/rag/retrieve.ts` logs `{ ragExampleId, similarity, genreFilter, fellBackToGlobal }` on every retrieval. This is the foundational data every other RAG decision needs.
+- **#7, #9, #10, #11 — deferred:** the multi-example flag, prompt summarization before embedding, the `rag_quality_signals` table, and style-tag retrieval all benefit from the #8 logs as their evaluation baseline. Ship them after a few hundred generations have accumulated retrieval logs so the impact can actually be measured rather than guessed at.
 
 **Tests written alongside this milestone:**
 - `services/usage/reset.ts:applyResets` — writes only when changed; admin tier handling
