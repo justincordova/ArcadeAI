@@ -167,7 +167,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
       // Hijack response for SSE
       reply.hijack();
-      writeSSEHeaders(reply);
+      writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: title });
 
       const ac = new AbortController();
@@ -522,7 +522,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       }
 
       reply.hijack();
-      writeSSEHeaders(reply);
+      writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: game.title });
 
       const ac = new AbortController();
@@ -554,8 +554,10 @@ export async function gamesRoutes(app: FastifyInstance) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
-      // Persist refined code (only on clean completion)
-      if (!streamError && !clientClosed && accumulatedCode) {
+      // Persist accumulated code whether or not the client disconnected,
+      // so a user cancel doesn't silently discard work already streamed.
+      // Only skip on a server-side stream error (the model failed).
+      if (!streamError && accumulatedCode) {
         try {
           await db
             .update(games)
@@ -623,7 +625,7 @@ export async function gamesRoutes(app: FastifyInstance) {
     try {
       // Open SSE before log insert so the client gets meta promptly
       reply.hijack();
-      writeSSEHeaders(reply);
+      writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: game.id, placeholderTitle: game.title });
 
       // Insert observability row (credits_charged=0 per SPEC §10)

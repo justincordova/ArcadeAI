@@ -6,7 +6,7 @@ import { usageLog, users } from "@arcadeai/db";
 import { CREDIT_COSTS, TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
-import { db } from "../../lib/db.js";
+import { db, sqlite } from "../../lib/db.js";
 import { applyResets } from "./reset.js";
 
 export type RefundReason = "llm_error" | "timeout" | "validation_error" | "abort";
@@ -51,23 +51,34 @@ export async function deduct(
     return { logId };
   }
 
-  // For Free: enforce both daily and monthly
-  // For Creator/Pro: enforce only monthly; daily decremented for observability
-  if (limits.dailyEnforced && user.creditsRemainingDaily < cost) {
-    throw new InsufficientCreditsError("Daily credit limit reached", user.dailyResetAt);
-  }
-  if (user.creditsRemainingMonthly < cost) {
-    throw new InsufficientCreditsError("Monthly credit limit reached", user.monthlyResetAt);
+  // Atomically decrement counters only when the balance is sufficient.
+  // A plain read→check→write is a TOCTOU race: two concurrent requests from
+  // the same user can both pass the upfront credit check and both deduct.
+  // Instead, issue a single conditional UPDATE using the raw sqlite handle so
+  // we can inspect `changes` on the Statement result. SQLite serializes
+  // writes, so if `changes === 0` the WHERE guard failed — balance was too low.
+  let changedRows: number;
+  if (limits.dailyEnforced) {
+    const stmt = sqlite.prepare(
+      `UPDATE "user" SET credits_remaining_daily = credits_remaining_daily - ?, credits_remaining_monthly = credits_remaining_monthly - ? WHERE id = ? AND credits_remaining_daily >= ? AND credits_remaining_monthly >= ?`
+    );
+    const result = stmt.run(cost, cost, userId, cost, cost);
+    changedRows = result.changes;
+  } else {
+    const stmt = sqlite.prepare(
+      `UPDATE "user" SET credits_remaining_daily = credits_remaining_daily - ?, credits_remaining_monthly = credits_remaining_monthly - ? WHERE id = ? AND credits_remaining_monthly >= ?`
+    );
+    const result = stmt.run(cost, cost, userId, cost);
+    changedRows = result.changes;
   }
 
-  // Decrement counters
-  await db
-    .update(users)
-    .set({
-      creditsRemainingDaily: sql`${users.creditsRemainingDaily} - ${cost}`,
-      creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} - ${cost}`,
-    })
-    .where(eq(users.id, userId));
+  if (changedRows === 0) {
+    // Re-read user to determine which limit was hit for the correct resetAt.
+    if (limits.dailyEnforced && user.creditsRemainingDaily < cost) {
+      throw new InsufficientCreditsError("Daily credit limit reached", user.dailyResetAt);
+    }
+    throw new InsufficientCreditsError("Monthly credit limit reached", user.monthlyResetAt);
+  }
 
   const logId = randomUUID();
   await db.insert(usageLog).values({
