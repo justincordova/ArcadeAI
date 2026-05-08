@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { activeCount, clear as clearActiveStreams } from "./lib/active-streams.js";
+import { loadEnv } from "./lib/env.js";
 import { authPlugin, registerAuthGuard } from "./plugins/auth.js";
 import { registerCors } from "./plugins/cors.js";
 import { registerRateLimit } from "./plugins/rate-limit.js";
@@ -10,11 +11,14 @@ import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
 
-const isDev = process.env.NODE_ENV === "development";
+// Validate env vars first so misconfiguration fails fast with a clear message
+// instead of surfacing as a 30-second-later 401 on an AI call.
+const env = loadEnv();
+const isDev = env.NODE_ENV === "development";
 
 const app = Fastify({
   logger: {
-    level: process.env.LOG_LEVEL ?? "info",
+    level: env.LOG_LEVEL,
     ...(isDev
       ? {
           transport: {
@@ -70,7 +74,7 @@ await app.register(meRoutes);
 await app.register(gamesRoutes);
 await app.register(billingRoutes);
 
-const port = Number(process.env.PORT ?? 3000);
+const port = env.PORT;
 
 // Defense-in-depth: any locks held by a crashed previous run cannot survive
 // across processes (the Set is module-scoped), but explicitly clearing makes
