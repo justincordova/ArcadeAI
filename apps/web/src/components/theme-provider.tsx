@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { patchMe } from "../lib/api/me.js";
 import { applyTheme, getStoredTheme } from "../lib/theme.js";
 import type { Theme } from "../lib/theme.js";
+import { toast } from "./ui/sonner.js";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -70,6 +71,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           queryClient.setQueryData(["me"], (m: MeResponse | undefined) =>
             m ? { ...m, theme: prev } : m
           );
+          toast.error("Failed to save theme preference");
         },
       });
     },

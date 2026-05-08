@@ -1,8 +1,34 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
+@import "tw-animate-css";
 
+/* ── Theme tokens — registered with Tailwind so utility classes work ──
+   These act as fallback/default values; the :root and .light blocks
+   below provide the actual cascading values used at runtime.
+*/
 @theme {
-  /* ── Color tokens ── */
+  --color-bg: #09090f;
+  --color-surface: #111118;
+  --color-surface-raised: #18181f;
+  --color-surface-overlay: #1f1f2e;
+  --color-border: #252535;
+  --color-border-subtle: #1a1a28;
+  --color-text-primary: #e8e8f0;
+  --color-text-secondary: #7878a0;
+  --color-text-muted: #4a4a68;
+  --color-text-accent: #a78bfa;
+  --color-accent-violet: #7c3aed;
+  --color-accent-violet-light: #a78bfa;
+  --color-accent-cyan: #06b6d4;
+  --color-accent-cyan-light: #67e8f9;
+  --color-success: #22d3a0;
+  --color-warning: #f59e0b;
+  --color-danger: #f43f5e;
+  --color-danger-muted: #4c1a28;
+}
+
+/* ── Dark theme (default) ── */
+:root {
   --color-bg: #09090f;
   --color-surface: #111118;
   --color-surface-raised: #18181f;
@@ -15,17 +41,48 @@
   --color-text-muted: #4a4a68;
   --color-text-accent: #a78bfa;
 
-  /* Accent — violet → cyan */
+  /* Accent colors are theme-invariant (the gradient is the same brand mark
+     in both modes). Only their interplay with surfaces/text shifts. */
   --color-accent-violet: #7c3aed;
   --color-accent-violet-light: #a78bfa;
   --color-accent-cyan: #06b6d4;
   --color-accent-cyan-light: #67e8f9;
 
-  /* Status */
   --color-success: #22d3a0;
   --color-warning: #f59e0b;
   --color-danger: #f43f5e;
   --color-danger-muted: #4c1a28;
+}
+
+/* ── Light theme ──
+   Cream surface palette with desaturated neon accents. Pure white kills
+   the arcade feel and full-saturation neon on white burns the eye, so
+   we soften both. Token names are identical to dark mode — every component
+   keeps using var(--color-*) and rebrands automatically.
+*/
+.light {
+  --color-bg: #fafaf6;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f4f4ee;
+  --color-surface-overlay: #ebebe2;
+  --color-border: #e0e0d4;
+  --color-border-subtle: #ececec;
+
+  --color-text-primary: #1a1a24;
+  --color-text-secondary: #4a4a68;
+  --color-text-muted: #9090a8;
+  --color-text-accent: #6d28d9;
+
+  /* Toned-down accents for legibility on cream */
+  --color-accent-violet: #6d28d9;
+  --color-accent-violet-light: #8b5cf6;
+  --color-accent-cyan: #0891b2;
+  --color-accent-cyan-light: #06b6d4;
+
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-danger-muted: #fee2e2;
 }
 
 /* ── Base resets ── */

@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { GAMES_QUERY_KEY, type GameSummary, deleteGame, patchGame } from "../../lib/api/games.js";
+import { toast } from "../ui/sonner.js";
 
 interface GameCardProps {
   game: GameSummary;
@@ -60,6 +61,7 @@ export function GameCard({ game, view }: GameCardProps) {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(GAMES_QUERY_KEY, ctx.prev);
+      toast.error("Failed to rename game");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY });
@@ -71,6 +73,10 @@ export function GameCard({ game, view }: GameCardProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY });
       setConfirmDelete(false);
+      toast.success("Game deleted");
+    },
+    onError: () => {
+      toast.error("Failed to delete game");
     },
   });
 

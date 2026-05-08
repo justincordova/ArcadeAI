@@ -6,6 +6,7 @@ import { getMissingKeyError, useConfig } from "../../hooks/useConfig.js";
 import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
 import { GAMES_QUERY_KEY, postThumbnail, publishGame, unpublishGame } from "../../lib/api/games.js";
+import { toast } from "../ui/sonner.js";
 import { GameIframe } from "./GameIframe.js";
 import { RepairController, type RepairStatus } from "./RepairController.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
@@ -372,29 +373,30 @@ function ShareButton({ gameId }: { gameId: string }) {
   }>(["game", gameId]);
   const isPublic = Boolean(cached?.isPublic);
   const slug = cached?.publicSlug ?? null;
-  const [feedback, setFeedback] = useState<string | null>(null);
 
   const publishMutation = useMutation({
     mutationFn: () => publishGame(gameId),
     onSuccess: (result) => {
       const url = `${window.location.origin}/play/${result.slug}`;
-      navigator.clipboard?.writeText(url).catch(() => {});
-      setFeedback("Link copied!");
-      setTimeout(() => setFeedback(null), 2000);
+      navigator.clipboard
+        ?.writeText(url)
+        .then(() => toast.success("Public link copied to clipboard"))
+        .catch(() => toast.success("Game published", { description: url }));
       queryClient.invalidateQueries({ queryKey: ["game", gameId] });
     },
     onError: () => {
-      setFeedback("Failed to publish");
-      setTimeout(() => setFeedback(null), 2000);
+      toast.error("Failed to publish game");
     },
   });
 
   const unpublishMutation = useMutation({
     mutationFn: () => unpublishGame(gameId),
     onSuccess: () => {
-      setFeedback("Now private");
-      setTimeout(() => setFeedback(null), 2000);
+      toast.success("Game is now private");
       queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+    },
+    onError: () => {
+      toast.error("Failed to unpublish game");
     },
   });
 
@@ -409,19 +411,17 @@ function ShareButton({ gameId }: { gameId: string }) {
   function handleCopy() {
     if (!slug) return;
     const url = `${window.location.origin}/play/${slug}`;
-    navigator.clipboard?.writeText(url).catch(() => {});
-    setFeedback("Link copied!");
-    setTimeout(() => setFeedback(null), 2000);
+    navigator.clipboard
+      ?.writeText(url)
+      .then(() => toast.success("Public link copied"))
+      .catch(() => toast.error("Could not copy to clipboard"));
   }
 
   const busy = publishMutation.isPending || unpublishMutation.isPending;
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      {feedback && (
-        <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{feedback}</span>
-      )}
-      {isPublic && slug && !feedback && (
+      {isPublic && slug && (
         <button
           type="button"
           onClick={handleCopy}
