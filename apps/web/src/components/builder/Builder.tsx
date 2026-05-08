@@ -19,6 +19,7 @@ import { type Message, MessageBubble } from "./MessageBubble.js";
 import { RepairController, type RepairStatus } from "./RepairController.js";
 import { ShareButton } from "./ShareButton.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
+import { StreamingCodePreview } from "./StreamingCodePreview.js";
 import { StreamingIndicator } from "./StreamingIndicator.js";
 
 interface BuilderProps {
@@ -59,6 +60,7 @@ function GenerationBuilder({ initialCode = "", initialMessages = [] }: BuilderPr
       messages={initialMessages}
       isStreaming={isStreaming}
       displayCode={displayCode}
+      streamingCode={code}
       error={error}
       prompt={prompt}
       setPrompt={setPrompt}
@@ -175,6 +177,7 @@ function RefinementBuilder({
         isStreaming={isStreaming}
         overlayStatus={overlayStatus}
         displayCode={displayCode}
+        streamingCode={streamingCode}
         error={error}
         prompt={prompt}
         setPrompt={setPrompt}
@@ -196,6 +199,8 @@ interface BuilderLayoutProps {
   isStreaming: boolean;
   overlayStatus?: OverlayStatus;
   displayCode: string;
+  /** In-flight streaming bytes only — drives the StreamingCodePreview. */
+  streamingCode: string;
   error: string | null;
   prompt: string;
   setPrompt: (v: string) => void;
@@ -231,6 +236,7 @@ function BuilderLayout({
   isStreaming,
   overlayStatus,
   displayCode,
+  streamingCode,
   error,
   prompt,
   setPrompt,
@@ -472,6 +478,7 @@ function BuilderLayout({
           ))}
 
           {isStreaming && <StreamingIndicator label={streamLabel} />}
+          {isStreaming && <StreamingCodePreview code={streamingCode} />}
 
           {error && <ErrorBanner message={error} />}
 

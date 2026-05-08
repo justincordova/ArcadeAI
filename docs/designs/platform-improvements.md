@@ -375,16 +375,16 @@ Items **#20** (chat bubbles refactor) and **#23** (game state persistence in ifr
 
 **Shipped:**
 
-- **#21 Stop button (shipped):** the chat-input send button becomes a red stop button while streaming; the floating overlay button is removed.
-- **#44 Cost preview (shipped):** prompt textarea footer reads "Generate (200 credits) — you have 800" or, in free + lifetime-cap mode, "Generate (1 of 1 remaining)".
-- **#43 Reset countdown (shipped):** plan dropdown shows "Daily resets in Xh Ym" / "Monthly resets in Xh Ym", refreshing each minute.
-- **#45 Free-tier explainer (shipped):** tooltips on usage bars and the lifetime-mode block.
-- **#15 Prefetch on hover (shipped):** GameCard prefetches `["game", id]` on `mouseenter` so navigation feels instant.
-- **#14 Loading skeletons (shipped):** dashboard renders N skeleton cards (matching `view` mode) instead of a spinner. Game-page skeleton deferred — the route already has a focused loading state.
+- **#21 Stop button:** the chat-input send button becomes a red stop button while streaming; the floating overlay button is removed.
+- **#44 Cost preview:** prompt textarea footer reads "Generate (200 credits) — you have 800" or, in free + lifetime-cap mode, "Generate (1 of 1 remaining)".
+- **#43 Reset countdown:** plan dropdown shows "Daily resets in Xh Ym" / "Monthly resets in Xh Ym", refreshing each minute.
+- **#45 Free-tier explainer:** tooltips on usage bars and the lifetime-mode block.
+- **#15 Prefetch on hover:** GameCard prefetches `["game", id]` on `mouseenter` so navigation feels instant.
+- **#14 Loading skeletons:** dashboard renders N skeleton cards (matching `view` mode) instead of a spinner. Game-page skeleton deferred — the route already has a focused loading state.
+- **#13 Streaming code preview:** `StreamingCodePreview` component renders below `StreamingIndicator`. Collapsible, default collapsed, last 30 lines, auto-scrolls when expanded, expanded state persisted to `localStorage`.
 
 **Deferred:**
 
-- **#13 Streaming code preview** — collapsible last-30-lines `<pre>`. Niche; revisit when there's a clear ask.
 - **#18 Code reveal disclosure** — adding `shiki` would inflate the bundle ~1MB for a feature most users won't use. Skip until there's a clear demand.
 - **#17 Keyboard shortcuts** — needs an overlay + careful keybinding design across mobile/desktop. Not deploy-blocking.
 - **#16 Mobile builder** — explicit acceptance is "tested on real iPhone Safari at < 768px"; can't be implemented blind.
