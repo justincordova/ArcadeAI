@@ -1,13 +1,12 @@
-import {
-  ENFORCE_LIFETIME_LIMITS_FOR_FREE,
-  FREE_TIER_LIFETIME_LIMITS,
-  TIER_CREDIT_LIMITS,
-  type Tier,
-} from "@arcadeai/shared";
-import { Link } from "@tanstack/react-router";
-import type React from "react";
+// Plan badge in the top bar — color-coded pill that opens a credit-usage
+// dropdown on click. The dropdown's full implementation lives in
+// PlanBadgeDropdown so this file stays focused on the trigger UI and the
+// outside-click close behavior.
+
+import { TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "../../hooks/useSession.js";
+import { PlanBadgeDropdown } from "./PlanBadgeDropdown.js";
 
 const TIER_STYLES: Record<string, { label: string; gradient: string; border: string }> = {
   free: {
@@ -38,129 +37,12 @@ function isKnownTier(t: string): t is Tier {
   return t === "free" || t === "creator" || t === "pro" || t === "admin";
 }
 
-interface UsageBarProps {
-  label: string;
-  remaining: number;
-  total: number;
-}
-
-function UsageBar({ label, remaining, total }: UsageBarProps) {
-  const pct = total > 0 ? Math.min(remaining / total, 1) : 0;
-  const pctDisplay = Math.round(pct * 100);
-
-  let barColor = "var(--color-success)";
-  if (pct <= 0.1) barColor = "var(--color-danger)";
-  else if (pct <= 0.3) barColor = "var(--color-warning)";
-
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: 5,
-          fontSize: 11,
-          color: "var(--color-text-secondary)",
-        }}
-      >
-        <span>{label}</span>
-        <span style={{ color: "var(--color-text-muted)" }}>
-          {remaining.toLocaleString()} / {total.toLocaleString()}
-          <span style={{ marginLeft: 4, opacity: 0.7 }}>({pctDisplay}%)</span>
-        </span>
-      </div>
-      <div
-        style={{
-          height: 4,
-          borderRadius: 2,
-          background: "var(--color-border)",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${pctDisplay}%`,
-            background: barColor,
-            borderRadius: 2,
-            transition: "width 0.3s ease",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/**
- * Lifetime-counter view for the temporary deployment-phase free-tier policy.
- * Shows used / limit per action (generations, refinements) instead of the
- * regular daily/monthly bars. Switches in when ENFORCE_LIFETIME_LIMITS_FOR_FREE
- * is on AND the user is on the free tier.
- */
-function LifetimeUsage({
-  generationsUsed,
-  refinementsUsed,
-}: {
-  generationsUsed: number;
-  refinementsUsed: number;
-}) {
-  const genTotal = FREE_TIER_LIFETIME_LIMITS.generations;
-  const refTotal = FREE_TIER_LIFETIME_LIMITS.refinements;
-  const genLeft = Math.max(0, genTotal - generationsUsed);
-  const refLeft = Math.max(0, refTotal - refinementsUsed);
-  const genColor = genLeft === 0 ? "var(--color-danger)" : "var(--color-text-primary)";
-  const refColor = refLeft === 0 ? "var(--color-danger)" : "var(--color-text-primary)";
-
-  return (
-    <div>
-      <p
-        style={{
-          fontSize: 11,
-          color: "var(--color-text-muted)",
-          marginBottom: 10,
-          lineHeight: 1.5,
-        }}
-      >
-        Free trial — limited generations and refinements while we test.
-      </p>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: 12,
-          marginBottom: 8,
-        }}
-      >
-        <span style={{ color: "var(--color-text-secondary)" }}>Generations</span>
-        <span style={{ color: genColor, fontWeight: 600 }}>
-          {generationsUsed} / {genTotal}
-        </span>
-      </div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          fontSize: 12,
-        }}
-      >
-        <span style={{ color: "var(--color-text-secondary)" }}>Refinements</span>
-        <span style={{ color: refColor, fontWeight: 600 }}>
-          {refinementsUsed} / {refTotal}
-        </span>
-      </div>
-    </div>
-  );
-}
-
 export function PlanBadge() {
   const { data: me, isLoading } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
+  // Outside-click close
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
@@ -178,11 +60,8 @@ export function PlanBadge() {
 
   const rawTier = me?.tier ?? "free";
   const tier: Tier = isKnownTier(rawTier) ? rawTier : "free";
-  const isAdmin = tier === "admin";
   const style = TIER_STYLES[tier] ?? TIER_STYLES.free;
   const limits = TIER_CREDIT_LIMITS[tier];
-  const dailyTotal = limits.daily;
-  const monthlyTotal = limits.monthly;
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
@@ -226,6 +105,7 @@ export function PlanBadge() {
           style={{ flexShrink: 0 }}
           aria-hidden="true"
         >
+          <title>{open ? "Close menu" : "Open menu"}</title>
           <path
             d={open ? "M2 7L5 4L8 7" : "M2 4L5 7L8 4"}
             stroke="url(#badge-grad)"
@@ -243,123 +123,14 @@ export function PlanBadge() {
       </button>
 
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            right: 0,
-            top: "calc(100% + 8px)",
-            width: 280,
-            background: "var(--color-surface)",
-            border: "1px solid var(--color-border)",
-            borderRadius: 14,
-            boxShadow: "0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.08)",
-            overflow: "hidden",
-            zIndex: 100,
-          }}
-        >
-          {/* Header */}
-          <div
-            style={{
-              padding: "14px 16px 12px",
-              borderBottom: "1px solid var(--color-border)",
-              backgroundImage: style.gradient,
-              backgroundClip: "border-box",
-              background: "transparent",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  backgroundImage: style.gradient,
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                {style.label} PLAN
-              </span>
-            </div>
-          </div>
-
-          {/* Usage */}
-          <div style={{ padding: "14px 16px" }}>
-            {isAdmin ? (
-              <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
-                Admin access — unlimited credits.
-              </p>
-            ) : tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE ? (
-              <LifetimeUsage
-                generationsUsed={me?.lifetimeGenerationsUsed ?? 0}
-                refinementsUsed={me?.lifetimeRefinementsUsed ?? 0}
-              />
-            ) : (
-              <>
-                <UsageBar
-                  label="Daily credits"
-                  remaining={me?.creditsRemainingDaily ?? 0}
-                  total={dailyTotal}
-                />
-                <UsageBar
-                  label="Monthly credits"
-                  remaining={me?.creditsRemainingMonthly ?? 0}
-                  total={monthlyTotal}
-                />
-              </>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div
-            style={{
-              padding: "10px 16px 14px",
-              borderTop: "1px solid var(--color-border)",
-            }}
-          >
-            <Link
-              to="/pricing"
-              onClick={() => setOpen(false)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 6,
-                padding: "8px 12px",
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 600,
-                fontFamily: "inherit",
-                background:
-                  "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.15) 100%)",
-                border: "1px solid rgba(124,58,237,0.25)",
-                color: "var(--color-accent-violet-light)",
-                textDecoration: "none",
-                transition: "all 0.15s",
-              }}
-              onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                (e.currentTarget as HTMLAnchorElement).style.background =
-                  "linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(6,182,212,0.25) 100%)";
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                (e.currentTarget as HTMLAnchorElement).style.background =
-                  "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.15) 100%)";
-              }}
-            >
-              View plans & pricing
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <path
-                  d="M2.5 6h7M6.5 3l3 3-3 3"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </Link>
-          </div>
-        </div>
+        <PlanBadgeDropdown
+          me={me}
+          tier={tier}
+          style={style}
+          dailyTotal={limits.daily}
+          monthlyTotal={limits.monthly}
+          onClose={() => setOpen(false)}
+        />
       )}
     </div>
   );
