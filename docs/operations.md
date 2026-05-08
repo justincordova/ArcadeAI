@@ -52,6 +52,13 @@ the `cp` may need to grab the `-wal` and `-shm` siblings too — better to use
 `bun run db:studio` opens Drizzle Studio against the local DB.
 `bun run db:migrate` runs pending migrations + post-migrate (sqlite-vec).
 
+## CI
+
+`.github/workflows/ci.yml` runs `bun install` → `bun run lint` → `bun run build`
+→ `bun run test` on every push to `main` and every PR. Linux runner; the
+macOS-only Homebrew-SQLite path in `packages/db/src/sqlite-vec-loader.ts` is
+a no-op there, so no extra system packages are needed.
+
 ## Health
 
 `GET /api/health` returns `200 { ok: true }`. Wire it as the orchestrator's
