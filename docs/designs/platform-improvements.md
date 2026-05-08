@@ -243,10 +243,7 @@ Addresses **#25, #26, #27, #28, #29, #30** plus the file-split items **#62, #63,
 - Move `pulse-dot`, `spin`, `route-fade-in` keyframes into `index.css`
 - Remove inline `<style>` tags from components
 
-**Tests written alongside this milestone:**
-- `GameCard` rename + delete optimistic-update + rollback
-- `RepairController` 2-attempt cap + fallback dialog flow
-- `theme-provider` initial paint, system listener, cross-tab sync
+**Tests:** none — frontend-only milestone, no backend tests required.
 
 ---
 
@@ -306,8 +303,7 @@ The three existing hooks become thin wrappers (~30 lines each). Common logic ext
 - Wrap each route's component in an ErrorBoundary
 - `RouteError` shows generic "Something went wrong" + reload button + (in dev) error message
 
-**Tests written alongside this milestone:**
-- `useSSEStream` parser correctness, abort cleanup, terminator-missing handling, heartbeat-frame ignoring
+**Tests:** none — frontend-only milestone, no backend tests required.
 
 ---
 
@@ -513,11 +509,10 @@ The previous milestones each shipped tests **alongside** their refactors. This m
 
 **Setup (done in Milestone A, hardened here):**
 - `vitest` + `@vitest/coverage-v8`
-- `@testing-library/react` + `@testing-library/user-event`
-- `msw` for fetch mocking in frontend tests
 - Fastify's built-in `inject` API for backend route tests
 - `bun run test`, `bun run test:watch`, `bun run test:coverage`
 - CI: `bun run test` runs on every PR
+- Frontend / component tests are explicitly out of scope.
 
 **Test plan (gap-fill — items not already covered in earlier milestones):**
 
@@ -535,13 +530,10 @@ The previous milestones each shipped tests **alongside** their refactors. This m
 | `routes/games.ts POST /:id/repair` — concurrency lock; 0-credit logging | integration |
 | `routes/health.ts` — both endpoints | integration |
 | `iframe-wrapper.ts` — wrapper injection at end of `</body>` | unit |
-| `dashboard/index.tsx` — view mode persistence | component |
-| `sign-in.tsx:validateNext` — relative-only paths accepted | unit |
 
 **Coverage targets** (soft, not gating):
 - `services/` — high coverage on credit + RAG paths; routine getters can be lower
 - `routes/` — every status code path exercised at least once per route
-- Components — focus on stateful/optimistic logic; skip pure visual components
 
 **Coverage is not the goal — confidence is.** A low-coverage file with an integration test that exercises the critical flow is more valuable than a high-coverage file padded with trivial assertions.
 
