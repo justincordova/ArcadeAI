@@ -112,6 +112,53 @@ describe("loadPublicGame", () => {
   });
 });
 
+describe("publish flow — slug stability and reuse", () => {
+  // The publish/unpublish endpoints are thin glue around a few SQL writes;
+  // we test the SQL-level behavior directly to verify the contract.
+  test("setting a public_slug then unpublishing retains the slug", async () => {
+    const { id: ownerId } = insertTestUser(testDb.sqlite, { tier: "free" });
+    insertGame({
+      id: "game-1",
+      userId: ownerId,
+      isPublic: false,
+      publicSlug: "stableabc",
+    });
+
+    // Simulate publish (set isPublic + publishedAt on existing slug)
+    testDb.sqlite
+      .prepare("UPDATE games SET is_public = 1, published_at = ? WHERE id = ?")
+      .run(Date.now(), "game-1");
+
+    // Simulate unpublish
+    testDb.sqlite.prepare("UPDATE games SET is_public = 0 WHERE id = ?").run("game-1");
+
+    const row = testDb.sqlite
+      .query<{ public_slug: string | null; is_public: number }, [string]>(
+        "SELECT public_slug, is_public FROM games WHERE id = ?"
+      )
+      .get("game-1");
+    expect(row?.public_slug).toBe("stableabc");
+    expect(row?.is_public).toBe(0);
+  });
+
+  test("public_slug uniqueness is enforced at the DB level", () => {
+    const { id: ownerId } = insertTestUser(testDb.sqlite, { tier: "free" });
+    insertGame({ id: "g1", userId: ownerId, publicSlug: "duplicate" });
+
+    expect(() => {
+      insertGame({ id: "g2", userId: ownerId, publicSlug: "duplicate" });
+    }).toThrow();
+  });
+
+  test("multiple games can share publicSlug=null", () => {
+    const { id: ownerId } = insertTestUser(testDb.sqlite, { tier: "free" });
+    insertGame({ id: "g1", userId: ownerId, publicSlug: null });
+    expect(() => {
+      insertGame({ id: "g2", userId: ownerId, publicSlug: null });
+    }).not.toThrow();
+  });
+});
+
 describe("recordRemix — lifetime cap interaction", () => {
   test("free user with budget: recordRemix succeeds and increments lifetime counter", async () => {
     const { recordRemix } = await import("../src/services/usage/charge.js");
