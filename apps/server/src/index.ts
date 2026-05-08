@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
 import { activeCount, clear as clearActiveStreams } from "./lib/active-streams.js";
+import { db, sqlite } from "./lib/db.js";
 import { loadEnv } from "./lib/env.js";
 import { authPlugin, registerAuthGuard } from "./plugins/auth.js";
 import { registerCors } from "./plugins/cors.js";
@@ -50,6 +51,14 @@ const app = Fastify({
 //   3. Auth /api/auth/* delegate plugin (Better Auth handler).
 //   4. Auth guard hook — populates `request.authSession` for /api/*.
 //   5. Request-context hook — must run AFTER auth so it can bind userId.
+// Decorate the DB handles onto the app so handlers/services can pull them
+// from `request.server.db` rather than the import-time singleton. The
+// singleton remains for code that needs the DB at module-load time (e.g.
+// Better Auth construction). Tests can override these decorators by
+// constructing the app against an in-memory DB.
+app.decorate("db", db);
+app.decorate("sqlite", sqlite);
+
 await registerCors(app);
 await registerRateLimit(app);
 await app.register(authPlugin);

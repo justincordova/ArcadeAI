@@ -1,3 +1,4 @@
+import { countTokens } from "@anthropic-ai/tokenizer";
 import type { FastifyBaseLogger } from "fastify";
 import { REFINEMENT_SYSTEM_PROMPT } from "../llm/prompts/refinement.js";
 import { summarizeCode } from "../llm/summarize.js";
@@ -17,16 +18,24 @@ interface RefinementContext {
   prompt: string;
 }
 
+// Anything above this many tokens of game code triggers summarization to keep
+// the refinement prompt within Claude's working context comfortably.
+const SUMMARIZATION_THRESHOLD_TOKENS = 2000;
+
 export async function buildRefinementContext({
   game,
   feedback,
   pastFeedback,
   logger,
 }: RefinementContextInput): Promise<RefinementContext> {
-  // Decide whether to use full code or a summarized digest
-  const estimatedTokens = game.currentCode.length / 4;
+  // Use the real Claude tokenizer instead of a `length / 4` estimate. The
+  // estimate runs ~30% off for HTML+JS-heavy code and was occasionally
+  // sending oversized prompts that the model handled but charged extra for.
+  const codeTokens = countTokens(game.currentCode);
   const codeOrDigest =
-    estimatedTokens > 2000 ? await summarizeCode(game.currentCode, logger) : game.currentCode;
+    codeTokens > SUMMARIZATION_THRESHOLD_TOKENS
+      ? await summarizeCode(game.currentCode, logger)
+      : game.currentCode;
 
   const parts: string[] = [];
 
