@@ -333,6 +333,8 @@ export async function gamesRoutes(app: FastifyInstance) {
         title: games.title,
         thumbnail: games.thumbnail,
         updatedAt: games.updatedAt,
+        isPublic: games.isPublic,
+        publicSlug: games.publicSlug,
       })
       .from(games)
       .where(eq(games.userId, userId))
@@ -369,6 +371,70 @@ export async function gamesRoutes(app: FastifyInstance) {
     await db.update(games).set({ title, updatedAt: now }).where(eq(games.id, id));
 
     return reply.send({ id, title, updatedAt: now });
+  });
+
+  // POST /api/games/:id/publish — make the game publicly playable. Generates
+  // a public_slug on first publish and reuses it on subsequent publishes so
+  // the URL is stable across publish/unpublish cycles.
+  app.post("/api/games/:id/publish", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return reply.status(400).send({ error: "Invalid id" });
+    }
+    const { id } = paramsResult.data;
+    const userId = request.authSession.user.id;
+
+    const game = await loadOwnedGame(id, userId);
+    if (!game) return reply.status(404).send({ error: "Not found" });
+    if (!game.currentCode) {
+      return reply.status(400).send({ error: "Game has no code to publish" });
+    }
+
+    let slug = game.publicSlug;
+    if (!slug) {
+      // Generate a unique slug. 8 hex chars = 4 billion options; collisions
+      // are vanishingly rare but the unique-index will reject duplicates so
+      // we retry up to 3 times before giving up.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const candidate = randomUUID().replace(/-/g, "").slice(0, 8);
+        try {
+          await db.update(games).set({ publicSlug: candidate }).where(eq(games.id, id));
+          slug = candidate;
+          break;
+        } catch {
+          // unique constraint hit; retry
+        }
+      }
+      if (!slug) {
+        return reply.status(500).send({ error: "Could not generate public slug; please retry" });
+      }
+    }
+
+    const now = Date.now();
+    await db
+      .update(games)
+      .set({ isPublic: true, publishedAt: now, updatedAt: now })
+      .where(eq(games.id, id));
+
+    return reply.send({ slug, isPublic: true, publishedAt: now });
+  });
+
+  // POST /api/games/:id/unpublish — keep the slug for stable re-publish, but
+  // hide the game from /play/:slug.
+  app.post("/api/games/:id/unpublish", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return reply.status(400).send({ error: "Invalid id" });
+    }
+    const { id } = paramsResult.data;
+    const userId = request.authSession.user.id;
+
+    const game = await loadOwnedGame(id, userId);
+    if (!game) return reply.status(404).send({ error: "Not found" });
+
+    await db.update(games).set({ isPublic: false, updatedAt: Date.now() }).where(eq(games.id, id));
+
+    return reply.send({ isPublic: false });
   });
 
   // POST /api/games/:id/thumbnail — save captured thumbnail

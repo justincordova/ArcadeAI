@@ -245,6 +245,74 @@ export async function markSucceeded(logId: string): Promise<void> {
   await db.update(usageLog).set({ succeeded: 1 }).where(eq(usageLog.id, logId));
 }
 
+/**
+ * Record a remix as a 0-credit "generation" that still counts against the
+ * free-tier lifetime cap. Mirrors the atomic-guard shape in `deduct`: free
+ * users at the lifetime cap get an InsufficientCreditsError before any DB
+ * write happens. Paid users and admins get a no-op log row inserted with
+ * the action recorded so the audit trail captures the remix.
+ *
+ * Returns the logId so the route can refund (which decrements the lifetime
+ * counter back) on subsequent failure.
+ */
+export async function recordRemix(userId: string, gameId: string): Promise<{ logId: string }> {
+  const user = await applyResets(userId);
+  if (!user) throw new Error("User not found");
+
+  const tier = user.tier as Tier;
+
+  if (tier === "admin") {
+    const logId = randomUUID();
+    await db.insert(usageLog).values({
+      id: logId,
+      userId,
+      gameId,
+      action: "generation",
+      creditsCharged: 0,
+      lifetimeCounterIncremented: false,
+      succeeded: 0,
+      refundedAt: null,
+      createdAt: Date.now(),
+    });
+    return { logId };
+  }
+
+  // Free + flag on: atomically increment the lifetime generations counter
+  // only when below the cap. Same TOCTOU guard as deduct.
+  if (tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE) {
+    const limit = FREE_TIER_LIFETIME_LIMITS.generations;
+    const stmt = sqlite.prepare(
+      `UPDATE "user"
+          SET lifetime_generations_used = lifetime_generations_used + 1
+        WHERE id = ?
+          AND lifetime_generations_used < ?`
+    );
+    const changedRows = stmt.run(userId, limit).changes;
+    if (changedRows === 0) {
+      throw new InsufficientCreditsError(
+        "Free tier lifetime generation limit reached. Upgrade for more.",
+        0,
+        "lifetime"
+      );
+    }
+  }
+
+  const logId = randomUUID();
+  await db.insert(usageLog).values({
+    id: logId,
+    userId,
+    gameId,
+    action: "generation",
+    creditsCharged: 0,
+    lifetimeCounterIncremented: tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE,
+    succeeded: 0,
+    refundedAt: null,
+    createdAt: Date.now(),
+  });
+
+  return { logId };
+}
+
 export async function refund(
   logId: string,
   opts?: { logger?: FastifyBaseLogger; reason?: RefundReason }

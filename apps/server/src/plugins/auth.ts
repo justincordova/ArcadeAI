@@ -70,7 +70,12 @@ export function registerAuthGuard(app: FastifyInstance) {
       !path.startsWith("/api/") ||
       path.startsWith("/api/auth/") ||
       path === "/api/health" ||
-      path === "/api/config"
+      path === "/api/config" ||
+      // GET /api/play/:slug is public; the matching POST .../remix below
+      // still requires auth. Auth handler is the wrong layer to make that
+      // distinction (it doesn't know the method), so we exempt the whole
+      // /api/play/* prefix and the remix route does its own session check.
+      path.startsWith("/api/play/")
     ) {
       return;
     }

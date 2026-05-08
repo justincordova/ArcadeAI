@@ -10,6 +10,7 @@ import { billingRoutes } from "./routes/billing.js";
 import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
+import { playRoutes } from "./routes/play.js";
 
 // Validate env vars first so misconfiguration fails fast with a clear message
 // instead of surfacing as a 30-second-later 401 on an AI call.
@@ -72,6 +73,7 @@ app.setErrorHandler((err: Error & { statusCode?: number }, request, reply) => {
 await app.register(healthRoutes);
 await app.register(meRoutes);
 await app.register(gamesRoutes);
+await app.register(playRoutes);
 await app.register(billingRoutes);
 
 const port = env.PORT;

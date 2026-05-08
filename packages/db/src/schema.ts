@@ -79,6 +79,16 @@ export const games = sqliteTable(
     thumbnail: text("thumbnail"),
     genre: text("genre"),
     originalPrompt: text("original_prompt").notNull(),
+    // Public sharing — when isPublic is true, the game is reachable via
+    // /play/<publicSlug> with no auth required. Slug is generated on first
+    // publish and retained on unpublish so re-publishing keeps the same URL.
+    isPublic: integer("is_public", { mode: "boolean" }).notNull().default(false),
+    publicSlug: text("public_slug").unique(),
+    publishedAt: integer("published_at"),
+    // If this game was created via the Remix flow, points at the source game.
+    // No FK reference here — self-references in Drizzle require ordering
+    // gymnastics, and SQLite enforcement is unnecessary for a soft pointer.
+    remixedFromGameId: text("remixed_from_game_id"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
