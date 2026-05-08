@@ -66,7 +66,12 @@ export function registerAuthGuard(app: FastifyInstance) {
   app.addHook("preHandler", async (request, reply) => {
     const path = request.url.split("?")[0];
 
-    if (!path.startsWith("/api/") || path.startsWith("/api/auth/") || path === "/api/health" || path === "/api/config") {
+    if (
+      !path.startsWith("/api/") ||
+      path.startsWith("/api/auth/") ||
+      path === "/api/health" ||
+      path === "/api/config"
+    ) {
       return;
     }
 
