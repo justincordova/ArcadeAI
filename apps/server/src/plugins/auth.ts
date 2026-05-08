@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { auth } from "../lib/auth.js";
+import { sendError, unauthorizedError } from "../lib/errors.js";
 
 type AuthSession = Awaited<ReturnType<typeof auth.api.getSession>>;
 
@@ -83,12 +84,12 @@ export function registerAuthGuard(app: FastifyInstance) {
     try {
       const session = await getSession(request);
       if (!session) {
-        return reply.status(401).send({ error: "Unauthorized" });
+        return sendError(reply, 401, unauthorizedError());
       }
       // biome-ignore lint/suspicious/noExplicitAny: Better Auth session shape
       (request as FastifyRequest & { authSession: any }).authSession = session;
     } catch {
-      return reply.status(401).send({ error: "Unauthorized" });
+      return sendError(reply, 401, unauthorizedError());
     }
   });
 }

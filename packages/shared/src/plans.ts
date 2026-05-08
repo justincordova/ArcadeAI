@@ -4,6 +4,13 @@ export type Tier = "free" | "creator" | "pro" | "admin";
 // and step 8 (display values for pricing). Per SPEC §10: only Free has an
 // enforced daily cap; paid tiers' daily counter is decremented for
 // observability but the daily check is skipped.
+//
+// Tier-change rules (enforced in apps/server/src/routes/billing.ts):
+//  - UPGRADE (new monthly cap > current balance): credits jump immediately
+//    to the new tier's allotment. Users who pay should see what they paid for.
+//  - DOWNGRADE (new monthly cap < current balance): the existing balance is
+//    preserved until the next monthly reset boundary. Capping would
+//    confiscate already-granted credit.
 export const TIER_CREDIT_LIMITS: Record<
   Tier,
   {

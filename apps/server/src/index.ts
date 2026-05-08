@@ -5,6 +5,7 @@ import { db, sqlite } from "./lib/db.js";
 import { loadEnv } from "./lib/env.js";
 import { authPlugin, registerAuthGuard } from "./plugins/auth.js";
 import { registerCors } from "./plugins/cors.js";
+import { registerCsrfGuard } from "./plugins/csrf.js";
 import { registerRateLimit } from "./plugins/rate-limit.js";
 import { registerRequestContext } from "./plugins/request-context.js";
 import { billingRoutes } from "./routes/billing.js";
@@ -63,6 +64,11 @@ await registerCors(app);
 await registerRateLimit(app);
 await app.register(authPlugin);
 registerAuthGuard(app);
+// CSRF guard runs AFTER auth so it benefits from the same auth-exempt path
+// list (the guard itself excludes /api/auth/* — Better Auth handles its
+// own anti-CSRF). Sits before request-context since 415s should still log
+// the userId if available.
+registerCsrfGuard(app);
 registerRequestContext(app);
 
 // Global error handler — emit one structured ERROR line per uncaught

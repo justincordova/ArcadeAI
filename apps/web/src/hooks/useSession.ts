@@ -7,6 +7,9 @@ export function useSession() {
     queryKey: ["me"],
     queryFn: fetchMeOrNull,
     retry: false,
-    staleTime: 60_000,
+    // 15s — short enough that returning to a tab after a reset boundary
+    // (daily/monthly) sees fresh counters without manual refresh, long
+    // enough that snappy navigation doesn't refire on every route change.
+    staleTime: 15_000,
   });
 }

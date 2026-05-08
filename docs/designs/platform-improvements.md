@@ -393,7 +393,7 @@ Items **#20** (chat bubbles refactor) and **#23** (game state persistence in ifr
 
 ---
 
-### 8. Milestone G — Auth, Credits, Billing Polish
+### 8. Milestone G — Auth, Credits, Billing Polish (shipped)
 
 Addresses **#34** (stale session), **#36** (account-linking half-done), **#37** (session invalidation), **#38** (CSRF), **#39** (sign-out cache), **#42** (refund reason granularity), **#46** (downgrade behavior).
 

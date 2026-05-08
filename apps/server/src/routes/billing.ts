@@ -40,15 +40,35 @@ export async function billingRoutes(app: FastifyInstance) {
     const monthlyResetAt = nextUtcMonthStart(now);
     const limits = TIER_CREDIT_LIMITS[tier];
 
-    // Per SPEC §10: on plan change, reset both counters to new tier's allotments.
-    // For paid tiers, dailyEnforced=false but we still initialize daily counter
-    // to the tier's daily value for observability parity.
+    // Read current balance so the downgrade rule (#46) can preserve it. The
+    // user table is the source of truth; credits_remaining_* live there.
+    const currentRows = await db
+      .select({
+        creditsRemainingDaily: users.creditsRemainingDaily,
+        creditsRemainingMonthly: users.creditsRemainingMonthly,
+      })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    // biome-ignore lint/style/noNonNullAssertion: authSession guarantees the row exists
+    const current = currentRows[0]!;
+
+    // SPEC §10 + plan #46: an UPGRADE bumps to the new tier's allotment
+    // immediately so paid users get the credits they paid for. A DOWNGRADE
+    // preserves the existing balance until the next monthly boundary —
+    // capping to the lower tier's monthly limit would punish the user for
+    // unspent credit they already legitimately had.
+    const isDowngrade = current.creditsRemainingMonthly > limits.monthly;
+    const nextMonthly = isDowngrade ? current.creditsRemainingMonthly : limits.monthly;
+    const isDowngradeDaily = current.creditsRemainingDaily > limits.daily;
+    const nextDaily = isDowngradeDaily ? current.creditsRemainingDaily : limits.daily;
+
     await db
       .update(users)
       .set({
         tier,
-        creditsRemainingMonthly: limits.monthly,
-        creditsRemainingDaily: limits.daily,
+        creditsRemainingMonthly: nextMonthly,
+        creditsRemainingDaily: nextDaily,
         monthlyResetAt,
         dailyResetAt,
         updatedAt: new Date(now),
@@ -62,8 +82,8 @@ export async function billingRoutes(app: FastifyInstance) {
       displayName: u.displayName ?? user.name ?? "",
       tier,
       theme: (u.theme ?? "dark") as string,
-      creditsRemainingDaily: limits.daily,
-      creditsRemainingMonthly: limits.monthly,
+      creditsRemainingDaily: nextDaily,
+      creditsRemainingMonthly: nextMonthly,
       dailyResetAt,
       monthlyResetAt,
     });

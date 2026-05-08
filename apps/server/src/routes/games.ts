@@ -25,6 +25,7 @@ import { retrieveExample } from "../services/rag/retrieve.js";
 import { buildRefinementContext } from "../services/refinement/context.js";
 import {
   InsufficientCreditsError,
+  type RefundReason,
   checkUpfront,
   deduct,
   markSucceeded,
@@ -32,6 +33,23 @@ import {
 } from "../services/usage/charge.js";
 import { logRepair, markRepairSucceeded } from "../services/usage/repair-log.js";
 import { applyResets } from "../services/usage/reset.js";
+
+/**
+ * Pick the best `RefundReason` for the failure that ended a stream. The
+ * reasons are observability metadata — they show up on `usage_log` rows so
+ * we can answer "what's the dominant failure mode?" from logs alone.
+ *
+ * Decisions:
+ *  - `AbortError` → `abort` (user closed the tab; LLM SDK propagates as abort)
+ *  - error message contains "timeout" / "timed out" → `timeout`
+ *  - everything else (LLM 5xx, stream parse failure, etc.) → `llm_error`
+ */
+function classifyRefundReason(err: Error): RefundReason {
+  if (err.name === "AbortError") return "abort";
+  const msg = err.message.toLowerCase();
+  if (msg.includes("timeout") || msg.includes("timed out")) return "timeout";
+  return "llm_error";
+}
 
 const CreateGameBody = z.object({
   prompt: z.string().trim().min(1).max(2000),
@@ -265,8 +283,10 @@ export async function gamesRoutes(app: FastifyInstance) {
 
       // Finalize: markSucceeded or refund (mutually exclusive, each runs once)
       if (streamError) {
-        // Server-side error: refund credits
-        await refund(logId, { logger: request.log, reason: "llm_error" }).catch(() => {});
+        await refund(logId, {
+          logger: request.log,
+          reason: classifyRefundReason(streamError),
+        }).catch(() => {});
       } else {
         // Success (including user-cancel per SPEC §14: credits not refunded on cancel)
         await markSucceeded(logId).catch(() => {});
@@ -586,7 +606,10 @@ export async function gamesRoutes(app: FastifyInstance) {
           logger: request.log,
         }));
       } catch (err) {
-        await refund(logId, { logger: request.log, reason: "validation_error" }).catch(() => {});
+        // Failure here is post-deduct, pre-stream — feedback insert, history
+        // load, or context build. All three are persistence/IO; classify
+        // accordingly. validation_error is reserved for upstream zod failures.
+        await refund(logId, { logger: request.log, reason: "persistence_error" }).catch(() => {});
         throw err;
       }
 
@@ -640,7 +663,10 @@ export async function gamesRoutes(app: FastifyInstance) {
 
       // Finalize credits
       if (streamError) {
-        await refund(logId, { logger: request.log, reason: "llm_error" }).catch(() => {});
+        await refund(logId, {
+          logger: request.log,
+          reason: classifyRefundReason(streamError),
+        }).catch(() => {});
       } else {
         await markSucceeded(logId).catch(() => {});
       }

@@ -29,3 +29,19 @@ export async function deleteMe(): Promise<void> {
 export function linkProviderUrl(provider: "google" | "github"): string {
   return `${API}/api/auth/link/${provider}`;
 }
+
+/**
+ * Disconnect a linked OAuth provider via Better Auth's unlink endpoint.
+ * The server-side last-provider guard (SPEC §11) is enforced separately —
+ * this just hits the Better Auth route. Better Auth returns a non-2xx if
+ * unlinking would leave the user with no auth method.
+ */
+export async function unlinkProvider(provider: "google" | "github"): Promise<void> {
+  const res = await fetch(`${API}/api/auth/unlink-account`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ providerId: provider }),
+  });
+  if (!res.ok) throw new Error("Could not disconnect provider");
+}

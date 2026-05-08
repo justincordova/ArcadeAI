@@ -1,3 +1,4 @@
+import { queryClient } from "@/lib/query-client.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { API_BASE } from "./client.js";
 
@@ -28,6 +29,10 @@ export async function signOut(): Promise<void> {
     method: "POST",
     credentials: "include",
   });
+  // Drop every cached query before hard-navigating so a back-button to the
+  // SPA doesn't briefly flash the previous user's data while the auth guard
+  // re-evaluates and redirects.
+  queryClient.clear();
   window.location.href = "/sign-in";
 }
 

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 // SPEC §11, §12, §14: /api/me GET, PATCH, DELETE
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { auth } from "../lib/auth.js";
 import { db } from "../lib/db.js";
 import { notFoundError, sendError, validationError } from "../lib/errors.js";
 import { applyResets } from "../services/usage/reset.js";
@@ -92,6 +93,16 @@ export async function meRoutes(app: FastifyInstance) {
   app.delete("/api/me", async (request, reply) => {
     const userId = request.authSession.user.id;
 
+    // Sign the user out FIRST so Better Auth has a chance to clear its own
+    // session-cookie state cleanly (cookie attrs, sameSite policies). The
+    // transaction below also deletes the session row as defense-in-depth,
+    // but going through Better Auth keeps any future audit/event hooks fed.
+    try {
+      await auth.api.signOut({ headers: request.headers as unknown as Headers });
+    } catch (err) {
+      request.log.warn({ err }, "auth.api.signOut failed during account delete; continuing");
+    }
+
     await db.transaction(async (tx) => {
       // Cascade order: delete owned game data, then logs, then auth rows, then user
       await tx.delete(games).where(eq(games.userId, userId));
@@ -101,10 +112,6 @@ export async function meRoutes(app: FastifyInstance) {
       await tx.delete(users).where(eq(users.id, userId));
     });
 
-    // The session row is deleted in the transaction above, so any subsequent
-    // request with the stale cookie will fail auth and land on /sign-in.
-    // The client navigates to /sign-in immediately after receiving 204, so no
-    // further action is needed here.
     return reply.status(204).send();
   });
 }
