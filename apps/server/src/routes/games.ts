@@ -6,7 +6,7 @@ import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
 import { db } from "../lib/db.js";
 import { loadOwnedGame } from "../lib/ownership.js";
-import { endSSE, writeSSE, writeSSEHeaders } from "../lib/sse.js";
+import { endSSE, startHeartbeat, writeSSE, writeSSEHeaders } from "../lib/sse.js";
 import { categorizeError } from "../services/llm/categorize-error.js";
 import { classifyPrompt } from "../services/llm/classify.js";
 import { streamGame, streamRefinement, streamRepair } from "../services/llm/client.js";
@@ -161,6 +161,11 @@ export async function gamesRoutes(app: FastifyInstance) {
       writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: title });
 
+      // Heartbeat keeps the connection warm against intermediate proxy idle
+      // timeouts during the long pre-LLM fanout and the multi-second model
+      // streams. The stop function is called in the finally block below.
+      const stopHeartbeat = startHeartbeat(reply);
+
       const ac = new AbortController();
       let clientClosed = false;
 
@@ -258,6 +263,8 @@ export async function gamesRoutes(app: FastifyInstance) {
         // Success (including user-cancel per SPEC §14: credits not refunded on cancel)
         await markSucceeded(logId).catch(() => {});
       }
+
+      stopHeartbeat();
 
       if (!clientClosed) {
         if (streamError) {
@@ -503,6 +510,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       reply.hijack();
       writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: game.title });
+      const stopHeartbeat = startHeartbeat(reply);
 
       const ac = new AbortController();
       let clientClosed = false;
@@ -553,6 +561,8 @@ export async function gamesRoutes(app: FastifyInstance) {
       } else {
         await markSucceeded(logId).catch(() => {});
       }
+
+      stopHeartbeat();
 
       if (!clientClosed) {
         if (streamError) {
@@ -606,6 +616,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       reply.hijack();
       writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: game.id, placeholderTitle: game.title });
+      const stopHeartbeat = startHeartbeat(reply);
 
       // Insert observability row (credits_charged=0 per SPEC §10)
       const { logId } = await logRepair(userId, game.id);
@@ -661,6 +672,8 @@ export async function gamesRoutes(app: FastifyInstance) {
         }
         await markRepairSucceeded(logId).catch(() => {});
       }
+
+      stopHeartbeat();
 
       if (!clientClosed) {
         if (streamError) {
