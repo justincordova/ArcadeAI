@@ -108,12 +108,15 @@ function PricingPage() {
           <IntervalToggle value={interval} onChange={setInterval} />
         </div>
 
-        {/* Plan rows — horizontal cards stacked vertically */}
+        {/* Plan cards laid out left-to-right — 4 across on wide viewports,
+            wraps to fit smaller screens. The inline grid takes precedence
+            over any Tailwind class so we use a single inline declaration. */}
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
+            display: "grid",
+            gap: 16,
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            alignItems: "stretch",
           }}
         >
           {PLANS.map((plan) => (

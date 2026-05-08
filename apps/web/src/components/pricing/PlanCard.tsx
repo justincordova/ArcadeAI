@@ -1,11 +1,8 @@
-// Pricing-page plan row. Horizontal layout: plan identity + price on the
-// left, feature list in the middle, CTA on the right. The card uses a
-// vertical accent bar on the left edge instead of a top stripe so the
-// horizontal silhouette reads as one piece.
+// Pricing-page plan card. Vertically-oriented card displayed alongside its
+// siblings in a left-to-right row on the pricing page.
 //
-// Yearly pricing: the price column shows the discounted per-month price
-// alongside a strikethrough of the regular monthly price, then a small
-// "billed yearly" footnote with the annual total.
+// Yearly pricing: shows the discounted per-month price next to a strike-
+// through of the regular monthly price, then a "billed yearly" footnote.
 
 import {
   type BillingInterval,
@@ -24,22 +21,22 @@ interface PlanCardProps {
 
 const PLAN_ACCENTS: Record<string, { gradient: string; border: string; glow: string }> = {
   free: {
-    gradient: "linear-gradient(180deg, #22d3a0 0%, #06b6d4 100%)",
+    gradient: "linear-gradient(135deg, #22d3a0 0%, #06b6d4 100%)",
     border: "rgba(34,211,160,0.3)",
     glow: "rgba(34,211,160,0.08)",
   },
   creator: {
-    gradient: "linear-gradient(180deg, #f59e0b 0%, #f97316 100%)",
+    gradient: "linear-gradient(135deg, #f59e0b 0%, #f97316 100%)",
     border: "rgba(245,158,11,0.3)",
     glow: "rgba(245,158,11,0.08)",
   },
   pro: {
-    gradient: "linear-gradient(180deg, #a78bfa 0%, #7c3aed 100%)",
+    gradient: "linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)",
     border: "rgba(167,139,250,0.35)",
     glow: "rgba(167,139,250,0.08)",
   },
   enterprise: {
-    gradient: "linear-gradient(180deg, #a78bfa 0%, #06b6d4 100%)",
+    gradient: "linear-gradient(135deg, #a78bfa 0%, #06b6d4 100%)",
     border: "rgba(167,139,250,0.3)",
     glow: "rgba(167,139,250,0.06)",
   },
@@ -59,105 +56,85 @@ export function PlanCard({ plan, interval, isActive }: PlanCardProps) {
       style={{
         position: "relative",
         display: "flex",
-        flexDirection: "row",
-        alignItems: "stretch",
+        flexDirection: "column",
         borderRadius: 14,
         border: `1px solid ${active ? accent.border : "var(--color-border)"}`,
         background: active
-          ? `linear-gradient(90deg, ${accent.glow} 0%, var(--color-surface) 40%)`
+          ? `linear-gradient(160deg, ${accent.glow} 0%, var(--color-surface) 60%)`
           : "var(--color-surface)",
-        overflow: "hidden",
+        padding: "24px 20px 20px",
         transition: "all 0.2s",
         boxShadow: active
           ? `0 0 24px ${accent.glow}, 0 6px 20px rgba(0,0,0,0.25)`
           : "0 2px 12px rgba(0,0,0,0.18)",
+        height: "100%",
       }}
     >
-      {/* Vertical accent bar on the left edge — replaces the old top stripe.
-          A solid 3px line full-height reads as a single visual hook for the
-          card and works in the horizontal silhouette. */}
-      <div
-        aria-hidden="true"
-        style={{
-          width: 3,
-          background: accent.gradient,
-          opacity: active ? 1 : 0.45,
-          transition: "opacity 0.2s",
-          flexShrink: 0,
-        }}
-      />
+      {/* Active pill — top-right corner */}
+      {isActive && (
+        <span
+          style={{
+            position: "absolute",
+            right: 14,
+            top: 14,
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            padding: "2px 7px",
+            borderRadius: 9999,
+            border: `1px solid ${accent.border}`,
+            color: "var(--color-text-secondary)",
+          }}
+        >
+          ACTIVE
+        </span>
+      )}
 
-      {/* ── Identity + price column ── */}
-      <div
+      {/* Plan name — small uppercase label, gradient via text-clip */}
+      <h3
         style={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "20px 24px",
-          minWidth: 220,
-          maxWidth: 240,
-          borderRight: "1px solid var(--color-border-subtle)",
-          flexShrink: 0,
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          marginBottom: 14,
+          backgroundImage: accent.gradient,
+          WebkitBackgroundClip: "text",
+          WebkitTextFillColor: "transparent",
+          backgroundClip: "text",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <h3
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              letterSpacing: "0.04em",
-              backgroundImage: accent.gradient,
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-              margin: 0,
-            }}
-          >
-            {plan.name.toUpperCase()}
-          </h3>
-          {isActive && (
-            <span
-              style={{
-                fontSize: 9,
-                fontWeight: 700,
-                letterSpacing: "0.08em",
-                padding: "2px 7px",
-                borderRadius: 9999,
-                border: `1px solid ${accent.border}`,
-                color: "var(--color-text-secondary)",
-              }}
-            >
-              ACTIVE
-            </span>
-          )}
-        </div>
+        {plan.name.toUpperCase()}
+      </h3>
 
-        <PriceDisplay plan={plan} interval={interval} prices={prices} />
-
-        {credits && (
-          <p
-            style={{
-              fontSize: 11,
-              color: "var(--color-text-secondary)",
-              marginTop: 8,
-            }}
-          >
-            {credits.monthly.toLocaleString()} credits / month
-          </p>
-        )}
+      {/* Price */}
+      <div style={{ marginBottom: 4 }}>
+        <PriceDisplay prices={prices} interval={interval} />
       </div>
 
-      {/* ── Features column ── */}
+      {credits ? (
+        <p
+          style={{
+            fontSize: 11,
+            color: "var(--color-text-secondary)",
+            marginBottom: 20,
+          }}
+        >
+          {credits.monthly.toLocaleString()} credits / month
+        </p>
+      ) : (
+        <div style={{ marginBottom: 20 }} />
+      )}
+
+      {/* Feature list — fills remaining space */}
       <ul
         style={{
           flex: 1,
           listStyle: "none",
-          padding: "20px 24px",
+          padding: 0,
           margin: 0,
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: "8px 16px",
-          alignContent: "center",
+          display: "flex",
+          flexDirection: "column",
+          gap: 9,
         }}
       >
         {plan.features.map((f) => (
@@ -186,67 +163,52 @@ export function PlanCard({ plan, interval, isActive }: PlanCardProps) {
         ))}
       </ul>
 
-      {/* ── CTA column ── */}
-      <div
+      {/* CTA — solid gradient button. Text uses plain white so it can never
+          go invisible from text-clip + background interaction (the bug fix:
+          the previous version set both `background` and `backgroundImage`
+          on the same element with `text-clip`, which the shorthand reset
+          on hover, wiping out the gradient and leaving transparent text). */}
+      <button
+        type="button"
+        onClick={() => {}}
         style={{
-          display: "flex",
-          alignItems: "center",
-          padding: "20px 24px",
-          flexShrink: 0,
+          marginTop: 22,
+          width: "100%",
+          padding: "10px 16px",
+          borderRadius: 9,
+          border: "none",
+          backgroundImage: active
+            ? accent.gradient
+            : `linear-gradient(135deg, ${accent.glow} 0%, transparent 100%)`,
+          backgroundColor: active ? "transparent" : "var(--color-surface-raised)",
+          fontSize: 12,
+          fontWeight: 700,
+          letterSpacing: "0.06em",
+          fontFamily: "inherit",
+          color: active ? "#fff" : "var(--color-text-secondary)",
+          cursor: "pointer",
+          transition: "all 0.18s",
+          boxShadow: active ? `0 4px 16px ${accent.glow}` : "none",
         }}
       >
-        <button
-          type="button"
-          onClick={() => {}}
-          style={{
-            padding: "10px 18px",
-            borderRadius: 9,
-            border: `1px solid ${accent.border}`,
-            background: active
-              ? `linear-gradient(135deg, ${accent.glow.replace("0.08", "0.18")} 0%, transparent 100%)`
-              : "transparent",
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            fontFamily: "inherit",
-            cursor: "pointer",
-            backgroundImage: accent.gradient,
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-            transition: "all 0.15s",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {plan.ctaLabel}
-        </button>
-      </div>
+        {plan.ctaLabel}
+      </button>
     </div>
   );
 }
 
-/**
- * Price display column. On yearly:
- *  - Big number = discounted per-month price
- *  - Strikethrough above = regular monthly price
- *  - Footnote below = annual total (e.g. "$156 billed yearly")
- * On monthly: just the number + /mo.
- * On enterprise: "Custom".
- */
 function PriceDisplay({
-  plan,
-  interval,
   prices,
+  interval,
 }: {
-  plan: PlanCopy;
-  interval: BillingInterval;
   prices: { monthly: number; yearly: number } | null;
+  interval: BillingInterval;
 }) {
   if (prices === null) {
     return (
       <span
         style={{
-          fontSize: 28,
+          fontSize: 30,
           fontWeight: 800,
           color: "var(--color-text-primary)",
           lineHeight: 1,
@@ -266,7 +228,7 @@ function PriceDisplay({
       <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
         <span
           style={{
-            fontSize: 28,
+            fontSize: 30,
             fontWeight: 800,
             color: "var(--color-text-primary)",
             lineHeight: 1,
@@ -283,11 +245,10 @@ function PriceDisplay({
     const annualTotal = yearlyPerMonth * 12;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {/* Discounted price + strikethrough monthly */}
         <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
           <span
             style={{
-              fontSize: 28,
+              fontSize: 30,
               fontWeight: 800,
               color: "var(--color-text-primary)",
               lineHeight: 1,
@@ -315,12 +276,11 @@ function PriceDisplay({
     );
   }
 
-  // Monthly view
   return (
     <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
       <span
         style={{
-          fontSize: 28,
+          fontSize: 30,
           fontWeight: 800,
           color: "var(--color-text-primary)",
           lineHeight: 1,
