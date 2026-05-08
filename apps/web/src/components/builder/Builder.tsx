@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { getMissingKeyError, useConfig } from "../../hooks/useConfig.js";
@@ -311,15 +312,7 @@ function BuilderLayout({
               (e.currentTarget as HTMLAnchorElement).style.color = "var(--color-text-muted)";
             }}
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path
-                d="M8 10L4 6l4-4"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            <ChevronLeft size={12} strokeWidth={1.8} />
             Dashboard
           </Link>
           <span

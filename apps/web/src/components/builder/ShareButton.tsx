@@ -5,6 +5,7 @@
 // republishing produces the same URL.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Share2 } from "lucide-react";
 import { publishGame, unpublishGame } from "../../lib/api/games.js";
 import { toast } from "../ui/sonner.js";
 
@@ -110,21 +111,7 @@ export function ShareButton({ gameId }: { gameId: string }) {
           transition: "all 0.15s",
         }}
       >
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <title>{isPublic ? "Public" : "Share"}</title>
-          {isPublic ? (
-            <path
-              d="M2 6.5l3 3 5-7"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ) : (
-            <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          )}
-        </svg>
+        {isPublic ? <Check size={11} strokeWidth={2.2} /> : <Share2 size={11} strokeWidth={2} />}
         {isPublic ? "Public" : "Share"}
       </button>
     </div>

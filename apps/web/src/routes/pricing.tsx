@@ -108,14 +108,13 @@ function PricingPage() {
           <IntervalToggle value={interval} onChange={setInterval} />
         </div>
 
-        {/* Plan cards */}
+        {/* Plan rows — horizontal cards stacked vertically */}
         <div
           style={{
-            display: "grid",
-            gap: 16,
-            gridTemplateColumns: "repeat(1, 1fr)",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
           }}
-          className="sm:grid-cols-2 lg:grid-cols-4"
         >
           {PLANS.map((plan) => (
             <PlanCard

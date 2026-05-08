@@ -4,6 +4,7 @@
 // top bar.
 
 import { Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 
 export function ErrorBanner({ message }: { message: string }) {
   const showUpgrade = message.includes("/pricing");
@@ -43,16 +44,7 @@ export function ErrorBanner({ message }: { message: string }) {
           }}
         >
           Upgrade plan
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <title>Arrow right</title>
-            <path
-              d="M2.5 6h7M6.5 3l3 3-3 3"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <ArrowRight size={11} strokeWidth={2} />
         </Link>
       )}
     </div>

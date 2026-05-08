@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import { EmptyState } from "../../components/dashboard/EmptyState.js";
@@ -269,14 +270,7 @@ function Dashboard() {
                 (e.currentTarget as HTMLAnchorElement).style.opacity = "1";
               }}
             >
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-                <path
-                  d="M6.5 1.5v10M1.5 6.5h10"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
+              <Plus size={13} strokeWidth={2.4} />
               New Game
             </Link>
           </div>

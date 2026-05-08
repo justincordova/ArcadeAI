@@ -1,3 +1,5 @@
+import { Square } from "lucide-react";
+
 interface StopButtonProps {
   visible: boolean;
   onStop: () => void;
@@ -42,9 +44,7 @@ export function StopButton({ visible, onStop }: StopButtonProps) {
           (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(244,63,94,0.35)";
         }}
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <rect x="2" y="2" width="8" height="8" rx="1.5" fill="currentColor" />
-        </svg>
+        <Square size={12} fill="currentColor" />
         Stop
       </button>
     </div>

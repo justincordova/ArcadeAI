@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { ChevronDown, LogOut, Settings as SettingsIcon } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import { useSession } from "../hooks/useSession.js";
@@ -98,26 +99,15 @@ export function TopBar() {
             >
               {me?.displayName ?? "..."}
             </span>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 12 12"
-              fill="none"
-              aria-hidden="true"
+            <ChevronDown
+              size={12}
+              strokeWidth={1.8}
               style={{
                 transform: open ? "rotate(180deg)" : "none",
                 transition: "transform 0.15s",
                 opacity: 0.5,
               }}
-            >
-              <path
-                d="M2 4.5l4 3 4-3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+            />
           </button>
 
           {open && (
@@ -195,15 +185,7 @@ export function TopBar() {
                       "var(--color-text-secondary)";
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5" />
-                    <path
-                      d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.1 3.1l1.1 1.1M11.8 11.8l1.1 1.1M3.1 12.9l1.1-1.1M11.8 4.2l1.1-1.1"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                    />
-                  </svg>
+                  <SettingsIcon size={14} strokeWidth={1.8} />
                   Settings
                 </Link>
 
@@ -246,15 +228,7 @@ export function TopBar() {
                     (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-muted)";
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                    <path
-                      d="M10 11l3-3-3-3M13 8H6M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+                  <LogOut size={14} strokeWidth={1.8} />
                   Sign out
                 </button>
               </div>
