@@ -4,6 +4,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Sparkles } from "lucide-react";
 import { useEffect } from "react";
 import { LogoFull } from "../components/Logo.js";
 import { GameIframe } from "../components/builder/GameIframe.js";
@@ -131,15 +132,7 @@ function PlayPage() {
             boxShadow: "0 2px 12px rgba(124,58,237,0.3)",
           }}
         >
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-            <path
-              d="M3 5l3-3 3 3M6.5 2v8M3 11h7"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <Sparkles size={13} strokeWidth={1.8} />
           {remixMutation.isPending ? "Remixing…" : "Remix this"}
         </button>
       </header>

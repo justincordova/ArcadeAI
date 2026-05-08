@@ -1,6 +1,7 @@
 import type { MeResponse } from "@arcadeai/shared";
 // Cannot disconnect the last linked provider — disconnect not exposed in this step (SPEC §12).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
 import { linkProviderUrl } from "../../lib/api/me.js";
 
 const PROVIDERS: { id: "google" | "github"; label: string }[] = [
@@ -42,15 +43,7 @@ export function ConnectedAccounts() {
                 gap: 4,
               }}
             >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-                <path
-                  d="M2 6.5l2.5 2.5 5.5-5.5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+              <Check size={12} strokeWidth={2.4} />
               Linked
             </span>
           ) : (

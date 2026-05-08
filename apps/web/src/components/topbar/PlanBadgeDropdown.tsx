@@ -7,6 +7,7 @@
 import type { MeResponse } from "@arcadeai/shared";
 import { ENFORCE_LIFETIME_LIMITS_FOR_FREE, FREE_TIER_LIFETIME_LIMITS } from "@arcadeai/shared";
 import { Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 import type React from "react";
 
 interface TierStyle {
@@ -133,16 +134,7 @@ export function PlanBadgeDropdown({
           }}
         >
           View plans &amp; pricing
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <title>Arrow right</title>
-            <path
-              d="M2.5 6h7M6.5 3l3 3-3 3"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          <ArrowRight size={12} strokeWidth={2} />
         </Link>
       </div>
     </div>

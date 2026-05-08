@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 import type React from "react";
 
 export function EmptyState() {
@@ -63,14 +64,7 @@ export function EmptyState() {
           (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(0)";
         }}
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path
-            d="M7 1.5v11M1.5 7h11"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
+        <Plus size={14} strokeWidth={2.4} />
         Create your first game
       </Link>
 

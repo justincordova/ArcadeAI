@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { AlertCircle } from "lucide-react";
 import { Builder } from "../../components/builder/Builder.js";
 import { API_BASE } from "../../lib/api/client.js";
 
@@ -62,22 +63,7 @@ function FullPageState({
               justifyContent: "center",
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <path
-                d="M10 6v4M10 14h.01"
-                stroke="var(--color-danger)"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-              <circle
-                cx="10"
-                cy="10"
-                r="8"
-                stroke="var(--color-danger)"
-                strokeWidth="1.5"
-                opacity="0.5"
-              />
-            </svg>
+            <AlertCircle size={20} strokeWidth={1.8} style={{ color: "var(--color-danger)" }} />
           </div>
           <p style={{ fontSize: 14, color: "var(--color-danger)", fontWeight: 600 }}>{children}</p>
         </div>

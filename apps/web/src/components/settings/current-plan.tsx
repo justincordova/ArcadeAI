@@ -1,6 +1,7 @@
 import type { MeResponse } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { ArrowRight } from "lucide-react";
 import type React from "react";
 
 const PLAN_LABELS: Record<string, string> = {
@@ -63,15 +64,7 @@ export function CurrentPlan() {
         }}
       >
         Manage plan
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path
-            d="M2.5 6h7M6.5 3l3 3-3 3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <ArrowRight size={12} strokeWidth={2} />
       </Link>
     </div>
   );
