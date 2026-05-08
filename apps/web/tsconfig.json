@@ -4,6 +4,7 @@
     "jsx": "react-jsx",
     "outDir": "./dist",
     "paths": {
+      "@/*": ["./src/*"],
       "@arcadeai/shared": ["../../packages/shared/src"],
       "@arcadeai/shared/*": ["../../packages/shared/src/*"]
     }

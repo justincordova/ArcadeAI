@@ -10,7 +10,6 @@ import { LogoFull } from "../components/Logo.js";
 import { GameIframe } from "../components/builder/GameIframe.js";
 import { useSession } from "../hooks/useSession.js";
 import { fetchPublicGame, remixPublicGame } from "../lib/api/games.js";
-import { fetchMe } from "../lib/auth.js";
 
 interface PlaySearch {
   intent?: string;
@@ -64,9 +63,8 @@ function PlayPage() {
   function handleRemixClick() {
     if (!me) {
       // Visitor not signed in — route through sign-in with intent so we
-      // pick up where they left off after OAuth.
-      // Using fetchMe via useSession returns null when unauthenticated.
-      void fetchMe; // imported for documentation; fetchMe handles 401 internally
+      // pick up where they left off after OAuth. useSession (via
+      // fetchMeOrNull) yields null for unauthenticated visitors.
       navigate({
         to: "/sign-in",
         search: { next: `/play/${slug}?intent=remix` },

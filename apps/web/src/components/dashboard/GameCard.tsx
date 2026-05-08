@@ -1,7 +1,7 @@
+import { GAMES_QUERY_KEY, type GameSummary, deleteGame, patchGame } from "@/lib/api/games.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { GAMES_QUERY_KEY, type GameSummary, deleteGame, patchGame } from "../../lib/api/games.js";
 import { toast } from "../ui/sonner.js";
 import { DeleteGameDialog } from "./DeleteGameDialog.js";
 import { PublicBadge } from "./PublicBadge.js";

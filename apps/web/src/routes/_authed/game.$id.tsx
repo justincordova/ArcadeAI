@@ -1,8 +1,8 @@
+import { Builder } from "@/components/builder/Builder.js";
+import { API_BASE } from "@/lib/api/client.js";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
-import { Builder } from "../../components/builder/Builder.js";
-import { API_BASE } from "../../lib/api/client.js";
 
 const API = API_BASE;
 

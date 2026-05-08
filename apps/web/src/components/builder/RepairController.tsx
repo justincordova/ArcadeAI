@@ -1,5 +1,5 @@
+import { useStreamedRepair } from "@/hooks/useStreamedRepair.js";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useStreamedRepair } from "../../hooks/useStreamedRepair.js";
 import { RepairFallbackDialog } from "./RepairFallbackDialog.js";
 
 interface GameError {

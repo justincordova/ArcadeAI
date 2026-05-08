@@ -8,7 +8,7 @@ import { useState } from "react";
 import { AdminBanner } from "../components/pricing/AdminBanner.js";
 import { IntervalToggle } from "../components/pricing/IntervalToggle.js";
 import { PlanCard } from "../components/pricing/PlanCard.js";
-import { fetchMe } from "../lib/auth.js";
+import { fetchMeOrNull } from "../lib/api/auth.js";
 
 export const Route = createFileRoute("/pricing")({
   component: PricingPage,
@@ -19,7 +19,7 @@ function PricingPage() {
 
   const { data: me } = useQuery({
     queryKey: ["me"],
-    queryFn: fetchMe,
+    queryFn: fetchMeOrNull,
     retry: false,
     staleTime: 60_000,
   });

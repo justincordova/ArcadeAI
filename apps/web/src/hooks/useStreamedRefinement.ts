@@ -1,10 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
-import { API_BASE } from "../lib/api/client.js";
+import { type QuotaError, type SSEStatus, useSSEStream } from "./useSSEStream.js";
 
-const API = API_BASE;
-
-export type RefinementStatus = "idle" | "streaming" | "error";
+export type RefinementStatus = SSEStatus;
 
 export interface StreamedRefinementState {
   status: RefinementStatus;
@@ -20,152 +18,86 @@ export interface StreamedRefinementState {
   attachIframe: (el: HTMLIFrameElement | null) => void;
 }
 
+function quotaMessage(body: QuotaError): string {
+  if (body.kind === "lifetime" || body.resetAt === 0) {
+    return "You've used your free trial. Upgrade on /pricing for more refinements.";
+  }
+  const resetDate = new Date(body.resetAt).toLocaleDateString();
+  return `Out of credits — resets ${resetDate}. Upgrade on /pricing.`;
+}
+
 export function useStreamedRefinement(gameId: string): StreamedRefinementState {
-  const [status, setStatus] = useState<RefinementStatus>("idle");
   const [streamingCode, setStreamingCode] = useState("");
   const [finalCode, setFinalCode] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const accumulatedRef = useRef("");
   const queryClient = useQueryClient();
 
   const attachIframe = useCallback((el: HTMLIFrameElement | null) => {
     iframeRef.current = el;
   }, []);
 
+  const sse = useSSEStream({
+    url: `/api/games/${gameId}/refine`,
+    handlers: {
+      onEvent(name, data) {
+        const d = data as { delta?: string };
+        if (name === "chunk" && typeof d.delta === "string") {
+          accumulatedRef.current += d.delta;
+          setStreamingCode(accumulatedRef.current);
+        }
+      },
+      onQuotaExceeded: quotaMessage,
+      onDone() {
+        // Promote accumulated streaming text into finalCode so the
+        // iframe keeps showing the refined game while the parent's
+        // ['game', id] query refetches. Then clear streamingCode.
+        setFinalCode(accumulatedRef.current);
+        setStreamingCode("");
+
+        // Trigger thumbnail capture after ~500ms
+        setTimeout(() => {
+          const iframe = iframeRef.current;
+          if (iframe?.contentWindow) {
+            iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+          }
+        }, 500);
+
+        // Invalidate game query so messages refetch, and me query
+        // so the user dropdown's credit bars update (plan 7 §11)
+        queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+        queryClient.invalidateQueries({ queryKey: ["me"] });
+      },
+      onError() {
+        // Server-side error refunds credits (SPEC §10) — refresh bars
+        queryClient.invalidateQueries({ queryKey: ["me"] });
+      },
+    },
+  });
+
   const refine = useCallback(
     (feedback: string) => {
-      const ac = new AbortController();
-      abortRef.current = ac;
-
-      setStatus("streaming");
-      setStreamingCode("");
-      setError(null);
       // Note: finalCode is intentionally NOT cleared here — keep the previous
       // refinement's code visible until the new stream produces enough chunks.
-
-      (async () => {
-        try {
-          const res = await fetch(`${API}/api/games/${gameId}/refine`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ feedback }),
-            signal: ac.signal,
-          });
-
-          if (res.status === 409) {
-            const body = (await res.json()) as { error: string };
-            setStatus("error");
-            setError(body.error);
-            return;
-          }
-
-          if (res.status === 402) {
-            const body = (await res.json()) as {
-              error: string;
-              resetAt: number;
-              kind?: "daily" | "monthly" | "lifetime";
-            };
-            setStatus("error");
-            if (body.kind === "lifetime" || body.resetAt === 0) {
-              setError("You've used your free trial. Upgrade on /pricing for more refinements.");
-            } else {
-              const resetDate = new Date(body.resetAt).toLocaleDateString();
-              setError(`Out of credits — resets ${resetDate}. Upgrade on /pricing.`);
-            }
-            return;
-          }
-
-          if (!res.ok || !res.body) {
-            setStatus("error");
-            setError("Request failed");
-            return;
-          }
-
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
-          let buf = "";
-          let accumulated = "";
-          let terminated = false;
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            buf += decoder.decode(value, { stream: true });
-
-            const frames = buf.split("\n\n");
-            buf = frames.pop() ?? "";
-
-            for (const frame of frames) {
-              if (!frame.trim()) continue;
-              const lines = frame.split("\n");
-              let event = "";
-              let data = "";
-              for (const line of lines) {
-                if (line.startsWith("event: ")) event = line.slice(7);
-                else if (line.startsWith("data: ")) data = line.slice(6);
-              }
-              if (!event || !data) continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (event === "chunk") {
-                  accumulated += parsed.delta;
-                  setStreamingCode(accumulated);
-                } else if (event === "error") {
-                  terminated = true;
-                  setStatus("error");
-                  setError(parsed.message);
-                  // Server-side error refunds credits (SPEC §10) — refresh bars
-                  queryClient.invalidateQueries({ queryKey: ["me"] });
-                } else if (event === "done") {
-                  terminated = true;
-                  setStatus("idle");
-                  // Promote accumulated streaming text into finalCode so the
-                  // iframe keeps showing the refined game while the parent's
-                  // ['game', id] query refetches. Then clear streamingCode.
-                  setFinalCode(accumulated);
-                  setStreamingCode("");
-
-                  // Trigger thumbnail capture after ~500ms
-                  setTimeout(() => {
-                    const iframe = iframeRef.current;
-                    if (iframe?.contentWindow) {
-                      iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
-                    }
-                  }, 500);
-
-                  // Invalidate game query so messages refetch, and me query
-                  // so the user dropdown's credit bars update (plan 7 §11)
-                  queryClient.invalidateQueries({ queryKey: ["game", gameId] });
-                  queryClient.invalidateQueries({ queryKey: ["me"] });
-                }
-              } catch {
-                // ignore malformed frames
-              }
-            }
-          }
-
-          if (!terminated) {
-            setStatus("error");
-            setError("Stream ended unexpectedly");
-          }
-        } catch (err) {
-          if ((err as Error).name === "AbortError") return;
-          setStatus("error");
-          setError(err instanceof Error ? err.message : "Unknown error");
-        }
-      })();
+      accumulatedRef.current = "";
+      setStreamingCode("");
+      sse.start({ feedback });
     },
-    [gameId, queryClient]
+    [sse]
   );
 
   const stop = useCallback(() => {
-    abortRef.current?.abort();
-    setStatus("idle");
+    sse.stop();
     setStreamingCode("");
-  }, []);
+  }, [sse]);
 
-  return { status, streamingCode, finalCode, error, refine, stop, attachIframe };
+  return {
+    status: sse.status,
+    streamingCode,
+    finalCode,
+    error: sse.error,
+    refine,
+    stop,
+    attachIframe,
+  };
 }

@@ -1,10 +1,11 @@
+import { useThemeSync } from "@/hooks/useThemeSync.js";
+import { fetchMeOrNull } from "@/lib/api/auth.js";
+import { patchMe } from "@/lib/api/me.js";
+import { type Theme, applyTheme, getStoredTheme } from "@/lib/theme.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type React from "react";
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { patchMe } from "../lib/api/me.js";
-import { applyTheme, getStoredTheme } from "../lib/theme.js";
-import type { Theme } from "../lib/theme.js";
 import { toast } from "./ui/sonner.js";
 
 interface ThemeContextValue {
@@ -22,8 +23,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     mutationFn: (t: Theme) => patchMe({ theme: t }),
   });
 
-  // Reconcile theme from DB when /api/me loads (SPEC §12 read path)
-  const { data: me } = useQuery<MeResponse | null>({ queryKey: ["me"] });
+  // Reconcile theme from DB when /api/me loads (SPEC §12 read path).
+  // Explicit queryFn replaces the deleted defaultQueryFn footgun — the cache
+  // is shared with useSession, but this guarantees a backstop fetch when the
+  // provider mounts on a route that doesn't go through the /_authed guard.
+  const { data: me } = useQuery<MeResponse | null>({
+    queryKey: ["me"],
+    queryFn: fetchMeOrNull,
+    retry: false,
+    staleTime: 60_000,
+  });
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally only reconcile when server theme changes
   useEffect(() => {
     if (me?.theme && me.theme !== theme) {
@@ -32,27 +41,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [me?.theme]);
 
-  // System preference change listener
-  useEffect(() => {
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    function onChange() {
-      if (theme === "system") applyTheme("system");
-    }
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, [theme]);
-
-  // Cross-tab storage sync
-  useEffect(() => {
-    function onStorage(e: StorageEvent) {
-      if (e.key !== "theme" || !e.newValue) return;
-      const next = e.newValue as Theme;
-      applyTheme(next);
-      setThemeState(next);
-    }
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  // System-preference + cross-tab listeners live in useThemeSync.
+  useThemeSync(theme, setThemeState);
 
   const setTheme = useCallback(
     (next: Theme) => {

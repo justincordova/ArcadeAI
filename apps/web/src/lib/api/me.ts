@@ -3,11 +3,9 @@ import { API_BASE } from "./client.js";
 
 const API = API_BASE;
 
-export async function fetchMe(): Promise<MeResponse> {
-  const res = await fetch(`${API}/api/me`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch user");
-  return res.json() as Promise<MeResponse>;
-}
+// Note: the read path lives at lib/api/auth.ts:fetchMeOrNull (returns null on
+// 401). Mutations below throw on error — they're called from authed contexts
+// where surfacing failure is correct.
 
 export async function patchMe(body: { display_name?: string; theme?: Theme }): Promise<MeResponse> {
   const res = await fetch(`${API}/api/me`, {

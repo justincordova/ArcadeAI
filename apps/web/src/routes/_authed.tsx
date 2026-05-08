@@ -1,13 +1,13 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { TopBar } from "../components/TopBar.js";
-import { fetchMe } from "../lib/auth.js";
+import { fetchMeOrNull } from "../lib/api/auth.js";
 import { queryClient } from "../lib/query-client.js";
 
 export const Route = createFileRoute("/_authed")({
   beforeLoad: async ({ location }) => {
     const me = await queryClient.ensureQueryData({
       queryKey: ["me"],
-      queryFn: fetchMe,
+      queryFn: fetchMeOrNull,
     });
     if (!me) {
       // location.search in TanStack Router is the PARSED search-params

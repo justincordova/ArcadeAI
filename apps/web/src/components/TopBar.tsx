@@ -3,7 +3,7 @@ import { ChevronDown, LogOut, Settings as SettingsIcon } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
 import { useSession } from "../hooks/useSession.js";
-import { signOut } from "../lib/auth.js";
+import { signOut } from "../lib/api/auth.js";
 import { LogoFull } from "./Logo.js";
 import { PlanBadge } from "./topbar/PlanBadge.js";
 

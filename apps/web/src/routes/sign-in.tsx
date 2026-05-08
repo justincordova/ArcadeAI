@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { LogoMark } from "../components/Logo.js";
-import { fetchMe, startSocialSignIn } from "../lib/auth.js";
+import { fetchMeOrNull, startSocialSignIn } from "../lib/api/auth.js";
 
 interface SignInSearch {
   next?: string;
@@ -18,7 +18,7 @@ export const Route = createFileRoute("/sign-in")({
     next: typeof search.next === "string" ? search.next : undefined,
   }),
   beforeLoad: async ({ search }) => {
-    const me = await fetchMe();
+    const me = await fetchMeOrNull();
     if (me) {
       throw redirect({ to: validateNext(search.next) });
     }

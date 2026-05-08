@@ -1,16 +1,23 @@
 import type { MeResponse } from "@arcadeai/shared";
-import { API_BASE } from "./api/client.js";
+import { API_BASE } from "./client.js";
 
 export type { MeResponse };
 
 const API = API_BASE;
 
-export async function fetchMe(): Promise<MeResponse | null> {
+/**
+ * Fetch the current user. Returns `null` on 401 / network error so callers
+ * (route guards, useSession) can treat unauthenticated as a normal state.
+ *
+ * Counterpart: routes that REQUIRE auth and want to surface failure should
+ * call `patchMe` / `deleteMe` from `lib/api/me.ts`, which throw on error.
+ */
+export async function fetchMeOrNull(): Promise<MeResponse | null> {
   try {
     const res = await fetch(`${API}/api/me`, { credentials: "include" });
     if (res.status === 401) return null;
     if (!res.ok) return null;
-    return res.json() as Promise<MeResponse>;
+    return (await res.json()) as MeResponse;
   } catch {
     return null;
   }

@@ -1,12 +1,12 @@
+import { getMissingKeyError, useConfig } from "@/hooks/useConfig.js";
+import { useStreamedGeneration } from "@/hooks/useStreamedGeneration.js";
+import { useStreamedRefinement } from "@/hooks/useStreamedRefinement.js";
+import { GAMES_QUERY_KEY, postThumbnail } from "@/lib/api/games.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { getMissingKeyError, useConfig } from "../../hooks/useConfig.js";
-import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
-import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
-import { GAMES_QUERY_KEY, postThumbnail } from "../../lib/api/games.js";
 import { ErrorBanner } from "./ErrorBanner.js";
 import { GameIframe } from "./GameIframe.js";
 import { type Message, MessageBubble } from "./MessageBubble.js";

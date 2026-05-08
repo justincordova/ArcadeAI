@@ -1,7 +1,7 @@
+import { patchMe } from "@/lib/api/me.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { patchMe } from "../../lib/api/me.js";
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 

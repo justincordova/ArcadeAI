@@ -4,9 +4,9 @@
 // URL to the clipboard; on unpublish, the slug is retained server-side so
 // republishing produces the same URL.
 
+import { publishGame, unpublishGame } from "@/lib/api/games.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Share2 } from "lucide-react";
-import { publishGame, unpublishGame } from "../../lib/api/games.js";
 import { toast } from "../ui/sonner.js";
 
 export function ShareButton({ gameId }: { gameId: string }) {

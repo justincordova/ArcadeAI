@@ -299,8 +299,8 @@ The three existing hooks become thin wrappers (~30 lines each). Common logic ext
 - `theme-provider.tsx` becomes thin wrapper
 
 **Error boundaries (#70):**
-- Install `react-error-boundary`
-- Wrap each route's component in an ErrorBoundary
+- Hand-rolled ~30-line `ErrorBoundary` class component (the `react-error-boundary` package's class types fight this repo's React 19 `@types/react`; not worth the dep)
+- Wrap the root layout in an ErrorBoundary keyed on pathname so route changes auto-reset
 - `RouteError` shows generic "Something went wrong" + reload button + (in dev) error message
 
 **Tests:** none — frontend-only milestone, no backend tests required.

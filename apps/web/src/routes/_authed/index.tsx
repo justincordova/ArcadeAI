@@ -1,11 +1,11 @@
+import { EmptyState } from "@/components/dashboard/EmptyState.js";
+import { GameGrid } from "@/components/dashboard/GameGrid.js";
+import { GAMES_QUERY_KEY, listGames } from "@/lib/api/games.js";
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
-import { EmptyState } from "../../components/dashboard/EmptyState.js";
-import { GameGrid } from "../../components/dashboard/GameGrid.js";
-import { GAMES_QUERY_KEY, listGames } from "../../lib/api/games.js";
 
 export const Route = createFileRoute("/_authed/")({
   component: Dashboard,

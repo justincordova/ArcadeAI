@@ -1,5 +1,5 @@
+import { injectWrapper } from "@/lib/iframe-wrapper.js";
 import { useEffect, useRef } from "react";
-import { injectWrapper } from "../../lib/iframe-wrapper.js";
 
 interface GameIframeProps {
   code: string | null;

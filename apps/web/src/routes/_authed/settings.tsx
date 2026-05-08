@@ -1,9 +1,9 @@
+import { ConnectedAccounts } from "@/components/settings/connected-accounts.js";
+import { CurrentPlan } from "@/components/settings/current-plan.js";
+import { DangerZone } from "@/components/settings/danger-zone.js";
+import { DisplayName } from "@/components/settings/display-name.js";
+import { Email } from "@/components/settings/email.js";
 import { createFileRoute } from "@tanstack/react-router";
-import { ConnectedAccounts } from "../../components/settings/connected-accounts.js";
-import { CurrentPlan } from "../../components/settings/current-plan.js";
-import { DangerZone } from "../../components/settings/danger-zone.js";
-import { DisplayName } from "../../components/settings/display-name.js";
-import { Email } from "../../components/settings/email.js";
 
 export const Route = createFileRoute("/_authed/settings")({
   component: SettingsPage,

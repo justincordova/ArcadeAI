@@ -3,9 +3,9 @@
 // PlanBadgeDropdown so this file stays focused on the trigger UI and the
 // outside-click close behavior.
 
+import { useSession } from "@/hooks/useSession.js";
 import { TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
 import { useEffect, useRef, useState } from "react";
-import { useSession } from "../../hooks/useSession.js";
 import { PlanBadgeDropdown } from "./PlanBadgeDropdown.js";
 
 const TIER_STYLES: Record<string, { label: string; gradient: string; border: string }> = {

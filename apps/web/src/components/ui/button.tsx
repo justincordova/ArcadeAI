@@ -2,10 +2,10 @@
 // Uses class-variance-authority to define variants; consumers compose
 // classes via `cn(buttonVariants({ variant, size }), extraClassName)`.
 
+import { cn } from "@/lib/cn.js";
 import { Slot } from "@radix-ui/react-slot";
 import { type VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
-import { cn } from "../../lib/cn.js";
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-violet)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] disabled:pointer-events-none disabled:opacity-50 cursor-pointer",

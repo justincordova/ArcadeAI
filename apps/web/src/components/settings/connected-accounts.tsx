@@ -1,8 +1,8 @@
+import { linkProviderUrl } from "@/lib/api/me.js";
 import type { MeResponse } from "@arcadeai/shared";
 // Cannot disconnect the last linked provider — disconnect not exposed in this step (SPEC §12).
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import { linkProviderUrl } from "../../lib/api/me.js";
 
 const PROVIDERS: { id: "google" | "github"; label: string }[] = [
   { id: "google", label: "Google" },

@@ -1,4 +1,4 @@
-import type { GameSummary } from "../../lib/api/games.js";
+import type { GameSummary } from "@/lib/api/games.js";
 import { GameCard } from "./GameCard.js";
 
 interface GameGridProps {
