@@ -1,23 +1,19 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { getMissingKeyError, useConfig } from "../../hooks/useConfig.js";
 import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
-import { GAMES_QUERY_KEY, postThumbnail, publishGame, unpublishGame } from "../../lib/api/games.js";
-import { toast } from "../ui/sonner.js";
+import { GAMES_QUERY_KEY, postThumbnail } from "../../lib/api/games.js";
+import { ErrorBanner } from "./ErrorBanner.js";
 import { GameIframe } from "./GameIframe.js";
+import { type Message, MessageBubble } from "./MessageBubble.js";
 import { RepairController, type RepairStatus } from "./RepairController.js";
+import { ShareButton } from "./ShareButton.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
 import { StopButton } from "./StopButton.js";
-
-interface Message {
-  id: string;
-  kind: string;
-  content: string;
-  createdAt: number;
-}
+import { StreamingIndicator } from "./StreamingIndicator.js";
 
 interface BuilderProps {
   initialCode?: string;
@@ -210,6 +206,7 @@ interface BuilderLayoutProps {
 function SendIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
+      <title>Send</title>
       <path
         d="M1.5 7.5h12M8.5 2.5l5 5-5 5"
         stroke="currentColor"
@@ -221,271 +218,7 @@ function SendIcon() {
   );
 }
 
-function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
-  const isUser = msg.kind === "prompt" || msg.kind === "feedback";
-  return (
-    <div
-      style={{
-        marginBottom: isLast ? 0 : 16,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: isUser ? "flex-end" : "flex-start",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "85%",
-          padding: "10px 14px",
-          borderRadius: isUser ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-          fontSize: 13,
-          lineHeight: 1.55,
-          background: isUser
-            ? "linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(6,182,212,0.2) 100%)"
-            : "var(--color-surface-raised)",
-          border: isUser ? "1px solid rgba(124,58,237,0.3)" : "1px solid var(--color-border)",
-          color: "var(--color-text-primary)",
-          wordBreak: "break-word",
-        }}
-      >
-        {msg.content}
-      </div>
-      <span
-        style={{
-          marginTop: 4,
-          fontSize: 10,
-          color: "var(--color-text-muted)",
-          letterSpacing: "0.02em",
-        }}
-      >
-        {isUser ? "You" : "AI"}
-      </span>
-    </div>
-  );
-}
-
-function ErrorBanner({ message }: { message: string }) {
-  // If the streaming hooks surfaced a "/pricing" link cue, render the rest of
-  // the message as text and an inline upgrade button. Otherwise plain text.
-  const pricingIdx = message.indexOf("/pricing");
-  const showUpgrade = pricingIdx !== -1;
-  const text = showUpgrade ? message.replace(/Upgrade on \/pricing\.?/i, "").trim() : message;
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: 8,
-        padding: "10px 14px",
-        borderRadius: 10,
-        border: "1px solid rgba(244,63,94,0.3)",
-        background: "rgba(244,63,94,0.08)",
-        fontSize: 13,
-        color: "var(--color-danger)",
-        marginTop: 8,
-      }}
-    >
-      <span>{text}</span>
-      {showUpgrade && (
-        <Link
-          to="/pricing"
-          style={{
-            alignSelf: "flex-start",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            padding: "5px 10px",
-            borderRadius: 8,
-            fontSize: 12,
-            fontWeight: 600,
-            textDecoration: "none",
-            background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
-            color: "#fff",
-          }}
-        >
-          Upgrade plan
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path
-              d="M2.5 6h7M6.5 3l3 3-3 3"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </Link>
-      )}
-    </div>
-  );
-}
-
-function StreamingIndicator({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "10px 14px",
-        borderRadius: "14px 14px 14px 4px",
-        background: "var(--color-surface-raised)",
-        border: "1px solid var(--color-border)",
-        width: "fit-content",
-        marginBottom: 16,
-      }}
-    >
-      <span style={{ display: "flex", gap: 3 }}>
-        {[0, 1, 2].map((i) => (
-          <span
-            key={i}
-            style={{
-              width: 5,
-              height: 5,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #a78bfa, #06b6d4)",
-              animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
-            }}
-          />
-        ))}
-      </span>
-      <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{label}</span>
-      <style>
-        {
-          "@keyframes pulse-dot { 0%,80%,100%{opacity:0.3;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }"
-        }
-      </style>
-    </div>
-  );
-}
-
 const SUGGESTIONS = ["A simple snake game", "Asteroids with power-ups", "Pong with AI opponent"];
-
-/**
- * Share toggle for an existing game. Reads the current publish state from
- * the cached `["game", gameId]` query and toggles publish/unpublish via
- * mutations. Copies the public URL to the clipboard on successful publish.
- */
-function ShareButton({ gameId }: { gameId: string }) {
-  const queryClient = useQueryClient();
-  const cached = queryClient.getQueryData<{
-    isPublic?: boolean;
-    publicSlug?: string | null;
-  }>(["game", gameId]);
-  const isPublic = Boolean(cached?.isPublic);
-  const slug = cached?.publicSlug ?? null;
-
-  const publishMutation = useMutation({
-    mutationFn: () => publishGame(gameId),
-    onSuccess: (result) => {
-      const url = `${window.location.origin}/play/${result.slug}`;
-      navigator.clipboard
-        ?.writeText(url)
-        .then(() => toast.success("Public link copied to clipboard"))
-        .catch(() => toast.success("Game published", { description: url }));
-      queryClient.invalidateQueries({ queryKey: ["game", gameId] });
-    },
-    onError: () => {
-      toast.error("Failed to publish game");
-    },
-  });
-
-  const unpublishMutation = useMutation({
-    mutationFn: () => unpublishGame(gameId),
-    onSuccess: () => {
-      toast.success("Game is now private");
-      queryClient.invalidateQueries({ queryKey: ["game", gameId] });
-    },
-    onError: () => {
-      toast.error("Failed to unpublish game");
-    },
-  });
-
-  function handleClick() {
-    if (isPublic) {
-      unpublishMutation.mutate();
-    } else {
-      publishMutation.mutate();
-    }
-  }
-
-  function handleCopy() {
-    if (!slug) return;
-    const url = `${window.location.origin}/play/${slug}`;
-    navigator.clipboard
-      ?.writeText(url)
-      .then(() => toast.success("Public link copied"))
-      .catch(() => toast.error("Could not copy to clipboard"));
-  }
-
-  const busy = publishMutation.isPending || unpublishMutation.isPending;
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-      {isPublic && slug && (
-        <button
-          type="button"
-          onClick={handleCopy}
-          aria-label="Copy public link"
-          title={`Copy ${window.location.origin}/play/${slug}`}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "3px 8px",
-            borderRadius: 6,
-            fontSize: 11,
-            color: "var(--color-text-secondary)",
-            background: "var(--color-surface-raised)",
-            border: "1px solid var(--color-border)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
-        >
-          /play/{slug}
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={busy}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "5px 10px",
-          borderRadius: 7,
-          fontSize: 11,
-          fontWeight: 600,
-          fontFamily: "inherit",
-          letterSpacing: "0.04em",
-          textTransform: "uppercase",
-          border: isPublic ? "1px solid rgba(34,211,160,0.4)" : "1px solid var(--color-border)",
-          background: isPublic ? "rgba(34,211,160,0.08)" : "transparent",
-          color: isPublic ? "var(--color-success)" : "var(--color-text-secondary)",
-          cursor: busy ? "wait" : "pointer",
-          opacity: busy ? 0.6 : 1,
-          transition: "all 0.15s",
-        }}
-      >
-        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          {isPublic ? (
-            <path
-              d="M2 6.5l3 3 5-7"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              fill="none"
-            />
-          ) : (
-            <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-          )}
-        </svg>
-        {isPublic ? "Public" : "Share"}
-      </button>
-    </div>
-  );
-}
 
 function BuilderLayout({
   messages,
