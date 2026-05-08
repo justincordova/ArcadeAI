@@ -9,6 +9,13 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../lib/db.js";
+import {
+  notFoundError,
+  quotaError,
+  sendError,
+  unauthorizedError,
+  validationError,
+} from "../lib/errors.js";
 import { loadPublicGame } from "../lib/ownership.js";
 import { getSession } from "../plugins/auth.js";
 import { InsufficientCreditsError, markSucceeded, recordRemix } from "../services/usage/charge.js";
@@ -23,13 +30,13 @@ export async function playRoutes(app: FastifyInstance) {
   app.get("/api/play/:slug", async (request, reply) => {
     const parseResult = SlugParams.safeParse(request.params);
     if (!parseResult.success) {
-      return reply.status(400).send({ error: "Invalid slug" });
+      return sendError(reply, 400, validationError("Invalid slug"));
     }
 
     const game = await loadPublicGame(parseResult.data.slug);
     if (!game) {
       // 404 (not 403) on private/unknown to avoid leaking existence.
-      return reply.status(404).send({ error: "Not found" });
+      return sendError(reply, 404, notFoundError());
     }
 
     return reply.send(game);
@@ -42,20 +49,20 @@ export async function playRoutes(app: FastifyInstance) {
   app.post("/api/play/:slug/remix", async (request, reply) => {
     const parseResult = SlugParams.safeParse(request.params);
     if (!parseResult.success) {
-      return reply.status(400).send({ error: "Invalid slug" });
+      return sendError(reply, 400, validationError("Invalid slug"));
     }
 
     let userId: string;
     try {
       const session = await getSession(request);
-      if (!session) return reply.status(401).send({ error: "Unauthorized" });
+      if (!session) return sendError(reply, 401, unauthorizedError());
       userId = session.user.id;
     } catch {
-      return reply.status(401).send({ error: "Unauthorized" });
+      return sendError(reply, 401, unauthorizedError());
     }
 
     const source = await loadPublicGame(parseResult.data.slug);
-    if (!source) return reply.status(404).send({ error: "Not found" });
+    if (!source) return sendError(reply, 404, notFoundError());
 
     const newId = randomUUID();
     const now = Date.now();
@@ -90,7 +97,10 @@ export async function playRoutes(app: FastifyInstance) {
       });
     } catch (err) {
       request.log.error({ err }, "remix insert failed");
-      return reply.status(500).send({ error: "Could not create remix" });
+      return sendError(reply, 500, {
+        code: "INTERNAL_ERROR",
+        message: "Could not create remix",
+      });
     }
 
     // Record the remix as a 0-credit generation. Free users at the lifetime
@@ -105,11 +115,11 @@ export async function playRoutes(app: FastifyInstance) {
         .where(eq(games.id, newId))
         .catch(() => {});
       if (err instanceof InsufficientCreditsError) {
-        return reply.status(402).send({
-          error: "insufficient_credits",
-          resetAt: err.resetAt,
-          kind: err.kind,
-        });
+        return sendError(
+          reply,
+          402,
+          quotaError("insufficient_credits", { resetAt: err.resetAt, kind: err.kind })
+        );
       }
       throw err;
     }

@@ -4,28 +4,35 @@ import { API_BASE } from "../lib/api/client.js";
 export type SSEStatus = "idle" | "streaming" | "error";
 
 /**
- * 402 payload shape used by all credit-gated streaming endpoints. `kind`
- * distinguishes hard-cap exhaustion (lifetime, no reset) from window
- * exhaustion (daily/monthly, surfaces a reset date).
+ * Server's standard error body — see `apps/server/src/lib/errors.ts`. The
+ * `code` field is the contract; `message` is display-grade copy that may
+ * change. Switch on `code` to discriminate cases.
+ */
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+/**
+ * Normalized 402 payload surfaced to wrapper hooks. Shape stays stable
+ * across the server's old `{ error, resetAt, kind }` and new
+ * `{ code, message, details: { resetAt, kind } }` so consumers never had to
+ * change.
  */
 export interface QuotaError {
-  error: string;
+  message: string;
   resetAt: number;
   kind?: "daily" | "monthly" | "lifetime";
 }
 
-/**
- * Per-event handler. Returning `true` from a terminal handler (done/error)
- * marks the stream as terminated so the "ended without terminator" guard
- * doesn't fire afterward.
- */
 export interface SSEStreamHandlers {
   onEvent: (name: string, data: unknown) => void;
   /**
    * 409 — concurrent stream / busy. Return a string to override the
-   * surfaced error message. Default surfaces `body.error`.
+   * surfaced error message; default surfaces `body.message`.
    */
-  onConflict?: (body: { error: string }) => string | undefined;
+  onConflict?: (body: { message: string }) => string | undefined;
   /**
    * 402 — out of credits / lifetime cap exhausted. Return a string to
    * override the surfaced error message.
@@ -34,6 +41,34 @@ export interface SSEStreamHandlers {
   /** Terminal events — onEvent receives them too; these are a convenience. */
   onDone?: () => void;
   onError?: (message: string) => void;
+}
+
+/** Pull a normalized `{ message }` out of either error shape. */
+function normalizeError(body: unknown): { message: string } {
+  if (body && typeof body === "object") {
+    const o = body as Record<string, unknown>;
+    if (typeof o.message === "string") return { message: o.message };
+    if (typeof o.error === "string") return { message: o.error };
+  }
+  return { message: "Request failed" };
+}
+
+/** Pull `{ message, resetAt, kind }` out of either 402 shape. */
+function normalizeQuotaError(body: unknown): QuotaError {
+  if (body && typeof body === "object") {
+    const o = body as Record<string, unknown>;
+    const details = (o.details as Record<string, unknown> | undefined) ?? o;
+    const message =
+      typeof o.message === "string"
+        ? o.message
+        : typeof o.error === "string"
+          ? o.error
+          : "Quota exceeded";
+    const resetAt = typeof details.resetAt === "number" ? details.resetAt : 0;
+    const kind = details.kind as QuotaError["kind"];
+    return { message, resetAt, kind };
+  }
+  return { message: "Quota exceeded", resetAt: 0 };
 }
 
 interface UseSSEStreamOptions {
@@ -115,23 +150,20 @@ export function useSSEStream(opts: UseSSEStreamOptions): UseSSEStream {
           const res = await fetch(target, init);
 
           if (res.status === 409) {
-            const parsed = (await res.json().catch(() => ({ error: "Busy" }))) as {
-              error: string;
-            };
-            const override = handlersRef.current.onConflict?.(parsed);
+            const raw = await res.json().catch(() => ({}));
+            const norm = normalizeError(raw);
+            const override = handlersRef.current.onConflict?.(norm);
             setStatus("error");
-            setError(override || parsed.error);
+            setError(override || norm.message);
             return;
           }
 
           if (res.status === 402) {
-            const parsed = (await res.json().catch(() => ({
-              error: "Quota exceeded",
-              resetAt: 0,
-            }))) as QuotaError;
-            const override = handlersRef.current.onQuotaExceeded?.(parsed);
+            const raw = await res.json().catch(() => ({}));
+            const quota = normalizeQuotaError(raw);
+            const override = handlersRef.current.onQuotaExceeded?.(quota);
             setStatus("error");
-            setError(override || parsed.error);
+            setError(override || quota.message);
             return;
           }
 

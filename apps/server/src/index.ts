@@ -73,9 +73,15 @@ app.setErrorHandler((err: Error & { statusCode?: number }, request, reply) => {
   request.log.error({ err }, "request failed");
   const statusCode = err.statusCode ?? 500;
   if (statusCode >= 500) {
-    return reply.status(statusCode).send({ error: "Internal Server Error" });
+    return reply.status(statusCode).send({
+      code: "INTERNAL_ERROR",
+      message: "Internal Server Error",
+    });
   }
-  return reply.status(statusCode).send({ error: err.message });
+  return reply.status(statusCode).send({
+    code: "VALIDATION_ERROR",
+    message: err.message,
+  });
 });
 
 // Routes

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../lib/db.js";
+import { notFoundError, sendError, validationError } from "../lib/errors.js";
 import { applyResets } from "../services/usage/reset.js";
 
 const PatchMeBody = z
@@ -58,7 +59,7 @@ export async function meRoutes(app: FastifyInstance) {
   app.get("/api/me", async (request, reply) => {
     const userId = request.authSession.user.id;
     const me = await loadMe(userId);
-    if (!me) return reply.status(404).send({ error: "User not found" });
+    if (!me) return sendError(reply, 404, notFoundError("User not found"));
     return reply.send(me);
   });
 
@@ -66,10 +67,11 @@ export async function meRoutes(app: FastifyInstance) {
   app.patch("/api/me", async (request, reply) => {
     const parseResult = PatchMeBody.safeParse(request.body);
     if (!parseResult.success) {
-      return reply.status(400).send({
-        error: "Validation error",
-        issues: parseResult.error.issues,
-      });
+      return sendError(
+        reply,
+        400,
+        validationError("Validation error", { issues: parseResult.error.issues })
+      );
     }
 
     const userId = request.authSession.user.id;
@@ -82,7 +84,7 @@ export async function meRoutes(app: FastifyInstance) {
     await db.update(users).set(update).where(eq(users.id, userId));
 
     const me = await loadMe(userId);
-    if (!me) return reply.status(404).send({ error: "User not found" });
+    if (!me) return sendError(reply, 404, notFoundError("User not found"));
     return reply.send(me);
   });
 

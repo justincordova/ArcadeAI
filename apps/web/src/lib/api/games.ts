@@ -108,8 +108,15 @@ export async function remixPublicGame(slug: string): Promise<RemixResponse> {
     throw new Error("Sign in to remix");
   }
   if (res.status === 402) {
-    const body = (await res.json()) as { kind?: string; resetAt?: number };
-    if (body.kind === "lifetime" || body.resetAt === 0) {
+    // Server returns the new ApiError shape: { code, message, details: { kind, resetAt } }.
+    // The old shape ({ kind, resetAt } at top level) is normalized by reading
+    // either path so a stale build can't break this gracefully-degraded UX.
+    const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const details = (raw.details as Record<string, unknown> | undefined) ?? raw;
+    const kind = details.kind as string | undefined;
+    const resetAt = typeof details.resetAt === "number" ? details.resetAt : undefined;
+    const code = raw.code as string | undefined;
+    if (code === "FREE_TIER_EXHAUSTED" || kind === "lifetime" || resetAt === 0) {
       throw new Error("You've used your free trial. Upgrade for more remixes.");
     }
     throw new Error("Out of credits — upgrade for more remixes.");

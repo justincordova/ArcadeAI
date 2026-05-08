@@ -5,6 +5,13 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
 import { db } from "../lib/db.js";
+import {
+  conflictError,
+  notFoundError,
+  quotaError,
+  sendError,
+  validationError,
+} from "../lib/errors.js";
 import { loadOwnedGame } from "../lib/ownership.js";
 import { endSSE, startHeartbeat, writeSSE, writeSSEHeaders } from "../lib/sse.js";
 import { categorizeError } from "../services/llm/categorize-error.js";
@@ -74,10 +81,11 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.post("/api/games", { config: perUser10PerMin }, async (request, reply) => {
     const parseResult = CreateGameBody.safeParse(request.body);
     if (!parseResult.success) {
-      return reply.status(400).send({
-        error: "Validation error",
-        issues: parseResult.error.issues,
-      });
+      return sendError(
+        reply,
+        400,
+        validationError("Validation error", { issues: parseResult.error.issues })
+      );
     }
 
     const { prompt } = parseResult.data;
@@ -87,11 +95,11 @@ export async function gamesRoutes(app: FastifyInstance) {
     // atomic guard inside `deduct` is the source of truth — this is a UX
     // optimization to surface 402 before any DB writes or SSE handshakes.
     const userState = await applyResets(userId);
-    if (!userState) return reply.status(404).send({ error: "User not found" });
+    if (!userState) return sendError(reply, 404, notFoundError("User not found"));
 
     const upfront = checkUpfront(userState, "generation");
     if (upfront) {
-      return reply.status(402).send(upfront);
+      return sendError(reply, 402, quotaError(upfront.error, upfront));
     }
 
     // Concurrency cap: 1 active stream per user
@@ -99,7 +107,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       acquire(userId);
     } catch (err) {
       if (err instanceof ConcurrencyError) {
-        return reply.status(409).send({ error: err.message });
+        return sendError(reply, 409, conflictError(err.message));
       }
       throw err;
     }
@@ -147,11 +155,11 @@ export async function gamesRoutes(app: FastifyInstance) {
           .where(eq(games.id, id))
           .catch(() => {});
         if (err instanceof InsufficientCreditsError) {
-          return reply.status(402).send({
-            error: "insufficient_credits",
-            resetAt: err.resetAt,
-            kind: err.kind,
-          });
+          return sendError(
+            reply,
+            402,
+            quotaError("insufficient_credits", { resetAt: err.resetAt, kind: err.kind })
+          );
         }
         throw err;
       }
@@ -283,7 +291,7 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.get("/api/games/:id", async (request, reply) => {
     const parseResult = GameIdParams.safeParse(request.params);
     if (!parseResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
 
     const { id } = parseResult.data;
@@ -291,7 +299,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     const game = await loadOwnedGame(id, userId);
     if (!game) {
-      return reply.status(404).send({ error: "Not found" });
+      return sendError(reply, 404, notFoundError());
     }
 
     const msgs = await db
@@ -307,7 +315,7 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.delete("/api/games/:id", async (request, reply) => {
     const parseResult = GameIdParams.safeParse(request.params);
     if (!parseResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
 
     const { id } = parseResult.data;
@@ -315,7 +323,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     const game = await loadOwnedGame(id, userId);
     if (!game) {
-      return reply.status(404).send({ error: "Not found" });
+      return sendError(reply, 404, notFoundError());
     }
 
     await db.delete(games).where(eq(games.id, id));
@@ -347,15 +355,16 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.patch("/api/games/:id", async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
 
     const bodyResult = PatchGameBody.safeParse(request.body);
     if (!bodyResult.success) {
-      return reply.status(400).send({
-        error: "Validation error",
-        issues: bodyResult.error.issues,
-      });
+      return sendError(
+        reply,
+        400,
+        validationError("Validation error", { issues: bodyResult.error.issues })
+      );
     }
 
     const { id } = paramsResult.data;
@@ -364,7 +373,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     const game = await loadOwnedGame(id, userId);
     if (!game) {
-      return reply.status(404).send({ error: "Not found" });
+      return sendError(reply, 404, notFoundError());
     }
 
     const now = Date.now();
@@ -379,15 +388,15 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.post("/api/games/:id/publish", async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
     const { id } = paramsResult.data;
     const userId = request.authSession.user.id;
 
     const game = await loadOwnedGame(id, userId);
-    if (!game) return reply.status(404).send({ error: "Not found" });
+    if (!game) return sendError(reply, 404, notFoundError());
     if (!game.currentCode) {
-      return reply.status(400).send({ error: "Game has no code to publish" });
+      return sendError(reply, 400, validationError("Game has no code to publish"));
     }
 
     let slug = game.publicSlug;
@@ -406,7 +415,10 @@ export async function gamesRoutes(app: FastifyInstance) {
         }
       }
       if (!slug) {
-        return reply.status(500).send({ error: "Could not generate public slug; please retry" });
+        return sendError(reply, 500, {
+          code: "INTERNAL_ERROR",
+          message: "Could not generate public slug; please retry",
+        });
       }
     }
 
@@ -424,13 +436,13 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.post("/api/games/:id/unpublish", async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
     const { id } = paramsResult.data;
     const userId = request.authSession.user.id;
 
     const game = await loadOwnedGame(id, userId);
-    if (!game) return reply.status(404).send({ error: "Not found" });
+    if (!game) return sendError(reply, 404, notFoundError());
 
     await db.update(games).set({ isPublic: false, updatedAt: Date.now() }).where(eq(games.id, id));
 
@@ -441,7 +453,7 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.post("/api/games/:id/thumbnail", async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
 
     const bodyResult = ThumbnailBody.safeParse(request.body);
@@ -449,12 +461,16 @@ export async function gamesRoutes(app: FastifyInstance) {
       // Check if the thumbnail is too large (max string length exceeded)
       const sizeIssue = bodyResult.error.issues.find((i) => i.code === "too_big");
       if (sizeIssue) {
-        return reply.status(413).send({ error: "Thumbnail too large" });
+        return sendError(reply, 413, {
+          code: "PAYLOAD_TOO_LARGE",
+          message: "Thumbnail too large",
+        });
       }
-      return reply.status(400).send({
-        error: "Validation error",
-        issues: bodyResult.error.issues,
-      });
+      return sendError(
+        reply,
+        400,
+        validationError("Validation error", { issues: bodyResult.error.issues })
+      );
     }
 
     const { id } = paramsResult.data;
@@ -463,7 +479,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     const game = await loadOwnedGame(id, userId);
     if (!game) {
-      return reply.status(404).send({ error: "Not found" });
+      return sendError(reply, 404, notFoundError());
     }
 
     await db.update(games).set({ thumbnail, updatedAt: Date.now() }).where(eq(games.id, id));
@@ -475,15 +491,16 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.post("/api/games/:id/refine", { config: perUser10PerMin }, async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
 
     const bodyResult = RefineBody.safeParse(request.body);
     if (!bodyResult.success) {
-      return reply.status(400).send({
-        error: "Validation error",
-        issues: bodyResult.error.issues,
-      });
+      return sendError(
+        reply,
+        400,
+        validationError("Validation error", { issues: bodyResult.error.issues })
+      );
     }
 
     const { id } = paramsResult.data;
@@ -492,20 +509,20 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     const game = await loadOwnedGame(id, userId);
     if (!game) {
-      return reply.status(404).send({ error: "Not found" });
+      return sendError(reply, 404, notFoundError());
     }
 
     if (!game.currentCode) {
-      return reply.status(400).send({ error: "Game has no code to refine" });
+      return sendError(reply, 400, validationError("Game has no code to refine"));
     }
 
     // Upfront credit check before SSE (402 before any bytes emitted per SPEC §11)
     const refineUserState = await applyResets(userId);
-    if (!refineUserState) return reply.status(404).send({ error: "User not found" });
+    if (!refineUserState) return sendError(reply, 404, notFoundError("User not found"));
 
     const refineUpfront = checkUpfront(refineUserState, "refinement");
     if (refineUpfront) {
-      return reply.status(402).send(refineUpfront);
+      return sendError(reply, 402, quotaError(refineUpfront.error, refineUpfront));
     }
 
     // Concurrency cap: 1 active stream per user
@@ -513,7 +530,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       acquire(userId);
     } catch (err) {
       if (err instanceof ConcurrencyError) {
-        return reply.status(409).send({ error: err.message });
+        return sendError(reply, 409, conflictError(err.message));
       }
       throw err;
     }
@@ -525,11 +542,11 @@ export async function gamesRoutes(app: FastifyInstance) {
         ({ logId } = await deduct(userId, "refinement", id));
       } catch (err) {
         if (err instanceof InsufficientCreditsError) {
-          return reply.status(402).send({
-            error: "insufficient_credits",
-            resetAt: err.resetAt,
-            kind: err.kind,
-          });
+          return sendError(
+            reply,
+            402,
+            quotaError("insufficient_credits", { resetAt: err.resetAt, kind: err.kind })
+          );
         }
         throw err;
       }
@@ -647,15 +664,16 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.post("/api/games/:id/repair", { config: perUser10PerMin }, async (request, reply) => {
     const paramsResult = GameIdParams.safeParse(request.params);
     if (!paramsResult.success) {
-      return reply.status(400).send({ error: "Invalid id" });
+      return sendError(reply, 400, validationError("Invalid id"));
     }
 
     const bodyResult = RepairBody.safeParse(request.body);
     if (!bodyResult.success) {
-      return reply.status(400).send({
-        error: "Validation error",
-        issues: bodyResult.error.issues,
-      });
+      return sendError(
+        reply,
+        400,
+        validationError("Validation error", { issues: bodyResult.error.issues })
+      );
     }
 
     const { id } = paramsResult.data;
@@ -664,7 +682,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     const game = await loadOwnedGame(id, userId);
     if (!game) {
-      return reply.status(404).send({ error: "Not found" });
+      return sendError(reply, 404, notFoundError());
     }
 
     // Concurrency cap: repair counts against the same 1-stream-per-user limit
@@ -672,7 +690,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       acquire(userId);
     } catch (err) {
       if (err instanceof ConcurrencyError) {
-        return reply.status(409).send({ error: err.message });
+        return sendError(reply, 409, conflictError(err.message));
       }
       throw err;
     }

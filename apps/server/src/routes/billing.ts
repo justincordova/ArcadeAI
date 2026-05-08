@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../lib/db.js";
+import { sendError, validationError } from "../lib/errors.js";
 import { nextUtcMidnight, nextUtcMonthStart } from "../services/usage/reset.js";
 
 const ChangePlanBody = z.object({
@@ -17,10 +18,11 @@ export async function billingRoutes(app: FastifyInstance) {
   app.post("/api/billing/change-plan", async (request, reply) => {
     const parseResult = ChangePlanBody.safeParse(request.body);
     if (!parseResult.success) {
-      return reply.status(400).send({
-        error: "Validation error",
-        issues: parseResult.error.issues,
-      });
+      return sendError(
+        reply,
+        400,
+        validationError("Validation error", { issues: parseResult.error.issues })
+      );
     }
 
     const { tier } = parseResult.data;
@@ -30,9 +32,7 @@ export async function billingRoutes(app: FastifyInstance) {
 
     // Admin tier cannot be changed via billing
     if (currentTier === "admin") {
-      return reply.status(400).send({
-        error: "Admin tier cannot be changed via billing",
-      });
+      return sendError(reply, 400, validationError("Admin tier cannot be changed via billing"));
     }
 
     const now = Date.now();
