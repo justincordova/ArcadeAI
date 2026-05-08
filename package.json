@@ -6,10 +6,14 @@
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "build": "bun run --filter '*' build",
+    "typecheck": "bun run --filter '*' typecheck",
     "test": "bun run --filter '*' test",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "check": "biome check --write ."
+    "check": "biome check --write .",
+    "db:migrate": "bun run --filter @arcadeai/db migrate",
+    "db:generate": "bun run --filter @arcadeai/db generate",
+    "db:studio": "bun run --filter @arcadeai/db studio"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

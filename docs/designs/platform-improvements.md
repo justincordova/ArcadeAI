@@ -434,7 +434,7 @@ Items **#40** (admin dashboard), **#41** (set-credits dev tool) **deferred** —
 
 ---
 
-### 9. Milestone H — Observability, DX, Documentation
+### 9. Milestone H — Observability, DX, Documentation (shipped)
 
 Addresses **#71** (log shipping docs), **#74** (RAG retrieval logging — covered in Milestone E), **#75** (userId in LLM cost logs), **#76-82** (DX), **#94** (sync-docs), **#97** (architecture diagram).
 
@@ -445,16 +445,17 @@ Items **#91-93** (PostHog analytics, conversion funnel, feedback widget) and **#
 - **#71:** `docs/operations.md` documenting log-shipping options (Loki / Datadog / CloudWatch) — not implementing, just noting.
 
 **DX:**
-- **#76:** `bun run typecheck` runs `tsc --noEmit` across all workspaces (faster than full build)
-- **#77:** Install `lefthook`; pre-commit runs `bun run build && bun run lint && bun run test`
-- **#78:** `.github/workflows/ci.yml` runs build + lint + test on push and PR
-- **#80:** Rewrite `README.md` (~150 lines): what, why, prereqs, env setup, dev/build/migrate, troubleshooting (`brew install sqlite`)
-- **#81:** New `packages/db/src/seed.ts` — admin user + 3 sample games on `bun run --filter @arcadeai/db seed`
-- **#82:** `bun run db:studio` runs `drizzle-kit studio`
+- **#76 (shipped):** `bun run typecheck` runs `tsc --noEmit` across workspaces — faster than the full build for editor-loop checks.
+- **#77 deferred:** lefthook adds another dev dep + config file. The pre-commit gate is documented in `AGENTS.md` and run by humans/agents; revisit if there's a recurring "forgot to lint" pattern.
+- **#78 (shipped):** `.github/workflows/ci.yml` runs lint + build on push and PR. Test step wired in once integration tests land in Milestone I.
+- **#80 (shipped):** README rewrite — what, why, prereqs, env setup, scripts, troubleshooting, Mermaid sequence diagram.
+- **#81 deferred:** seed script needs curated sample games to be useful. Without them it's just a UUID generator. Add when there's a sample game corpus worth seeding.
+- **#82 (shipped):** `bun run db:studio` opens Drizzle Studio. Top-level `db:migrate` and `db:generate` aliases too.
 
 **Docs:**
-- **#94:** Run `sync-docs` to reconcile SPEC.md drift (sharing flow added, lifetime limits added, shadcn finally installed, etc.)
-- **#97:** Mermaid sequence diagram in README showing user → vite → fastify → anthropic → SSE → iframe
+- **#94 deferred:** `sync-docs` is a manual reconciliation pass. Run it after Milestone I lands so SPEC.md absorbs both the shipped feature work and any test-discovered behavior corrections.
+- **#97 (shipped):** Mermaid sequence diagram in `README.md` covering the prompt → SSE → iframe flow.
+- **`docs/operations.md` (shipped):** log fields, shipping options, backups, graceful shutdown notes.
 
 ---
 

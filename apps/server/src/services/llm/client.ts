@@ -130,6 +130,11 @@ export async function streamRepair({
 // Per plan §5: skip the line on stream error rather than logging zeros.
 // The `.catch` is critical — without it, an aborted or failed stream
 // produces an unhandled promise rejection that can crash the process.
+//
+// The `logger` param is the request-scoped child logger from
+// plugins/request-context.ts, which has `requestId` and `userId` already
+// bound. That means the emitted line carries `userId` for free — every cost
+// log can be aggregated by user without changes here.
 function logUsageOnDrain(
   usagePromise: PromiseLike<{ inputTokens?: number; outputTokens?: number }>,
   start: number,
