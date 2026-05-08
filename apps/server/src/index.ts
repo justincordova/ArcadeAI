@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import Fastify from "fastify";
+import { activeCount, clear as clearActiveStreams } from "./lib/active-streams.js";
 import { authPlugin, registerAuthGuard } from "./plugins/auth.js";
 import { registerCors } from "./plugins/cors.js";
 import { registerRateLimit } from "./plugins/rate-limit.js";
@@ -71,6 +72,11 @@ await app.register(billingRoutes);
 
 const port = Number(process.env.PORT ?? 3000);
 
+// Defense-in-depth: any locks held by a crashed previous run cannot survive
+// across processes (the Set is module-scoped), but explicitly clearing makes
+// the invariant obvious in startup logs and is safe for tests.
+clearActiveStreams();
+
 try {
   await app.listen({ port, host: "0.0.0.0" });
   app.log.info(`Server listening on port ${port}`);
@@ -78,3 +84,33 @@ try {
   app.log.error(err);
   process.exit(1);
 }
+
+// Graceful shutdown: on SIGTERM/SIGINT, stop accepting new requests, wait
+// briefly for in-flight streaming work to drain, then exit. Without this,
+// active SSE connections are killed mid-frame and clients see truncated
+// errors. The 30-second cap matches typical orchestrator drain windows.
+let shuttingDown = false;
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  app.log.info({ signal, activeStreams: activeCount() }, "shutdown signal received");
+
+  const drainDeadline = Date.now() + 30_000;
+  while (activeCount() > 0 && Date.now() < drainDeadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (activeCount() > 0) {
+    app.log.warn({ remaining: activeCount() }, "drain deadline reached; forcing close");
+  }
+
+  try {
+    await app.close();
+    app.log.info("server closed cleanly");
+  } catch (err) {
+    app.log.error({ err }, "error during shutdown");
+  }
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
