@@ -7,6 +7,43 @@ const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "",
 });
 
+// Server-side LLM timeouts. Generation and refinement get 90s — enough
+// for a slow-but-healthy Anthropic response on a cold model. Repair gets
+// 60s because output is shorter and we don't want a stuck repair to block
+// the user's next attempt.
+//
+// The timeout is composed with the user's AbortController via
+// AbortSignal.any so a user cancel still aborts immediately.
+export const LLM_TIMEOUT_MS = {
+  generation: 90_000,
+  refinement: 90_000,
+  repair: 60_000,
+} as const;
+
+/**
+ * Compose the user's abort signal with a server-side timeout. Returns the
+ * combined signal AND a cleanup function the caller MUST invoke after the
+ * stream resolves so the timer doesn't leak.
+ */
+export function withTimeout(
+  userSignal: AbortSignal,
+  timeoutMs: number
+): { signal: AbortSignal; cleanup: () => void } {
+  const timeoutController = new AbortController();
+  const handle = setTimeout(() => {
+    timeoutController.abort(new Error("LLM call exceeded server-side timeout"));
+  }, timeoutMs);
+
+  // AbortSignal.any composes multiple signals; aborts when any input aborts.
+  // Available since Node 20 / Bun 1.0.
+  const composed = AbortSignal.any([userSignal, timeoutController.signal]);
+
+  return {
+    signal: composed,
+    cleanup: () => clearTimeout(handle),
+  };
+}
+
 export async function streamGame({
   system,
   prompt,
@@ -19,13 +56,18 @@ export async function streamGame({
   logger?: FastifyBaseLogger;
 }) {
   const start = Date.now();
+  const { signal: composed, cleanup } = withTimeout(signal, LLM_TIMEOUT_MS.generation);
   const result = streamText({
     model: anthropic(SONNET),
     system,
     messages: [{ role: "user", content: prompt }],
-    abortSignal: signal,
+    abortSignal: composed,
     maxOutputTokens: 8192,
   });
+  // Cleanup the timer once usage settles (success or error).
+  void Promise.resolve(result.usage)
+    .then(() => cleanup())
+    .catch(() => cleanup());
   logUsageOnDrain(result.usage, start, logger);
   return result;
 }
@@ -42,13 +84,17 @@ export async function streamRefinement({
   logger?: FastifyBaseLogger;
 }) {
   const start = Date.now();
+  const { signal: composed, cleanup } = withTimeout(signal, LLM_TIMEOUT_MS.refinement);
   const result = streamText({
     model: anthropic(SONNET),
     system,
     messages: [{ role: "user", content: prompt }],
-    abortSignal: signal,
+    abortSignal: composed,
     maxOutputTokens: 8192,
   });
+  void Promise.resolve(result.usage)
+    .then(() => cleanup())
+    .catch(() => cleanup());
   logUsageOnDrain(result.usage, start, logger);
   return result;
 }
@@ -65,13 +111,17 @@ export async function streamRepair({
   logger?: FastifyBaseLogger;
 }) {
   const start = Date.now();
+  const { signal: composed, cleanup } = withTimeout(signal, LLM_TIMEOUT_MS.repair);
   const result = streamText({
     model: anthropic(SONNET),
     system,
     messages: [{ role: "user", content: userMessage }],
-    abortSignal: signal,
+    abortSignal: composed,
     maxOutputTokens: 8192,
   });
+  void Promise.resolve(result.usage)
+    .then(() => cleanup())
+    .catch(() => cleanup());
   logUsageOnDrain(result.usage, start, logger);
   return result;
 }
