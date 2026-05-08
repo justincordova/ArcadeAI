@@ -1,4 +1,6 @@
-const API = "http://localhost:3000";
+import { API_BASE } from "./client.js";
+
+const API = API_BASE;
 
 export interface GameSummary {
   id: string;

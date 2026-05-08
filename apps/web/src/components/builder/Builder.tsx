@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { getMissingKeyError, useConfig } from "../../hooks/useConfig.js";
 import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
@@ -334,14 +335,12 @@ function BuilderLayout({
   const canSubmit = !isStreaming && prompt.trim().length > 0 && !missingKeyError;
 
   function handleSuggestionClick(text: string) {
-    setPrompt(text);
-    // Auto-submit after state flushes
-    setTimeout(() => {
-      const syntheticEvent = { preventDefault: () => {} } as React.FormEvent;
-      // We have to call onSubmit with the text directly since state may not have flushed
-      // Instead, set then trigger via a form submit
-      textareaRef.current?.form?.requestSubmit();
-    }, 0);
+    // flushSync ensures the state update is committed to the DOM before
+    // requestSubmit fires. Without it, the form may read the stale prompt value.
+    flushSync(() => {
+      setPrompt(text);
+    });
+    textareaRef.current?.form?.requestSubmit();
   }
 
   return (

@@ -47,6 +47,10 @@ export function RepairController({
   onStatusChange,
   children,
 }: RepairControllerProps) {
+  // repairAttemptRef is the authoritative counter — updated synchronously so
+  // rapid back-to-back game-error messages see the correct value without
+  // waiting for a re-render. repairAttempt state drives UI only.
+  const repairAttemptRef = useRef(0);
   const [repairAttempt, setRepairAttempt] = useState(0);
   const [repairStatus, setRepairStatus] = useState<RepairStatus>("idle");
   const [lastError, setLastError] = useState<GameError | null>(null);
@@ -64,6 +68,7 @@ export function RepairController({
   // Reset attempt counter when a new generation/refinement is kicked off
   useEffect(() => {
     if (resetTrigger !== undefined) {
+      repairAttemptRef.current = 0;
       setRepairAttempt(0);
       setRepairStatus("idle");
     }
@@ -92,11 +97,11 @@ export function RepairController({
       setBrokenCode(currentCode);
       setLastError(err);
 
-      // Compute the next attempt count BEFORE the state updater. Side effects
-      // (repair.start) must not run inside a state updater — React 18 strict
-      // mode double-invokes pure setters in development and would fire the
-      // POST /api/games/:id/repair twice, producing a 409 race.
-      const next = repairAttempt + 1;
+      // Increment the ref synchronously so rapid back-to-back game-error
+      // messages (before React re-renders) see the correct count. The state
+      // mirror drives UI only.
+      repairAttemptRef.current += 1;
+      const next = repairAttemptRef.current;
       setRepairAttempt(next);
       if (next <= 2) {
         setRepairStatus("repairing");
@@ -105,7 +110,7 @@ export function RepairController({
         setRepairStatus("fallback");
       }
     },
-    [currentCode, repair, repairAttempt]
+    [currentCode, repair]
   );
 
   // Register window message listener for game-error events
@@ -127,12 +132,14 @@ export function RepairController({
   }, [iframeRef, handleGameError]);
 
   function handleTryAgain() {
+    repairAttemptRef.current = 0;
     setRepairAttempt(0);
     setRepairStatus("idle");
     onTryAgain();
   }
 
   function handleRefine() {
+    repairAttemptRef.current = 0;
     setRepairAttempt(0);
     setRepairStatus("idle");
     onRefine();

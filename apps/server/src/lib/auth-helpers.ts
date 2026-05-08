@@ -1,17 +1,9 @@
 import { randomBytes } from "node:crypto";
+import { nextUtcMidnight, nextUtcMonthStart } from "../services/usage/reset.js";
 
-export function nextUtcMidnightMs(now: number): number {
-  const d = new Date(now);
-  d.setUTCHours(24, 0, 0, 0);
-  return d.getTime();
-}
-
-export function firstOfNextMonthUtcMs(now: number): number {
-  const d = new Date(now);
-  d.setUTCMonth(d.getUTCMonth() + 1, 1);
-  d.setUTCHours(0, 0, 0, 0);
-  return d.getTime();
-}
+// Re-export under the names used by auth.ts to avoid a breaking rename.
+export const nextUtcMidnightMs = nextUtcMidnight;
+export const firstOfNextMonthUtcMs = nextUtcMonthStart;
 
 export function randomHex(bytes: number): string {
   return randomBytes(bytes).toString("hex");

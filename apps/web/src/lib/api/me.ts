@@ -1,6 +1,7 @@
 import type { MeResponse, Theme } from "@arcadeai/shared";
+import { API_BASE } from "./client.js";
 
-const API = "http://localhost:3000";
+const API = API_BASE;
 
 export async function fetchMe(): Promise<MeResponse> {
   const res = await fetch(`${API}/api/me`, { credentials: "include" });

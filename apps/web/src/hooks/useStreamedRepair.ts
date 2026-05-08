@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API_BASE } from "../lib/api/client.js";
 
-const API = "http://localhost:3000";
+const API = API_BASE;
 
 export type RepairStatus = "idle" | "streaming" | "error";
 
@@ -10,13 +11,6 @@ export interface StreamedRepairState {
   error: string | null;
   start: (args: { error: { message: string; stack?: string } }) => void;
   stop: () => void;
-}
-
-export class ConcurrencyError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ConcurrencyError";
-  }
 }
 
 export function useStreamedRepair(gameId: string): StreamedRepairState {

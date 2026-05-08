@@ -1,7 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
+import { API_BASE } from "../lib/api/client.js";
 
-const API = "http://localhost:3000";
+const API = API_BASE;
 
 export type RefinementStatus = "idle" | "streaming" | "error";
 

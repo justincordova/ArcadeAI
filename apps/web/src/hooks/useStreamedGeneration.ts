@@ -1,7 +1,9 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
+import { API_BASE } from "../lib/api/client.js";
 
-const API = "http://localhost:3000";
+const API = API_BASE;
 
 export type StreamStatus = "idle" | "streaming" | "error";
 
@@ -23,6 +25,7 @@ export function useStreamedGeneration(): StreamedGenerationState {
   const abortRef = useRef<AbortController | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const attachIframe = useCallback((el: HTMLIFrameElement | null) => {
     iframeRef.current = el;
@@ -98,7 +101,7 @@ export function useStreamedGeneration(): StreamedGenerationState {
                 const parsed = JSON.parse(data);
                 if (event === "meta") {
                   setGameId(parsed.gameId);
-                  window.history.replaceState(null, "", `/game/${parsed.gameId}`);
+                  void navigate({ to: "/game/$id", params: { id: parsed.gameId }, replace: true });
                 } else if (event === "chunk") {
                   setCode((prev) => prev + parsed.delta);
                 } else if (event === "error") {
@@ -139,7 +142,7 @@ export function useStreamedGeneration(): StreamedGenerationState {
         }
       })();
     },
-    [queryClient]
+    [queryClient, navigate]
   );
 
   const stop = useCallback(() => {

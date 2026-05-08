@@ -10,6 +10,12 @@ import {
 } from "./auth-helpers.js";
 import { db } from "./db.js";
 
+if (!process.env.BETTER_AUTH_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error(
+    "BETTER_AUTH_SECRET is not set. Sessions would be signed with a public fallback, allowing forgery. Set BETTER_AUTH_SECRET in your environment."
+  );
+}
+
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-me",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",

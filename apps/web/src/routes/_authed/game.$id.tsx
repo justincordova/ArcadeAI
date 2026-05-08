@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Builder } from "../../components/builder/Builder.js";
+import { API_BASE } from "../../lib/api/client.js";
 
-const API = "http://localhost:3000";
+const API = API_BASE;
 
 interface GameData {
   id: string;

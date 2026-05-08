@@ -1,8 +1,9 @@
 import type { MeResponse } from "@arcadeai/shared";
+import { API_BASE } from "./api/client.js";
 
 export type { MeResponse };
 
-const API = "http://localhost:3000";
+const API = API_BASE;
 
 export async function fetchMe(): Promise<MeResponse | null> {
   try {
