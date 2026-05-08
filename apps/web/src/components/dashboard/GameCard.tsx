@@ -3,6 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { GAMES_QUERY_KEY, type GameSummary, deleteGame, patchGame } from "../../lib/api/games.js";
 import { toast } from "../ui/sonner.js";
+import { DeleteGameDialog } from "./DeleteGameDialog.js";
+import { PublicBadge } from "./PublicBadge.js";
 
 interface GameCardProps {
   game: GameSummary;
@@ -201,93 +203,14 @@ export function GameCard({ game, view }: GameCardProps) {
     </div>
   );
 
-  const deleteConfirm = confirmDelete && (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 50,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(0,0,0,0.7)",
-        backdropFilter: "blur(4px)",
-      }}
-    >
-      <div
-        style={{
-          width: "100%",
-          maxWidth: 380,
-          margin: "0 16px",
-          background: "var(--color-surface)",
-          border: "1px solid var(--color-border)",
-          borderRadius: 16,
-          overflow: "hidden",
-          boxShadow: "0 24px 64px rgba(0,0,0,0.6)",
-        }}
-      >
-        <div style={{ padding: "20px 20px 0" }}>
-          <h2
-            style={{
-              fontSize: 15,
-              fontWeight: 700,
-              color: "var(--color-text-primary)",
-              marginBottom: 6,
-            }}
-          >
-            Delete this game?
-          </h2>
-          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 20 }}>
-            This action cannot be undone.
-          </p>
-          {deleteMutation.isError && (
-            <p style={{ fontSize: 12, color: "var(--color-danger)", marginBottom: 12 }}>
-              Failed to delete. Please try again.
-            </p>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 8, padding: "0 20px 20px" }}>
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(false)}
-            style={{
-              flex: 1,
-              padding: "9px 16px",
-              borderRadius: 9,
-              border: "1px solid var(--color-border)",
-              background: "transparent",
-              fontSize: 13,
-              fontWeight: 600,
-              color: "var(--color-text-secondary)",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => deleteMutation.mutate()}
-            disabled={deleteMutation.isPending}
-            style={{
-              flex: 1,
-              padding: "9px 16px",
-              borderRadius: 9,
-              border: "none",
-              background: "linear-gradient(135deg, #b91c1c 0%, #f43f5e 100%)",
-              fontSize: 13,
-              fontWeight: 600,
-              color: "#fff",
-              cursor: deleteMutation.isPending ? "not-allowed" : "pointer",
-              fontFamily: "inherit",
-              opacity: deleteMutation.isPending ? 0.6 : 1,
-            }}
-          >
-            {deleteMutation.isPending ? "Deleting..." : "Delete"}
-          </button>
-        </div>
-      </div>
-    </div>
+  const deleteConfirm = (
+    <DeleteGameDialog
+      open={confirmDelete}
+      onOpenChange={setConfirmDelete}
+      onConfirm={() => deleteMutation.mutate()}
+      isDeleting={deleteMutation.isPending}
+      hasError={deleteMutation.isError}
+    />
   );
 
   // ── List view ──
@@ -647,39 +570,5 @@ export function GameCard({ game, view }: GameCardProps) {
       </div>
       {deleteConfirm}
     </>
-  );
-}
-
-function PublicBadge() {
-  return (
-    <span
-      title="This game is publicly shareable"
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "3px 7px",
-        borderRadius: 6,
-        fontSize: 10,
-        fontWeight: 700,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-        color: "var(--color-success)",
-        background: "rgba(9,9,15,0.75)",
-        backdropFilter: "blur(8px)",
-        border: "1px solid rgba(34,211,160,0.4)",
-      }}
-    >
-      <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-        <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4" />
-        <path
-          d="M1.5 6h9M6 1.5c1.5 1.5 2.4 3 2.4 4.5S7.5 9 6 10.5C4.5 9 3.6 7.5 3.6 6S4.5 3 6 1.5z"
-          stroke="currentColor"
-          strokeWidth="1.2"
-          fill="none"
-        />
-      </svg>
-      Public
-    </span>
   );
 }
