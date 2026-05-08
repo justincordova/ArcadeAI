@@ -418,18 +418,21 @@ export function GameCard({ game, view }: GameCardProps) {
                   }}
                 />
               ) : (
-                <p
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: "var(--color-text-primary)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {game.title}
-                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: "var(--color-text-primary)",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {game.title}
+                  </p>
+                  {game.isPublic && <PublicBadge />}
+                </div>
               )}
               <p style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 2 }}>
                 Edited {formatRelative(game.updatedAt)}
@@ -628,8 +631,49 @@ export function GameCard({ game, view }: GameCardProps) {
 
         {/* Kebab */}
         <div style={{ position: "absolute", right: 8, top: 8 }}>{kebab}</div>
+
+        {/* Public badge — top-left so it doesn't conflict with the kebab */}
+        {game.isPublic && (
+          <div style={{ position: "absolute", left: 8, top: 8 }}>
+            <PublicBadge />
+          </div>
+        )}
       </div>
       {deleteConfirm}
     </>
+  );
+}
+
+function PublicBadge() {
+  return (
+    <span
+      title="This game is publicly shareable"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "3px 7px",
+        borderRadius: 6,
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        color: "var(--color-success)",
+        background: "rgba(9,9,15,0.75)",
+        backdropFilter: "blur(8px)",
+        border: "1px solid rgba(34,211,160,0.4)",
+      }}
+    >
+      <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+        <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4" />
+        <path
+          d="M1.5 6h9M6 1.5c1.5 1.5 2.4 3 2.4 4.5S7.5 9 6 10.5C4.5 9 3.6 7.5 3.6 6S4.5 3 6 1.5z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          fill="none"
+        />
+      </svg>
+      Public
+    </span>
   );
 }

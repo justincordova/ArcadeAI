@@ -1,11 +1,11 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { getMissingKeyError, useConfig } from "../../hooks/useConfig.js";
 import { useStreamedGeneration } from "../../hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "../../hooks/useStreamedRefinement.js";
-import { GAMES_QUERY_KEY, postThumbnail } from "../../lib/api/games.js";
+import { GAMES_QUERY_KEY, postThumbnail, publishGame, unpublishGame } from "../../lib/api/games.js";
 import { GameIframe } from "./GameIframe.js";
 import { RepairController, type RepairStatus } from "./RepairController.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
@@ -358,6 +358,134 @@ function StreamingIndicator({ label }: { label: string }) {
 }
 
 const SUGGESTIONS = ["A simple snake game", "Asteroids with power-ups", "Pong with AI opponent"];
+
+/**
+ * Share toggle for an existing game. Reads the current publish state from
+ * the cached `["game", gameId]` query and toggles publish/unpublish via
+ * mutations. Copies the public URL to the clipboard on successful publish.
+ */
+function ShareButton({ gameId }: { gameId: string }) {
+  const queryClient = useQueryClient();
+  const cached = queryClient.getQueryData<{
+    isPublic?: boolean;
+    publicSlug?: string | null;
+  }>(["game", gameId]);
+  const isPublic = Boolean(cached?.isPublic);
+  const slug = cached?.publicSlug ?? null;
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const publishMutation = useMutation({
+    mutationFn: () => publishGame(gameId),
+    onSuccess: (result) => {
+      const url = `${window.location.origin}/play/${result.slug}`;
+      navigator.clipboard?.writeText(url).catch(() => {});
+      setFeedback("Link copied!");
+      setTimeout(() => setFeedback(null), 2000);
+      queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+    },
+    onError: () => {
+      setFeedback("Failed to publish");
+      setTimeout(() => setFeedback(null), 2000);
+    },
+  });
+
+  const unpublishMutation = useMutation({
+    mutationFn: () => unpublishGame(gameId),
+    onSuccess: () => {
+      setFeedback("Now private");
+      setTimeout(() => setFeedback(null), 2000);
+      queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+    },
+  });
+
+  function handleClick() {
+    if (isPublic) {
+      unpublishMutation.mutate();
+    } else {
+      publishMutation.mutate();
+    }
+  }
+
+  function handleCopy() {
+    if (!slug) return;
+    const url = `${window.location.origin}/play/${slug}`;
+    navigator.clipboard?.writeText(url).catch(() => {});
+    setFeedback("Link copied!");
+    setTimeout(() => setFeedback(null), 2000);
+  }
+
+  const busy = publishMutation.isPending || unpublishMutation.isPending;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {feedback && (
+        <span style={{ fontSize: 11, color: "var(--color-text-secondary)" }}>{feedback}</span>
+      )}
+      {isPublic && slug && !feedback && (
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label="Copy public link"
+          title={`Copy ${window.location.origin}/play/${slug}`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "3px 8px",
+            borderRadius: 6,
+            fontSize: 11,
+            color: "var(--color-text-secondary)",
+            background: "var(--color-surface-raised)",
+            border: "1px solid var(--color-border)",
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          /play/{slug}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={busy}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "5px 10px",
+          borderRadius: 7,
+          fontSize: 11,
+          fontWeight: 600,
+          fontFamily: "inherit",
+          letterSpacing: "0.04em",
+          textTransform: "uppercase",
+          border: isPublic ? "1px solid rgba(34,211,160,0.4)" : "1px solid var(--color-border)",
+          background: isPublic ? "rgba(34,211,160,0.08)" : "transparent",
+          color: isPublic ? "var(--color-success)" : "var(--color-text-secondary)",
+          cursor: busy ? "wait" : "pointer",
+          opacity: busy ? 0.6 : 1,
+          transition: "all 0.15s",
+        }}
+      >
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          {isPublic ? (
+            <path
+              d="M2 6.5l3 3 5-7"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+          ) : (
+            <path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          )}
+        </svg>
+        {isPublic ? "Public" : "Share"}
+      </button>
+    </div>
+  );
+}
 
 function BuilderLayout({
   messages,
@@ -745,11 +873,7 @@ function BuilderLayout({
               {displayCode ? "Live Preview" : "Preview"}
             </span>
           </div>
-          {gameId && (
-            <span style={{ fontSize: 10, color: "var(--color-text-muted)" }}>
-              ID: {gameId.slice(0, 8)}
-            </span>
-          )}
+          {gameId && <ShareButton gameId={gameId} />}
         </div>
 
         {/* Game area */}

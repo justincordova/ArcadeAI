@@ -7,6 +7,29 @@ export interface GameSummary {
   title: string;
   thumbnail: string | null;
   updatedAt: number;
+  isPublic: boolean;
+  publicSlug: string | null;
+}
+
+export interface PublicGame {
+  id: string;
+  title: string;
+  currentCode: string;
+  originalPrompt: string;
+  ownerDisplayName: string;
+  publishedAt: number | null;
+}
+
+export interface PublishResponse {
+  slug: string;
+  isPublic: boolean;
+  publishedAt: number;
+}
+
+export interface RemixResponse {
+  id: string;
+  title: string;
+  remixedFromGameId: string;
 }
 
 export const GAMES_QUERY_KEY = ["games"] as const;
@@ -44,4 +67,53 @@ export async function postThumbnail(id: string, dataUrl: string): Promise<void> 
     body: JSON.stringify({ thumbnail: dataUrl }),
   });
   if (!res.ok) throw new Error("Failed to save thumbnail");
+}
+
+// ── Public sharing ───────────────────────────────────────────────────────────
+
+export async function publishGame(id: string): Promise<PublishResponse> {
+  const res = await fetch(`${API}/api/games/${id}/publish`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to publish game");
+  return res.json() as Promise<PublishResponse>;
+}
+
+export async function unpublishGame(id: string): Promise<void> {
+  const res = await fetch(`${API}/api/games/${id}/unpublish`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to unpublish game");
+}
+
+/**
+ * Fetch a public game by slug. Returns null on 404 so callers can render
+ * a "not found" state cleanly instead of catching exceptions.
+ */
+export async function fetchPublicGame(slug: string): Promise<PublicGame | null> {
+  const res = await fetch(`${API}/api/play/${slug}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to load public game");
+  return res.json() as Promise<PublicGame>;
+}
+
+export async function remixPublicGame(slug: string): Promise<RemixResponse> {
+  const res = await fetch(`${API}/api/play/${slug}/remix`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (res.status === 401) {
+    throw new Error("Sign in to remix");
+  }
+  if (res.status === 402) {
+    const body = (await res.json()) as { kind?: string; resetAt?: number };
+    if (body.kind === "lifetime" || body.resetAt === 0) {
+      throw new Error("You've used your free trial. Upgrade for more remixes.");
+    }
+    throw new Error("Out of credits — upgrade for more remixes.");
+  }
+  if (!res.ok) throw new Error("Failed to remix game");
+  return res.json() as Promise<RemixResponse>;
 }
