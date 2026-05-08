@@ -16,5 +16,10 @@ export interface MeResponse {
   creditsRemainingMonthly: number;
   dailyResetAt: number;
   monthlyResetAt: number;
+  // Lifetime counters used by the temporary deployment-phase free-tier policy.
+  // Always returned; the client decides how to render based on the active
+  // policy (see ENFORCE_LIFETIME_LIMITS_FOR_FREE in plans.ts).
+  lifetimeGenerationsUsed: number;
+  lifetimeRefinementsUsed: number;
   linkedProviders: LinkedProvider[];
 }

@@ -1,26 +1,109 @@
 // SPEC §10: credit deduction, refund idempotency, admin bypass.
 // Only Free has an enforced daily cap; Creator/Pro skip the daily check.
+//
+// Deployment-phase addition: when ENFORCE_LIFETIME_LIMITS_FOR_FREE is on, the
+// free tier is gated by FREE_TIER_LIFETIME_LIMITS — a hard cap on
+// generations and refinements per account, ever. The lifetime counters live
+// on the user row; their guard is folded into the same atomic UPDATE that
+// decrements credits, so a race between two concurrent free-tier requests
+// can't bypass the cap.
 
 import { randomUUID } from "node:crypto";
 import { usageLog, users } from "@arcadeai/db";
-import { CREDIT_COSTS, TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
+import {
+  CREDIT_COSTS,
+  ENFORCE_LIFETIME_LIMITS_FOR_FREE,
+  FREE_TIER_LIFETIME_LIMITS,
+  TIER_CREDIT_LIMITS,
+  type Tier,
+} from "@arcadeai/shared";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, sqlite } from "../../lib/db.js";
 import { applyResets } from "./reset.js";
 
-export type RefundReason = "llm_error" | "timeout" | "validation_error" | "abort";
+export type RefundReason =
+  | "llm_error"
+  | "timeout"
+  | "validation_error"
+  | "abort"
+  | "persistence_error";
+
+export type InsufficientCreditsKind = "daily" | "monthly" | "lifetime";
 
 export class InsufficientCreditsError extends Error {
   resetAt: number;
-  constructor(message: string, resetAt: number) {
+  kind: InsufficientCreditsKind;
+  constructor(message: string, resetAt: number, kind: InsufficientCreditsKind) {
     super(message);
     this.name = "InsufficientCreditsError";
     this.resetAt = resetAt;
+    this.kind = kind;
   }
 }
 
 type Action = "generation" | "refinement" | "repair";
+
+/**
+ * Upfront credit/lifetime check used by streaming routes BEFORE they hijack
+ * the response. Returns null if the user can afford the action; otherwise
+ * returns a 402-shaped error object the caller can `reply.status(402).send()`.
+ *
+ * The atomic guard inside `deduct()` is the source of truth — this is purely
+ * a UX optimization to surface 402 BEFORE the SSE response opens, so the
+ * client can show a friendly upgrade banner instead of an SSE error event.
+ */
+export function checkUpfront(
+  userState: {
+    tier: Tier;
+    creditsRemainingDaily: number;
+    creditsRemainingMonthly: number;
+    dailyResetAt: number;
+    monthlyResetAt: number;
+    lifetimeGenerationsUsed: number;
+    lifetimeRefinementsUsed: number;
+  },
+  action: Action
+): { error: "insufficient_credits"; resetAt: number; kind: InsufficientCreditsKind } | null {
+  if (userState.tier === "admin") return null;
+
+  const cost = CREDIT_COSTS[action];
+  const limits = TIER_CREDIT_LIMITS[userState.tier];
+
+  // Lifetime check first — it's the hardest gate. Free tier only, when the
+  // flag is on. Repairs are exempt (action handled below by lifetimeCounterFor).
+  if (userState.tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE) {
+    const lifetimeKey = lifetimeCounterFor(action);
+    if (
+      lifetimeKey === "generations" &&
+      userState.lifetimeGenerationsUsed >= FREE_TIER_LIFETIME_LIMITS.generations
+    ) {
+      return { error: "insufficient_credits", resetAt: 0, kind: "lifetime" };
+    }
+    if (
+      lifetimeKey === "refinements" &&
+      userState.lifetimeRefinementsUsed >= FREE_TIER_LIFETIME_LIMITS.refinements
+    ) {
+      return { error: "insufficient_credits", resetAt: 0, kind: "lifetime" };
+    }
+  }
+
+  if (limits.dailyEnforced && userState.creditsRemainingDaily < cost) {
+    return { error: "insufficient_credits", resetAt: userState.dailyResetAt, kind: "daily" };
+  }
+  if (userState.creditsRemainingMonthly < cost) {
+    return { error: "insufficient_credits", resetAt: userState.monthlyResetAt, kind: "monthly" };
+  }
+  return null;
+}
+
+// Map an action to which lifetime counter (if any) it should increment.
+// Repairs don't count against any lifetime cap (they're free + bug-fixing).
+function lifetimeCounterFor(action: Action): "generations" | "refinements" | null {
+  if (action === "generation") return "generations";
+  if (action === "refinement") return "refinements";
+  return null;
+}
 
 export async function deduct(
   userId: string,
@@ -36,7 +119,7 @@ export async function deduct(
   const limits = TIER_CREDIT_LIMITS[tier];
 
   if (tier === "admin") {
-    // Admin: no credit check, insert zero-cost log row
+    // Admin: no credit check, no lifetime check, insert zero-cost log row
     const logId = randomUUID();
     await db.insert(usageLog).values({
       id: logId,
@@ -44,6 +127,7 @@ export async function deduct(
       gameId,
       action,
       creditsCharged: 0,
+      lifetimeCounterIncremented: false,
       succeeded: 0,
       refundedAt: null,
       createdAt: Date.now(),
@@ -51,33 +135,94 @@ export async function deduct(
     return { logId };
   }
 
-  // Atomically decrement counters only when the balance is sufficient.
-  // A plain read→check→write is a TOCTOU race: two concurrent requests from
-  // the same user can both pass the upfront credit check and both deduct.
-  // Instead, issue a single conditional UPDATE using the raw sqlite handle so
-  // we can inspect `changes` on the Statement result. SQLite serializes
-  // writes, so if `changes === 0` the WHERE guard failed — balance was too low.
+  // Determine whether the lifetime guard applies on this call.
+  const lifetimeKey =
+    tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE ? lifetimeCounterFor(action) : null;
+
+  // Build the atomic conditional UPDATE. Folding the lifetime guard into the
+  // same WHERE clause means a TOCTOU race between two concurrent requests
+  // can't bypass the cap — at most one UPDATE will satisfy the condition.
   let changedRows: number;
-  if (limits.dailyEnforced) {
+  if (lifetimeKey === "generations") {
+    const limit = FREE_TIER_LIFETIME_LIMITS.generations;
     const stmt = sqlite.prepare(
-      `UPDATE "user" SET credits_remaining_daily = credits_remaining_daily - ?, credits_remaining_monthly = credits_remaining_monthly - ? WHERE id = ? AND credits_remaining_daily >= ? AND credits_remaining_monthly >= ?`
+      `UPDATE "user"
+          SET credits_remaining_daily   = credits_remaining_daily   - ?,
+              credits_remaining_monthly = credits_remaining_monthly - ?,
+              lifetime_generations_used = lifetime_generations_used + 1
+        WHERE id = ?
+          AND credits_remaining_daily   >= ?
+          AND credits_remaining_monthly >= ?
+          AND lifetime_generations_used < ?`
     );
-    const result = stmt.run(cost, cost, userId, cost, cost);
-    changedRows = result.changes;
+    changedRows = stmt.run(cost, cost, userId, cost, cost, limit).changes;
+  } else if (lifetimeKey === "refinements") {
+    const limit = FREE_TIER_LIFETIME_LIMITS.refinements;
+    const stmt = sqlite.prepare(
+      `UPDATE "user"
+          SET credits_remaining_daily   = credits_remaining_daily   - ?,
+              credits_remaining_monthly = credits_remaining_monthly - ?,
+              lifetime_refinements_used = lifetime_refinements_used + 1
+        WHERE id = ?
+          AND credits_remaining_daily   >= ?
+          AND credits_remaining_monthly >= ?
+          AND lifetime_refinements_used < ?`
+    );
+    changedRows = stmt.run(cost, cost, userId, cost, cost, limit).changes;
+  } else if (limits.dailyEnforced) {
+    const stmt = sqlite.prepare(
+      `UPDATE "user"
+          SET credits_remaining_daily   = credits_remaining_daily   - ?,
+              credits_remaining_monthly = credits_remaining_monthly - ?
+        WHERE id = ?
+          AND credits_remaining_daily   >= ?
+          AND credits_remaining_monthly >= ?`
+    );
+    changedRows = stmt.run(cost, cost, userId, cost, cost).changes;
   } else {
     const stmt = sqlite.prepare(
-      `UPDATE "user" SET credits_remaining_daily = credits_remaining_daily - ?, credits_remaining_monthly = credits_remaining_monthly - ? WHERE id = ? AND credits_remaining_monthly >= ?`
+      `UPDATE "user"
+          SET credits_remaining_daily   = credits_remaining_daily   - ?,
+              credits_remaining_monthly = credits_remaining_monthly - ?
+        WHERE id = ?
+          AND credits_remaining_monthly >= ?`
     );
-    const result = stmt.run(cost, cost, userId, cost);
-    changedRows = result.changes;
+    changedRows = stmt.run(cost, cost, userId, cost).changes;
   }
 
   if (changedRows === 0) {
-    // Re-read user to determine which limit was hit for the correct resetAt.
-    if (limits.dailyEnforced && user.creditsRemainingDaily < cost) {
-      throw new InsufficientCreditsError("Daily credit limit reached", user.dailyResetAt);
+    // The atomic UPDATE failed its guard. Determine which condition triggered
+    // it based on the user state we read at the top of this function. The
+    // re-read is best-effort; concurrent racers may have shifted state, but
+    // the resulting error is still a true rejection.
+    if (
+      lifetimeKey === "generations" &&
+      user.lifetimeGenerationsUsed >= FREE_TIER_LIFETIME_LIMITS.generations
+    ) {
+      throw new InsufficientCreditsError(
+        "Free tier lifetime generation limit reached. Upgrade for more.",
+        0,
+        "lifetime"
+      );
     }
-    throw new InsufficientCreditsError("Monthly credit limit reached", user.monthlyResetAt);
+    if (
+      lifetimeKey === "refinements" &&
+      user.lifetimeRefinementsUsed >= FREE_TIER_LIFETIME_LIMITS.refinements
+    ) {
+      throw new InsufficientCreditsError(
+        "Free tier lifetime refinement limit reached. Upgrade for more.",
+        0,
+        "lifetime"
+      );
+    }
+    if (limits.dailyEnforced && user.creditsRemainingDaily < cost) {
+      throw new InsufficientCreditsError("Daily credit limit reached", user.dailyResetAt, "daily");
+    }
+    throw new InsufficientCreditsError(
+      "Monthly credit limit reached",
+      user.monthlyResetAt,
+      "monthly"
+    );
   }
 
   const logId = randomUUID();
@@ -87,6 +232,7 @@ export async function deduct(
     gameId,
     action,
     creditsCharged: cost,
+    lifetimeCounterIncremented: lifetimeKey !== null,
     succeeded: 0,
     refundedAt: null,
     createdAt: Date.now(),
@@ -108,6 +254,7 @@ export async function refund(
     .select({
       userId: usageLog.userId,
       creditsCharged: usageLog.creditsCharged,
+      lifetimeCounterIncremented: usageLog.lifetimeCounterIncremented,
       refundedAt: usageLog.refundedAt,
       action: usageLog.action,
     })
@@ -118,14 +265,43 @@ export async function refund(
   if (!row || row.refundedAt !== null) return; // already refunded or not found
 
   const cost = row.creditsCharged;
-  if (cost > 0) {
-    await db
-      .update(users)
-      .set({
-        creditsRemainingDaily: sql`${users.creditsRemainingDaily} + ${cost}`,
-        creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} + ${cost}`,
-      })
-      .where(eq(users.id, row.userId));
+  const action = row.action as Action;
+  // Whether to decrement the lifetime counter is recorded on the log row at
+  // deduct time, not re-derived. This is robust against the
+  // ENFORCE_LIFETIME_LIMITS_FOR_FREE flag flipping or the user's tier
+  // changing between deduct and refund.
+  const lifetimeKey = row.lifetimeCounterIncremented ? lifetimeCounterFor(action) : null;
+
+  if (cost > 0 || lifetimeKey !== null) {
+    if (lifetimeKey === "generations") {
+      await db
+        .update(users)
+        .set({
+          creditsRemainingDaily: sql`${users.creditsRemainingDaily} + ${cost}`,
+          creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} + ${cost}`,
+          // CASE-guarded so we never go below 0 even if the row was reset
+          // between deduct and refund.
+          lifetimeGenerationsUsed: sql`CASE WHEN ${users.lifetimeGenerationsUsed} > 0 THEN ${users.lifetimeGenerationsUsed} - 1 ELSE 0 END`,
+        })
+        .where(eq(users.id, row.userId));
+    } else if (lifetimeKey === "refinements") {
+      await db
+        .update(users)
+        .set({
+          creditsRemainingDaily: sql`${users.creditsRemainingDaily} + ${cost}`,
+          creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} + ${cost}`,
+          lifetimeRefinementsUsed: sql`CASE WHEN ${users.lifetimeRefinementsUsed} > 0 THEN ${users.lifetimeRefinementsUsed} - 1 ELSE 0 END`,
+        })
+        .where(eq(users.id, row.userId));
+    } else if (cost > 0) {
+      await db
+        .update(users)
+        .set({
+          creditsRemainingDaily: sql`${users.creditsRemainingDaily} + ${cost}`,
+          creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} + ${cost}`,
+        })
+        .where(eq(users.id, row.userId));
+    }
   }
 
   await db.update(usageLog).set({ refundedAt: Date.now() }).where(eq(usageLog.id, logId));

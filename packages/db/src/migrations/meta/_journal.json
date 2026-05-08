@@ -15,6 +15,20 @@
       "when": 1778126198210,
       "tag": "0001_clammy_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1778213713265,
+      "tag": "0002_large_sabra",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1778213833786,
+      "tag": "0003_crazy_malcolm_colcord",
+      "breakpoints": true
     }
   ]
 }

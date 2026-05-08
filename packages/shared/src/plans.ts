@@ -29,6 +29,19 @@ export const CREDIT_COSTS = {
   repair: 0,
 } as const;
 
+// ── Temporary deployment-phase free-tier policy ───────────────────────────────
+// During the initial public deployment, free users are throttled to a hard
+// lifetime cap to gate runaway costs while we observe real usage. Once we have
+// data, flip ENFORCE_LIFETIME_LIMITS_FOR_FREE to false and the standard SPEC §10
+// limits (3000/mo, 500/day) apply again. The lifetime_*_used columns stay in
+// the DB regardless for observability.
+export const FREE_TIER_LIFETIME_LIMITS = {
+  generations: 1,
+  refinements: 3,
+} as const;
+
+export const ENFORCE_LIFETIME_LIMITS_FOR_FREE = true;
+
 // ── Plan display types (step 08) ──────────────────────────────────────────────
 
 // The four tiers visible on the pricing page (enterprise is display-only)

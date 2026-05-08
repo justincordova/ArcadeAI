@@ -1,0 +1,1 @@
+ALTER TABLE `usage_log` ADD `lifetime_counter_incremented` integer DEFAULT false NOT NULL;

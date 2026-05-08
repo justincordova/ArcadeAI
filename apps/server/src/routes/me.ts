@@ -47,6 +47,8 @@ async function loadMe(userId: string): Promise<MeResponse | null> {
     creditsRemainingMonthly: counters.creditsRemainingMonthly,
     dailyResetAt: counters.dailyResetAt,
     monthlyResetAt: counters.monthlyResetAt,
+    lifetimeGenerationsUsed: user.lifetimeGenerationsUsed,
+    lifetimeRefinementsUsed: user.lifetimeRefinementsUsed,
     linkedProviders,
   };
 }

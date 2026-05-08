@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { games, messages } from "@arcadeai/db";
-import { CREDIT_COSTS, TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import { asc, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -19,6 +18,7 @@ import { retrieveExample } from "../services/rag/retrieve.js";
 import { buildRefinementContext } from "../services/refinement/context.js";
 import {
   InsufficientCreditsError,
+  checkUpfront,
   deduct,
   markSucceeded,
   refund,
@@ -83,25 +83,15 @@ export async function gamesRoutes(app: FastifyInstance) {
     const { prompt } = parseResult.data;
     const userId = request.authSession.user.id;
 
-    // Upfront credit check (before creating game row per SPEC §11)
+    // Upfront credit check (before creating game row per SPEC §11). The
+    // atomic guard inside `deduct` is the source of truth — this is a UX
+    // optimization to surface 402 before any DB writes or SSE handshakes.
     const userState = await applyResets(userId);
     if (!userState) return reply.status(404).send({ error: "User not found" });
 
-    const cost = CREDIT_COSTS.generation;
-    const limits = TIER_CREDIT_LIMITS[userState.tier as keyof typeof TIER_CREDIT_LIMITS];
-    if (userState.tier !== "admin") {
-      if (limits.dailyEnforced && userState.creditsRemainingDaily < cost) {
-        return reply.status(402).send({
-          error: "insufficient_credits",
-          resetAt: userState.dailyResetAt,
-        });
-      }
-      if (userState.creditsRemainingMonthly < cost) {
-        return reply.status(402).send({
-          error: "insufficient_credits",
-          resetAt: userState.monthlyResetAt,
-        });
-      }
+    const upfront = checkUpfront(userState, "generation");
+    if (upfront) {
+      return reply.status(402).send(upfront);
     }
 
     // Concurrency cap: 1 active stream per user
@@ -160,6 +150,7 @@ export async function gamesRoutes(app: FastifyInstance) {
           return reply.status(402).send({
             error: "insufficient_credits",
             resetAt: err.resetAt,
+            kind: err.kind,
           });
         }
         throw err;
@@ -439,22 +430,9 @@ export async function gamesRoutes(app: FastifyInstance) {
     const refineUserState = await applyResets(userId);
     if (!refineUserState) return reply.status(404).send({ error: "User not found" });
 
-    const refineCost = CREDIT_COSTS.refinement;
-    const refineLimits =
-      TIER_CREDIT_LIMITS[refineUserState.tier as keyof typeof TIER_CREDIT_LIMITS];
-    if (refineUserState.tier !== "admin") {
-      if (refineLimits.dailyEnforced && refineUserState.creditsRemainingDaily < refineCost) {
-        return reply.status(402).send({
-          error: "insufficient_credits",
-          resetAt: refineUserState.dailyResetAt,
-        });
-      }
-      if (refineUserState.creditsRemainingMonthly < refineCost) {
-        return reply.status(402).send({
-          error: "insufficient_credits",
-          resetAt: refineUserState.monthlyResetAt,
-        });
-      }
+    const refineUpfront = checkUpfront(refineUserState, "refinement");
+    if (refineUpfront) {
+      return reply.status(402).send(refineUpfront);
     }
 
     // Concurrency cap: 1 active stream per user
@@ -477,6 +455,7 @@ export async function gamesRoutes(app: FastifyInstance) {
           return reply.status(402).send({
             error: "insufficient_credits",
             resetAt: err.resetAt,
+            kind: err.kind,
           });
         }
         throw err;

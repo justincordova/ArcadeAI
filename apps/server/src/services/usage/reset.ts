@@ -28,6 +28,8 @@ export async function applyResets(userId: string) {
       creditsRemainingMonthly: users.creditsRemainingMonthly,
       dailyResetAt: users.dailyResetAt,
       monthlyResetAt: users.monthlyResetAt,
+      lifetimeGenerationsUsed: users.lifetimeGenerationsUsed,
+      lifetimeRefinementsUsed: users.lifetimeRefinementsUsed,
     })
     .from(users)
     .where(eq(users.id, userId));
@@ -76,5 +78,7 @@ export async function applyResets(userId: string) {
     creditsRemainingMonthly: changed ? creditsRemainingMonthly : user.creditsRemainingMonthly,
     dailyResetAt,
     monthlyResetAt,
+    lifetimeGenerationsUsed: user.lifetimeGenerationsUsed,
+    lifetimeRefinementsUsed: user.lifetimeRefinementsUsed,
   };
 }

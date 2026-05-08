@@ -15,6 +15,13 @@ export const users = sqliteTable("user", {
   creditsRemainingMonthly: integer("credits_remaining_monthly").notNull().default(3000),
   dailyResetAt: integer("daily_reset_at").notNull().default(0),
   monthlyResetAt: integer("monthly_reset_at").notNull().default(0),
+  // Lifetime counters used by the temporary deployment-phase free-tier policy
+  // (see packages/shared/src/plans.ts:FREE_TIER_LIFETIME_LIMITS). These are
+  // monotonically incremented on success and decremented only on refund. They
+  // exist for all tiers so the schema is consistent, but are only enforced
+  // when ENFORCE_LIFETIME_LIMITS_FOR_FREE is true and tier === 'free'.
+  lifetimeGenerationsUsed: integer("lifetime_generations_used").notNull().default(0),
+  lifetimeRefinementsUsed: integer("lifetime_refinements_used").notNull().default(0),
   theme: text("theme").notNull().default("dark"), // 'dark' | 'light' | 'system'
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
@@ -102,6 +109,13 @@ export const usageLog = sqliteTable(
     gameId: text("game_id").references(() => games.id, { onDelete: "set null" }),
     action: text("action").notNull(), // 'generation' | 'refinement' | 'repair'
     creditsCharged: integer("credits_charged").notNull(),
+    // True if this deduct also incremented the user's lifetime counter
+    // (free tier + ENFORCE_LIFETIME_LIMITS_FOR_FREE). Refund consults this
+    // to decide whether to decrement the counter back, independent of the
+    // current tier or flag value (which may have changed since deduct).
+    lifetimeCounterIncremented: integer("lifetime_counter_incremented", { mode: "boolean" })
+      .notNull()
+      .default(false),
     succeeded: integer("succeeded").notNull().default(0), // 0 or 1
     refundedAt: integer("refunded_at"),
     createdAt: integer("created_at").notNull(),
