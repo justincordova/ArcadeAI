@@ -1,5 +1,24 @@
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+// Closed enum sets used by typed `text(..., { enum })` columns. Duplicated
+// from `@arcadeai/shared` rather than imported because @arcadeai/db is a
+// lower-level package — letting it depend back on shared would create a
+// circular relationship in the workspace graph.
+const TIER_VALUES = ["free", "creator", "pro", "admin"] as const;
+const GENRE_VALUES = [
+  "paddle",
+  "snake",
+  "flappy",
+  "shooter",
+  "platformer",
+  "puzzle",
+  "runner",
+  "other",
+] as const;
+const MESSAGE_KIND_VALUES = ["prompt", "feedback"] as const;
+const USAGE_ACTION_VALUES = ["generation", "refinement", "repair"] as const;
+const THEME_VALUES = ["dark", "light", "system"] as const;
+
 // users — extended from Better Auth's user table
 // Better Auth manages the base user/session/account/verification tables.
 // Our custom columns are declared here and included via Better Auth's additionalFields.
@@ -10,7 +29,7 @@ export const users = sqliteTable("user", {
   name: text("name").notNull().default(""),
   image: text("image"),
   displayName: text("display_name").notNull().default(""),
-  tier: text("tier").notNull().default("free"), // 'free' | 'creator' | 'pro' | 'admin'
+  tier: text("tier", { enum: TIER_VALUES }).notNull().default("free"),
   creditsRemainingDaily: integer("credits_remaining_daily").notNull().default(500),
   creditsRemainingMonthly: integer("credits_remaining_monthly").notNull().default(3000),
   dailyResetAt: integer("daily_reset_at").notNull().default(0),
@@ -22,7 +41,7 @@ export const users = sqliteTable("user", {
   // when ENFORCE_LIFETIME_LIMITS_FOR_FREE is true and tier === 'free'.
   lifetimeGenerationsUsed: integer("lifetime_generations_used").notNull().default(0),
   lifetimeRefinementsUsed: integer("lifetime_refinements_used").notNull().default(0),
-  theme: text("theme").notNull().default("dark"), // 'dark' | 'light' | 'system'
+  theme: text("theme", { enum: THEME_VALUES }).notNull().default("dark"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -77,7 +96,7 @@ export const games = sqliteTable(
     title: text("title").notNull(),
     currentCode: text("current_code").notNull().default(""),
     thumbnail: text("thumbnail"),
-    genre: text("genre"),
+    genre: text("genre", { enum: GENRE_VALUES }),
     originalPrompt: text("original_prompt").notNull(),
     // Public sharing — when isPublic is true, the game is reachable via
     // /play/<publicSlug> with no auth required. Slug is generated on first
@@ -102,7 +121,7 @@ export const messages = sqliteTable(
     gameId: text("game_id")
       .notNull()
       .references(() => games.id, { onDelete: "cascade" }),
-    kind: text("kind").notNull(), // 'prompt' | 'feedback'
+    kind: text("kind", { enum: MESSAGE_KIND_VALUES }).notNull(),
     content: text("content").notNull(),
     createdAt: integer("created_at").notNull(),
   },
@@ -117,7 +136,7 @@ export const usageLog = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     gameId: text("game_id").references(() => games.id, { onDelete: "set null" }),
-    action: text("action").notNull(), // 'generation' | 'refinement' | 'repair'
+    action: text("action", { enum: USAGE_ACTION_VALUES }).notNull(),
     creditsCharged: integer("credits_charged").notNull(),
     // True if this deduct also incremented the user's lifetime counter
     // (free tier + ENFORCE_LIFETIME_LIMITS_FOR_FREE). Refund consults this
@@ -135,7 +154,7 @@ export const usageLog = sqliteTable(
 
 export const ragExamples = sqliteTable("rag_examples", {
   id: text("id").primaryKey(),
-  genre: text("genre").notNull(),
+  genre: text("genre", { enum: GENRE_VALUES }).notNull(),
   prompt: text("prompt").notNull(),
   html: text("html").notNull(),
   createdAt: integer("created_at").notNull(),

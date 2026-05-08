@@ -327,24 +327,13 @@ export function sendError(reply: FastifyReply, status: number, error: ApiError):
 
 All routes migrate. The frontend switches on `code` instead of parsing `message` strings. **Migration is per-route to keep diffs reviewable** — server route + matching client error handler in the same commit.
 
-**games.ts split (#57):**
+**games.ts split (#57): deferred.**
 
-Extract the 696-line `routes/games.ts` into:
-```
-services/generation/
-  run-generation.ts        // the long pipeline currently inlined
-  run-refinement.ts
-  run-repair.ts
-routes/
-  games.ts                 // thin: parse, delegate to service, write SSE
-```
-
-Each `run-*.ts` returns an async generator yielding SSE events. Route handler iterates and writes. Massively more testable: services unit-test against a fake LLM client.
+Original plan was to extract the 770-line `routes/games.ts` into `services/generation/run-{generation,refinement,repair}.ts` async generators. The stated motivation was testability. Reassessing: Fastify routes are testable via `app.inject()` regardless of internal structure, so the generator extraction adds significant rewrite risk for marginal testing benefit when there are no tests yet to backstop the refactor. Revisit once Milestone I has integration tests in place — then the split (or a different decomposition that the tests prove correct) can be done with a safety net.
 
 **Enum constraints (#54, #55, #59):**
-- `tier`, `genre`, `messages.kind`, `usageLog.action` get Drizzle enum types
-- New migration adds CHECK constraints
-- Existing data audited and normalized first
+- `tier`, `genre`, `theme`, `messages.kind`, `usageLog.action` get Drizzle enum types so the TS layer catches typos at compile time
+- DB-level CHECK constraints **deferred**: SQLite doesn't support `ALTER TABLE ADD CONSTRAINT`, so the CHECK migration would require recreating each table — risky on a live DB for marginal value (Zod schemas at the route layer already enforce the same invariant). Revisit alongside any future schema-rebuild migration.
 
 **DB client (#51):**
 - `lib/db.ts` exports `createDb(path)` factory
