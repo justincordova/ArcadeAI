@@ -62,10 +62,18 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
           }
 
           if (res.status === 402) {
-            const body = (await res.json()) as { error: string; resetAt: number };
-            const resetDate = new Date(body.resetAt).toLocaleDateString();
+            const body = (await res.json()) as {
+              error: string;
+              resetAt: number;
+              kind?: "daily" | "monthly" | "lifetime";
+            };
             setStatus("error");
-            setError(`Out of credits — resets ${resetDate}. Upgrade on /pricing.`);
+            if (body.kind === "lifetime" || body.resetAt === 0) {
+              setError("You've used your free trial. Upgrade on /pricing for more refinements.");
+            } else {
+              const resetDate = new Date(body.resetAt).toLocaleDateString();
+              setError(`Out of credits — resets ${resetDate}. Upgrade on /pricing.`);
+            }
             return;
           }
 

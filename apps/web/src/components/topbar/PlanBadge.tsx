@@ -1,4 +1,9 @@
-import { TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
+import {
+  ENFORCE_LIFETIME_LIMITS_FOR_FREE,
+  FREE_TIER_LIFETIME_LIMITS,
+  TIER_CREDIT_LIMITS,
+  type Tier,
+} from "@arcadeai/shared";
 import { Link } from "@tanstack/react-router";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
@@ -82,6 +87,69 @@ function UsageBar({ label, remaining, total }: UsageBarProps) {
             transition: "width 0.3s ease",
           }}
         />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Lifetime-counter view for the temporary deployment-phase free-tier policy.
+ * Shows used / limit per action (generations, refinements) instead of the
+ * regular daily/monthly bars. Switches in when ENFORCE_LIFETIME_LIMITS_FOR_FREE
+ * is on AND the user is on the free tier.
+ */
+function LifetimeUsage({
+  generationsUsed,
+  refinementsUsed,
+}: {
+  generationsUsed: number;
+  refinementsUsed: number;
+}) {
+  const genTotal = FREE_TIER_LIFETIME_LIMITS.generations;
+  const refTotal = FREE_TIER_LIFETIME_LIMITS.refinements;
+  const genLeft = Math.max(0, genTotal - generationsUsed);
+  const refLeft = Math.max(0, refTotal - refinementsUsed);
+  const genColor = genLeft === 0 ? "var(--color-danger)" : "var(--color-text-primary)";
+  const refColor = refLeft === 0 ? "var(--color-danger)" : "var(--color-text-primary)";
+
+  return (
+    <div>
+      <p
+        style={{
+          fontSize: 11,
+          color: "var(--color-text-muted)",
+          marginBottom: 10,
+          lineHeight: 1.5,
+        }}
+      >
+        Free trial — limited generations and refinements while we test.
+      </p>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 12,
+          marginBottom: 8,
+        }}
+      >
+        <span style={{ color: "var(--color-text-secondary)" }}>Generations</span>
+        <span style={{ color: genColor, fontWeight: 600 }}>
+          {generationsUsed} / {genTotal}
+        </span>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 12,
+        }}
+      >
+        <span style={{ color: "var(--color-text-secondary)" }}>Refinements</span>
+        <span style={{ color: refColor, fontWeight: 600 }}>
+          {refinementsUsed} / {refTotal}
+        </span>
       </div>
     </div>
   );
@@ -222,6 +290,11 @@ export function PlanBadge() {
               <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
                 Admin access — unlimited credits.
               </p>
+            ) : tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE ? (
+              <LifetimeUsage
+                generationsUsed={me?.lifetimeGenerationsUsed ?? 0}
+                refinementsUsed={me?.lifetimeRefinementsUsed ?? 0}
+              />
             ) : (
               <>
                 <UsageBar

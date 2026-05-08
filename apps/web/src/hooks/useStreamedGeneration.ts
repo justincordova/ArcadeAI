@@ -59,10 +59,20 @@ export function useStreamedGeneration(): StreamedGenerationState {
           }
 
           if (res.status === 402) {
-            const body = (await res.json()) as { error: string; resetAt: number };
-            const resetDate = new Date(body.resetAt).toLocaleDateString();
+            const body = (await res.json()) as {
+              error: string;
+              resetAt: number;
+              kind?: "daily" | "monthly" | "lifetime";
+            };
             setStatus("error");
-            setError(`Out of credits — resets ${resetDate}. Upgrade on /pricing.`);
+            // Lifetime cap (resetAt === 0) is a hard cap — no reset; surface
+            // an upgrade-only message instead of a fictional reset date.
+            if (body.kind === "lifetime" || body.resetAt === 0) {
+              setError("You've used your free trial. Upgrade on /pricing for more generations.");
+            } else {
+              const resetDate = new Date(body.resetAt).toLocaleDateString();
+              setError(`Out of credits — resets ${resetDate}. Upgrade on /pricing.`);
+            }
             return;
           }
 
