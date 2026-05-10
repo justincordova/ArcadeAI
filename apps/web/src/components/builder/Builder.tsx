@@ -281,6 +281,19 @@ function BuilderLayout({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isStreaming]);
 
+  // Global Esc → stop streaming (works even when textarea isn't focused)
+  useEffect(() => {
+    if (!isStreaming) return;
+    function handler(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onStop();
+      }
+    }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isStreaming, onStop]);
+
   const canSubmit = !isStreaming && prompt.trim().length > 0 && !missingKeyError;
 
   function handleSuggestionClick(text: string) {
@@ -515,9 +528,20 @@ function BuilderLayout({
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={(e) => {
+                // cmd/ctrl+enter always submits; plain enter submits unless shift held
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  onSubmit(e as unknown as React.FormEvent);
+                  return;
+                }
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   onSubmit(e as unknown as React.FormEvent);
+                  return;
+                }
+                if (e.key === "Escape" && isStreaming) {
+                  e.preventDefault();
+                  onStop();
                 }
               }}
               disabled={isStreaming || Boolean(missingKeyError)}
@@ -558,7 +582,7 @@ function BuilderLayout({
                   letterSpacing: "0.02em",
                 }}
               >
-                {isStreaming ? streamLabel : (costLine ?? "⌘↵ to send")}
+                {isStreaming ? `${streamLabel} · esc to stop` : (costLine ?? "⌘↵ to send")}
               </span>
               {isStreaming ? (
                 <button
