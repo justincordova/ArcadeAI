@@ -27,11 +27,40 @@ window.addEventListener('message', function(e) {
 });
 `;
 
+// Defense-in-depth CSP for generated games. The iframe is already sandboxed
+// (`allow-scripts` only), but the sandbox does not restrict outbound
+// network requests. A hallucinated or malicious fetch in generated code
+// could otherwise exfiltrate data or load remote scripts.
+//
+// - default-src 'none'             — no remote anything by default
+// - script-src 'unsafe-inline'     — inline <script> required (no remote scripts)
+// - style-src 'unsafe-inline'      — inline <style>/style="" required
+// - img-src data: blob:            — only data URIs and blob URLs (no remote images)
+// - media-src data: blob:          — same for audio/video
+// - font-src data:                 — only data URIs
+// - connect-src 'none'             — no fetch/XHR/WebSocket to anywhere
+// - form-action 'none'             — no form submission targets
+// - base-uri 'none'                — no <base> hijacking
+const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; form-action 'none'; base-uri 'none';">`;
+
 export function injectWrapper(html: string): string {
   const scriptTag = `<script>${WRAPPER_SCRIPT}</script>`;
-  const idx = html.lastIndexOf("</body>");
-  if (idx !== -1) {
-    return html.slice(0, idx) + scriptTag + html.slice(idx);
+
+  // Inject CSP into <head> (or at start if no <head>). Browsers respect
+  // the first CSP header/meta they see, so this needs to be early.
+  let withCsp: string;
+  const headIdx = html.indexOf("<head>");
+  if (headIdx !== -1) {
+    const insertAt = headIdx + "<head>".length;
+    withCsp = html.slice(0, insertAt) + CSP_META + html.slice(insertAt);
+  } else {
+    // No <head> — prepend so it parses before the first script
+    withCsp = CSP_META + html;
   }
-  return html + scriptTag;
+
+  const bodyIdx = withCsp.lastIndexOf("</body>");
+  if (bodyIdx !== -1) {
+    return withCsp.slice(0, bodyIdx) + scriptTag + withCsp.slice(bodyIdx);
+  }
+  return withCsp + scriptTag;
 }
