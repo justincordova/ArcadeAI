@@ -2,14 +2,21 @@
 // no auth required to view; auth is required to remix (the button routes
 // the user through /sign-in?next=/play/:slug?intent=remix).
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Sparkles } from "lucide-react";
+import { Heart, Play, Sparkles } from "lucide-react";
 import { useEffect } from "react";
 import { LogoFull } from "../components/Logo.js";
 import { GameIframe } from "../components/builder/GameIframe.js";
 import { useSession } from "../hooks/useSession.js";
-import { fetchPublicGame, remixPublicGame } from "../lib/api/games.js";
+import {
+  type PublicGame,
+  fetchPublicGame,
+  likeGame,
+  recordPlay,
+  remixPublicGame,
+  unlikeGame,
+} from "../lib/api/games.js";
 
 interface PlaySearch {
   intent?: string;
@@ -27,6 +34,7 @@ function PlayPage() {
   const { intent } = Route.useSearch();
   const navigate = useNavigate();
   const { data: me } = useSession();
+  const queryClient = useQueryClient();
 
   const {
     data: game,
@@ -38,12 +46,55 @@ function PlayPage() {
     retry: false,
   });
 
+  // Record one play per visit. The mutation is fire-and-forget on the
+  // client; the server is idempotent in the sense that it never errors,
+  // but we still bump play count once per slug per page mount.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate — fire once per slug change
+  useEffect(() => {
+    if (!game) return;
+    recordPlay(slug);
+  }, [slug, game?.id]);
+
   const remixMutation = useMutation({
     mutationFn: () => remixPublicGame(slug),
     onSuccess: (result) => {
       navigate({ to: "/game/$id", params: { id: result.id } });
     },
   });
+
+  const likeMutation = useMutation({
+    mutationFn: () => (game?.liked ? unlikeGame(slug) : likeGame(slug)),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["public-game", slug] });
+      const prev = queryClient.getQueryData<PublicGame>(["public-game", slug]);
+      if (prev) {
+        queryClient.setQueryData<PublicGame>(["public-game", slug], {
+          ...prev,
+          liked: !prev.liked,
+          likeCount: prev.liked ? Math.max(0, prev.likeCount - 1) : prev.likeCount + 1,
+        });
+      }
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["public-game", slug], ctx.prev);
+    },
+    onSettled: () => {
+      // Refresh discover lists too so the count there stays in sync.
+      queryClient.invalidateQueries({ queryKey: ["discover"] });
+    },
+  });
+
+  function handleLikeClick() {
+    if (!me) {
+      navigate({
+        to: "/sign-in",
+        search: { next: `/play/${slug}` },
+      });
+      return;
+    }
+    likeMutation.mutate();
+  }
 
   // Post-sign-in redirect: when arriving with ?intent=remix and an
   // authenticated session, fire the remix immediately. Once running, the
@@ -108,31 +159,73 @@ function PlayPage() {
         <Link to="/" style={{ textDecoration: "none" }} aria-label="ArcadeAI home">
           <LogoFull />
         </Link>
-        <button
-          type="button"
-          onClick={handleRemixClick}
-          disabled={remixMutation.isPending}
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "9px 18px",
-            borderRadius: 10,
-            fontSize: 13,
-            fontWeight: 600,
-            fontFamily: "inherit",
-            border: "none",
-            background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
-            color: "#fff",
-            cursor: remixMutation.isPending ? "wait" : "pointer",
-            opacity: remixMutation.isPending ? 0.7 : 1,
-            transition: "opacity 0.15s",
-            boxShadow: "0 2px 12px rgba(124,58,237,0.3)",
-          }}
-        >
-          <Sparkles size={13} strokeWidth={1.8} />
-          {remixMutation.isPending ? "Remixing…" : "Remix this"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <Link
+            to="/discover"
+            style={{
+              fontSize: 13,
+              fontWeight: 500,
+              color: "var(--color-text-secondary)",
+              textDecoration: "none",
+              padding: "8px 12px",
+            }}
+          >
+            Discover
+          </Link>
+          <button
+            type="button"
+            onClick={handleLikeClick}
+            disabled={likeMutation.isPending}
+            aria-pressed={game.liked}
+            aria-label={game.liked ? "Unlike" : "Like"}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 12px",
+              borderRadius: 9,
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              border: game.liked
+                ? "1px solid rgba(255,62,165,0.45)"
+                : "1px solid var(--color-border)",
+              background: game.liked ? "rgba(255,62,165,0.12)" : "var(--color-surface-raised)",
+              color: game.liked ? "var(--color-accent-primary)" : "var(--color-text-secondary)",
+              cursor: likeMutation.isPending ? "wait" : "pointer",
+              opacity: likeMutation.isPending ? 0.6 : 1,
+              transition: "all 0.15s",
+            }}
+          >
+            <Heart size={13} strokeWidth={2} fill={game.liked ? "currentColor" : "none"} />
+            {game.likeCount}
+          </button>
+          <button
+            type="button"
+            onClick={handleRemixClick}
+            disabled={remixMutation.isPending}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+              padding: "9px 18px",
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 600,
+              fontFamily: "inherit",
+              border: "none",
+              backgroundImage: "var(--gradient-brand)",
+              color: "#fff",
+              cursor: remixMutation.isPending ? "wait" : "pointer",
+              opacity: remixMutation.isPending ? 0.7 : 1,
+              transition: "opacity 0.15s",
+              boxShadow: "0 2px 14px rgba(255,62,165,0.3)",
+            }}
+          >
+            <Sparkles size={13} strokeWidth={1.8} />
+            {remixMutation.isPending ? "Remixing…" : "Remix"}
+          </button>
+        </div>
       </header>
 
       {/* Main: iframe + footer */}
@@ -160,20 +253,48 @@ function PlayPage() {
             gap: 16,
           }}
         >
-          <div style={{ minWidth: 0 }}>
-            <p
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div
               style={{
-                fontSize: 13,
-                fontWeight: 600,
-                color: "var(--color-text-primary)",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
                 marginBottom: 2,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
               }}
             >
-              {game.title}
-            </p>
+              <p
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--color-text-primary)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                  margin: 0,
+                  minWidth: 0,
+                }}
+              >
+                {game.title}
+              </p>
+              {game.genre && (
+                <span
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 9,
+                    fontFamily: "IBM Plex Mono, ui-monospace, monospace",
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    padding: "1px 6px",
+                    borderRadius: 9999,
+                    color: "var(--color-text-secondary)",
+                    border: "1px solid var(--color-border)",
+                  }}
+                >
+                  {game.genre}
+                </span>
+              )}
+            </div>
             <p
               style={{
                 fontSize: 11,
@@ -188,6 +309,22 @@ function PlayPage() {
             >
               by {game.ownerDisplayName} · "{game.originalPrompt}"
             </p>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              fontSize: 11,
+              fontFamily: "IBM Plex Mono, ui-monospace, monospace",
+              color: "var(--color-text-muted)",
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <Play size={10} strokeWidth={2.2} fill="currentColor" />
+              {game.playCount}
+            </span>
           </div>
           {remixMutation.isError && (
             <p style={{ fontSize: 12, color: "var(--color-danger)" }}>
@@ -219,8 +356,8 @@ function PlayLoading() {
           width: 28,
           height: 28,
           borderRadius: "50%",
-          border: "2px solid rgba(124,58,237,0.18)",
-          borderTopColor: "rgba(124,58,237,0.85)",
+          border: "2px solid rgba(255,62,165,0.18)",
+          borderTopColor: "rgba(255,62,165,0.9)",
           animation: "play-spin 0.8s linear infinite",
         }}
       />

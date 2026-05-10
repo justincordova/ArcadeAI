@@ -72,11 +72,15 @@ export function registerAuthGuard(app: FastifyInstance) {
       path.startsWith("/api/auth/") ||
       path === "/api/health" ||
       path === "/api/config" ||
-      // GET /api/play/:slug is public; the matching POST .../remix below
-      // still requires auth. Auth handler is the wrong layer to make that
-      // distinction (it doesn't know the method), so we exempt the whole
-      // /api/play/* prefix and the remix route does its own session check.
-      path.startsWith("/api/play/")
+      // GET /api/play/:slug is public; the matching POST .../remix /like
+      // /unlike still require auth. The auth handler is the wrong layer to
+      // make that distinction (it doesn't know the method), so we exempt
+      // the whole /api/play/* prefix and the auth-required routes do their
+      // own session check.
+      path.startsWith("/api/play/") ||
+      // /api/discover is anonymous-browsable. Sessions hydrate `liked`
+      // state when present, but the route doesn't require auth.
+      path === "/api/discover"
     ) {
       return;
     }

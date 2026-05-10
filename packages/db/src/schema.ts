@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // Closed enum sets used by typed `text(..., { enum })` columns. Duplicated
 // from `@arcadeai/shared` rather than imported because @arcadeai/db is a
@@ -108,10 +108,44 @@ export const games = sqliteTable(
     // No FK reference here — self-references in Drizzle require ordering
     // gymnastics, and SQLite enforcement is unnecessary for a soft pointer.
     remixedFromGameId: text("remixed_from_game_id"),
+    // Discover-page metrics. playCount is incremented on each public-play
+    // request (rate-limited per IP+slug); likeCount is the count of rows
+    // in game_likes pointing at this game and is denormalized for fast
+    // sort-by-likes queries. Both default to 0.
+    playCount: integer("play_count").notNull().default(0),
+    likeCount: integer("like_count").notNull().default(0),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (table) => [index("idx_games_user_id").on(table.userId)]
+  (table) => [
+    index("idx_games_user_id").on(table.userId),
+    // Discover queries filter on isPublic and order by likeCount/publishedAt.
+    // A composite index on (is_public, published_at) covers the "newest" sort
+    // and keeps "trending"/"top" within bounds (both rank within the
+    // is_public=true subset).
+    index("idx_games_public_published").on(table.isPublic, table.publishedAt),
+  ]
+);
+
+// game_likes — one row per (user, game). Server enforces uniqueness via
+// (gameId, userId) primary-key-shaped index plus an INSERT OR IGNORE so
+// double-clicks coalesce. Denormalized counter on games.likeCount stays
+// in sync via the same transaction that inserts/deletes here.
+export const gameLikes = sqliteTable(
+  "game_likes",
+  {
+    gameId: text("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_game_likes_unique").on(table.gameId, table.userId),
+    index("idx_game_likes_user").on(table.userId),
+  ]
 );
 
 export const messages = sqliteTable(

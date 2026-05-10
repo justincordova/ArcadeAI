@@ -15,7 +15,11 @@ export async function loadOwnedGame(gameId: string, userId: string) {
  * Lookup a game by its public slug. Returns null if no game with that slug
  * exists OR if the matched game has been unpublished. The ONLY non-owner
  * read path. Selects only fields safe to expose publicly (no userId, no
- * usage_log timestamps, no internal genre, etc).
+ * usage_log timestamps, etc.).
+ *
+ * Genre, like count, and play count are exposed because they're already
+ * surfaced on the discover page; the public play page also wants them
+ * for the like control.
  */
 export async function loadPublicGame(slug: string): Promise<{
   id: string;
@@ -24,6 +28,9 @@ export async function loadPublicGame(slug: string): Promise<{
   originalPrompt: string;
   ownerDisplayName: string;
   publishedAt: number | null;
+  genre: string | null;
+  likeCount: number;
+  playCount: number;
 } | null> {
   const rows = await db
     .select({
@@ -34,6 +41,9 @@ export async function loadPublicGame(slug: string): Promise<{
       isPublic: games.isPublic,
       publishedAt: games.publishedAt,
       userId: games.userId,
+      genre: games.genre,
+      likeCount: games.likeCount,
+      playCount: games.playCount,
     })
     .from(games)
     .where(and(eq(games.publicSlug, slug), eq(games.isPublic, true)))
@@ -58,5 +68,8 @@ export async function loadPublicGame(slug: string): Promise<{
     originalPrompt: row.originalPrompt,
     ownerDisplayName,
     publishedAt: row.publishedAt,
+    genre: row.genre,
+    likeCount: row.likeCount,
+    playCount: row.playCount,
   };
 }

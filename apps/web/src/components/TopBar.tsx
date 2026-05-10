@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, LogOut, Settings as SettingsIcon } from "lucide-react";
 import type React from "react";
 import { useState } from "react";
@@ -29,10 +29,16 @@ export function TopBar() {
         backdropFilter: "blur(12px)",
       }}
     >
-      {/* Left: Logo */}
-      <Link to="/" style={{ textDecoration: "none" }} aria-label="ArcadeAI home">
-        <LogoFull />
-      </Link>
+      {/* Left: Logo + primary nav */}
+      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+        <Link to="/" style={{ textDecoration: "none" }} aria-label="ArcadeAI home">
+          <LogoFull />
+        </Link>
+        <nav style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <NavLink to="/" label="My Games" />
+          <NavLink to="/discover" label="Discover" />
+        </nav>
+      </div>
 
       {/* Right: PlanBadge + User */}
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -75,7 +81,7 @@ export function TopBar() {
                 alignItems: "center",
                 justifyContent: "center",
                 borderRadius: "50%",
-                background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
+                backgroundImage: "var(--gradient-brand)",
                 fontFamily: "inherit",
                 fontSize: 12,
                 fontWeight: 700,
@@ -237,5 +243,49 @@ export function TopBar() {
         </div>
       </div>
     </header>
+  );
+}
+
+function NavLink({ to, label }: { to: "/" | "/discover"; label: string }) {
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  const active = to === "/" ? path === "/" : path.startsWith(to);
+  return (
+    <Link
+      to={to}
+      style={{
+        position: "relative",
+        padding: "6px 12px",
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: active ? 600 : 500,
+        color: active ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+        textDecoration: "none",
+        transition: "color 0.12s",
+      }}
+      onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
+        if (!active)
+          (e.currentTarget as HTMLAnchorElement).style.color = "var(--color-text-primary)";
+      }}
+      onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
+        if (!active)
+          (e.currentTarget as HTMLAnchorElement).style.color = "var(--color-text-secondary)";
+      }}
+    >
+      {label}
+      {active && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            left: 12,
+            right: 12,
+            bottom: -2,
+            height: 2,
+            backgroundImage: "var(--gradient-brand)",
+            borderRadius: 1,
+          }}
+        />
+      )}
+    </Link>
   );
 }

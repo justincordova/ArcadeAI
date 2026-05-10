@@ -4,8 +4,8 @@
 // GET /api/play/:slug does not.
 
 import { randomUUID } from "node:crypto";
-import { games, messages } from "@arcadeai/db";
-import { eq } from "drizzle-orm";
+import { gameLikes, games, messages } from "@arcadeai/db";
+import { and, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../lib/db.js";
@@ -18,6 +18,7 @@ import {
 } from "../lib/errors.js";
 import { loadPublicGame } from "../lib/ownership.js";
 import { getSession } from "../plugins/auth.js";
+import { likeGame, recordPlay, unlikeGame } from "../services/discover/likes.js";
 import { InsufficientCreditsError, markSucceeded, recordRemix } from "../services/usage/charge.js";
 
 const SlugParams = z.object({
@@ -26,7 +27,8 @@ const SlugParams = z.object({
 
 export async function playRoutes(app: FastifyInstance) {
   // GET /api/play/:slug — public view of a published game. Returns only
-  // fields safe to expose to anonymous visitors.
+  // fields safe to expose to anonymous visitors. Hydrates `liked: boolean`
+  // for authed viewers so the heart toggle reflects state on first paint.
   app.get("/api/play/:slug", async (request, reply) => {
     const parseResult = SlugParams.safeParse(request.params);
     if (!parseResult.success) {
@@ -39,7 +41,22 @@ export async function playRoutes(app: FastifyInstance) {
       return sendError(reply, 404, notFoundError());
     }
 
-    return reply.send(game);
+    let liked = false;
+    try {
+      const session = await getSession(request);
+      if (session) {
+        const rows = await db
+          .select({ gameId: gameLikes.gameId })
+          .from(gameLikes)
+          .where(and(eq(gameLikes.gameId, game.id), eq(gameLikes.userId, session.user.id)))
+          .limit(1);
+        liked = Boolean(rows[0]);
+      }
+    } catch {
+      liked = false;
+    }
+
+    return reply.send({ ...game, liked });
   });
 
   // POST /api/play/:slug/remix — duplicate a public game into the caller's
@@ -133,5 +150,85 @@ export async function playRoutes(app: FastifyInstance) {
       title: `Remix of ${source.title}`,
       remixedFromGameId: source.id,
     });
+  });
+
+  // POST /api/play/:slug/play — increment the public play counter.
+  // Fire-and-forget from the client; failures here never break the play
+  // experience. Counts toward the discover-page sort.
+  app.post("/api/play/:slug/play", async (request, reply) => {
+    const parseResult = SlugParams.safeParse(request.params);
+    if (!parseResult.success) {
+      return sendError(reply, 400, validationError("Invalid slug"));
+    }
+
+    // Look up the gameId via slug. We could do this with a single UPDATE
+    // ... WHERE public_slug = ?, but going through the helper keeps the
+    // private/published filtering centralized.
+    const game = await loadPublicGame(parseResult.data.slug);
+    if (!game) return sendError(reply, 404, notFoundError());
+
+    await recordPlay(game.id);
+    return reply.send({ ok: true });
+  });
+
+  // POST /api/play/:slug/like — like a public game (auth required).
+  // Idempotent: liking an already-liked game is a no-op. /api/play/* is
+  // exempt from the auth guard, so we check the session manually.
+  app.post("/api/play/:slug/like", async (request, reply) => {
+    const parseResult = SlugParams.safeParse(request.params);
+    if (!parseResult.success) {
+      return sendError(reply, 400, validationError("Invalid slug"));
+    }
+
+    let userId: string;
+    try {
+      const session = await getSession(request);
+      if (!session) return sendError(reply, 401, unauthorizedError());
+      userId = session.user.id;
+    } catch {
+      return sendError(reply, 401, unauthorizedError());
+    }
+
+    // Resolve slug → id. Same private-filtering as remix.
+    const rows = await db
+      .select({ id: games.id })
+      .from(games)
+      .where(and(eq(games.publicSlug, parseResult.data.slug), eq(games.isPublic, true)))
+      .limit(1);
+    const game = rows[0];
+    if (!game) return sendError(reply, 404, notFoundError());
+
+    const result = await likeGame(game.id, userId);
+    if (!result) return sendError(reply, 404, notFoundError());
+    return reply.send(result);
+  });
+
+  // DELETE /api/play/:slug/like — unlike. Same auth + idempotency rules.
+  app.delete("/api/play/:slug/like", async (request, reply) => {
+    const parseResult = SlugParams.safeParse(request.params);
+    if (!parseResult.success) {
+      return sendError(reply, 400, validationError("Invalid slug"));
+    }
+
+    let userId: string;
+    try {
+      const session = await getSession(request);
+      if (!session) return sendError(reply, 401, unauthorizedError());
+      userId = session.user.id;
+    } catch {
+      return sendError(reply, 401, unauthorizedError());
+    }
+
+    const rows = await db
+      .select({ id: games.id })
+      .from(games)
+      .where(and(eq(games.publicSlug, parseResult.data.slug), eq(games.isPublic, true)))
+      .limit(1);
+    const game = rows[0];
+    if (!game) return sendError(reply, 404, notFoundError());
+
+    const result = await unlikeGame(game.id, userId);
+    if (!result) return sendError(reply, 404, notFoundError());
+    return reply.send(result);
   });
 }

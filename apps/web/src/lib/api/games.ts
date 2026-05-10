@@ -20,6 +20,10 @@ export interface PublicGame {
   originalPrompt: string;
   ownerDisplayName: string;
   publishedAt: number | null;
+  genre: string | null;
+  likeCount: number;
+  playCount: number;
+  liked: boolean;
 }
 
 export interface PublishResponse {
@@ -112,6 +116,86 @@ export async function fetchPublicGame(slug: string): Promise<PublicGame | null> 
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to load public game");
   return res.json() as Promise<PublicGame>;
+}
+
+/** Fire-and-forget play counter. Failures are silently ignored. */
+export function recordPlay(slug: string): void {
+  fetch(`${API}/api/play/${slug}/play`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  }).catch(() => {
+    /* silent */
+  });
+}
+
+export interface LikeResponse {
+  liked: boolean;
+  changed: boolean;
+  likeCount: number;
+}
+
+export async function likeGame(slug: string): Promise<LikeResponse> {
+  const res = await fetch(`${API}/api/play/${slug}/like`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (res.status === 401) throw new Error("Sign in to like");
+  if (!res.ok) throw new Error("Failed to like game");
+  return res.json() as Promise<LikeResponse>;
+}
+
+export async function unlikeGame(slug: string): Promise<LikeResponse> {
+  const res = await fetch(`${API}/api/play/${slug}/like`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (res.status === 401) throw new Error("Sign in to like");
+  if (!res.ok) throw new Error("Failed to unlike game");
+  return res.json() as Promise<LikeResponse>;
+}
+
+// Discover listing
+export interface DiscoverGame {
+  id: string;
+  slug: string;
+  title: string;
+  thumbnail: string | null;
+  originalPrompt: string;
+  ownerDisplayName: string;
+  genre: string | null;
+  publishedAt: number | null;
+  playCount: number;
+  likeCount: number;
+  liked: boolean;
+}
+
+export interface DiscoverPage {
+  items: DiscoverGame[];
+  nextOffset: number | null;
+}
+
+export type DiscoverSort = "trending" | "top" | "new";
+
+export async function fetchDiscover(params: {
+  sort: DiscoverSort;
+  genre?: string | null;
+  limit?: number;
+  offset?: number;
+}): Promise<DiscoverPage> {
+  const search = new URLSearchParams();
+  search.set("sort", params.sort);
+  if (params.genre) search.set("genre", params.genre);
+  if (params.limit) search.set("limit", String(params.limit));
+  if (params.offset !== undefined) search.set("offset", String(params.offset));
+
+  const res = await fetch(`${API}/api/discover?${search.toString()}`, {
+    credentials: "include",
+  });
+  if (!res.ok) throw new Error("Failed to load discover");
+  return res.json() as Promise<DiscoverPage>;
 }
 
 export async function remixPublicGame(slug: string): Promise<RemixResponse> {

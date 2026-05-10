@@ -9,6 +9,7 @@ import { registerCsrfGuard } from "./plugins/csrf.js";
 import { registerRateLimit } from "./plugins/rate-limit.js";
 import { registerRequestContext } from "./plugins/request-context.js";
 import { billingRoutes } from "./routes/billing.js";
+import { discoverRoutes } from "./routes/discover.js";
 import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
@@ -95,6 +96,7 @@ await app.register(healthRoutes);
 await app.register(meRoutes);
 await app.register(gamesRoutes);
 await app.register(playRoutes);
+await app.register(discoverRoutes);
 await app.register(billingRoutes);
 
 const port = env.PORT;
