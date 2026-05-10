@@ -254,6 +254,20 @@ function SendIcon() {
 
 const SUGGESTIONS = ["A simple snake game", "Asteroids with power-ups", "Pong with AI opponent"];
 
+const SIDEBAR_WIDTH_KEY = "builder-sidebar-width";
+const SIDEBAR_MIN = 280;
+const SIDEBAR_MAX = 640;
+const SIDEBAR_DEFAULT = 340;
+
+function getStoredSidebarWidth(): number {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY);
+    const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
+    if (!Number.isNaN(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX) return n;
+  } catch {}
+  return SIDEBAR_DEFAULT;
+}
+
 function BuilderLayout({
   messages,
   isStreaming,
@@ -281,6 +295,35 @@ function BuilderLayout({
   const { data: config } = useConfig();
   const missingKeyError = getMissingKeyError(config);
   const { data: me } = useSession();
+  const [sidebarWidth, setSidebarWidth] = useState<number>(getStoredSidebarWidth);
+  const [resizing, setResizing] = useState(false);
+
+  // Drag-to-resize the chat sidebar. Mouse-move runs while a drag is active;
+  // we attach to window so the cursor can leave the handle without losing
+  // the drag. The width is clamped on every move and persisted on release.
+  useEffect(() => {
+    if (!resizing) return;
+    function onMove(e: MouseEvent) {
+      const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, e.clientX));
+      setSidebarWidth(next);
+    }
+    function onUp() {
+      setResizing(false);
+      try {
+        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+      } catch {}
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [resizing, sidebarWidth]);
 
   // Cost preview text (#44). Free + lifetime cap on shows trial counters;
   // everyone else sees credit cost vs remaining monthly balance. Admin
@@ -343,14 +386,13 @@ function BuilderLayout({
       {/* ── Left panel: chat ── */}
       <div
         style={{
-          width: 340,
-          minWidth: 280,
-          maxWidth: 400,
+          width: sidebarWidth,
           display: "flex",
           flexDirection: "column",
           background: "var(--color-surface)",
           borderRight: "1px solid var(--color-border)",
           flexShrink: 0,
+          position: "relative",
         }}
       >
         {/* Panel header */}
@@ -659,6 +701,48 @@ function BuilderLayout({
             </div>
           </div>
         </form>
+
+        {/* Drag handle — invisible 6px strip on the right edge that
+            shows a tinted line on hover. Pointer events outside the strip
+            still work because the strip is absolutely positioned and
+            doesn't block sibling content. */}
+        <button
+          type="button"
+          aria-label="Resize chat panel"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setResizing(true);
+          }}
+          onDoubleClick={() => {
+            setSidebarWidth(SIDEBAR_DEFAULT);
+            try {
+              localStorage.setItem(SIDEBAR_WIDTH_KEY, String(SIDEBAR_DEFAULT));
+            } catch {}
+          }}
+          style={{
+            position: "absolute",
+            top: 0,
+            right: -3,
+            bottom: 0,
+            width: 6,
+            cursor: "col-resize",
+            background: resizing ? "rgba(124,58,237,0.4)" : "transparent",
+            border: "none",
+            padding: 0,
+            zIndex: 5,
+            transition: "background 0.12s",
+          }}
+          onMouseEnter={(e) => {
+            if (!resizing) {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.2)";
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!resizing) {
+              (e.currentTarget as HTMLButtonElement).style.background = "transparent";
+            }
+          }}
+        />
       </div>
 
       {/* ── Right panel: game preview ── */}
