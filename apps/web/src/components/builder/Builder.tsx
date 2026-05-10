@@ -16,6 +16,7 @@ import { flushSync } from "react-dom";
 import { ErrorBanner } from "./ErrorBanner.js";
 import { GameIframe } from "./GameIframe.js";
 import { type Message, MessageBubble } from "./MessageBubble.js";
+import { PreviewControls } from "./PreviewControls.js";
 import { RepairController, type RepairStatus } from "./RepairController.js";
 import { ShareButton } from "./ShareButton.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
@@ -37,10 +38,17 @@ function GenerationBuilder({
 }: BuilderProps) {
   const { status, gameId, code, error, start, stop, attachIframe } = useStreamedGeneration();
   const [prompt, setPrompt] = useState(initialPrompt);
+  const [reloadKey, setReloadKey] = useState(0);
   const isStreaming = status === "streaming";
   const displayCode = code || initialCode;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const queryClient = useQueryClient();
+
+  function handleIframeReady(el: HTMLIFrameElement | null) {
+    iframeRef.current = el;
+    attachIframe(el);
+  }
 
   useEffect(() => {
     if (!isStreaming) textareaRef.current?.focus();
@@ -72,9 +80,12 @@ function GenerationBuilder({
       onSubmit={handleSubmit}
       onStop={stop}
       textareaRef={textareaRef}
+      iframeRef={iframeRef}
       gameId={gameId}
-      onIframeReady={attachIframe}
+      onIframeReady={handleIframeReady}
       onThumbnail={handleThumbnail}
+      reloadKey={reloadKey}
+      onRestart={() => setReloadKey((n) => n + 1)}
       streamLabel="Generating..."
       submitLabel="Generate"
     />
@@ -95,6 +106,7 @@ function RefinementBuilder({
   const [repairedCode, setRepairedCode] = useState<string | null>(null);
   const [refineTrigger, setRefineTrigger] = useState(0);
   const [repairStatus, setRepairStatus] = useState<RepairStatus>("idle");
+  const [reloadKey, setReloadKey] = useState(0);
   const isStreaming = status === "streaming";
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
@@ -189,9 +201,12 @@ function RefinementBuilder({
         onSubmit={handleSubmit}
         onStop={stop}
         textareaRef={textareaRef}
+        iframeRef={iframeRef}
         gameId={gameId}
         onIframeReady={handleIframeReady}
         onThumbnail={handleThumbnail}
+        reloadKey={reloadKey}
+        onRestart={() => setReloadKey((n) => n + 1)}
         streamLabel="Refining..."
         submitLabel="Refine"
       />
@@ -212,9 +227,12 @@ interface BuilderLayoutProps {
   onSubmit: (e: React.FormEvent) => void;
   onStop: () => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
   gameId?: string | null;
   onIframeReady: (el: HTMLIFrameElement | null) => void;
   onThumbnail: (gameId: string, dataUrl: string) => void;
+  reloadKey: number;
+  onRestart: () => void;
   streamLabel: string;
   submitLabel: string;
 }
@@ -248,9 +266,12 @@ function BuilderLayout({
   onSubmit,
   onStop,
   textareaRef,
+  iframeRef,
   gameId,
   onIframeReady,
   onThumbnail,
+  reloadKey,
+  onRestart,
   streamLabel,
   submitLabel,
 }: BuilderLayoutProps) {
@@ -684,7 +705,12 @@ function BuilderLayout({
               {displayCode ? "Live Preview" : "Preview"}
             </span>
           </div>
-          {gameId && <ShareButton gameId={gameId} />}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {displayCode && (
+              <PreviewControls iframeRef={iframeRef} onRestart={onRestart} disabled={isStreaming} />
+            )}
+            {gameId && <ShareButton gameId={gameId} />}
+          </div>
         </div>
 
         {/* Game area */}
@@ -694,6 +720,7 @@ function BuilderLayout({
             gameId={gameId}
             onIframeReady={onIframeReady}
             onThumbnail={onThumbnail}
+            reloadKey={reloadKey}
           />
           <StatusOverlay status={resolvedOverlay} />
         </div>

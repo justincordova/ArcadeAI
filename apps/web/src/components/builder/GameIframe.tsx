@@ -6,9 +6,20 @@ interface GameIframeProps {
   gameId?: string | null;
   onIframeReady?: (el: HTMLIFrameElement | null) => void;
   onThumbnail?: (gameId: string, dataUrl: string) => void;
+  /**
+   * When this number changes, the iframe re-mounts — re-running the game
+   * from a fresh state. Used by the "restart" preview-header button.
+   */
+  reloadKey?: number;
 }
 
-export function GameIframe({ code, gameId, onIframeReady, onThumbnail }: GameIframeProps) {
+export function GameIframe({
+  code,
+  gameId,
+  onIframeReady,
+  onThumbnail,
+  reloadKey = 0,
+}: GameIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
@@ -145,9 +156,11 @@ export function GameIframe({ code, gameId, onIframeReady, onThumbnail }: GameIfr
 
   return (
     <iframe
+      key={reloadKey}
       ref={iframeRef}
       srcDoc={injectWrapper(code)}
       sandbox="allow-scripts"
+      allow="fullscreen"
       style={{ width: "100%", height: "100%", border: "none", display: "block" }}
       title="Game preview"
     />
