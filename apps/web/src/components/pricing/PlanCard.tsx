@@ -4,6 +4,7 @@
 // Yearly pricing: shows the discounted per-month price next to a strike-
 // through of the regular monthly price, then a "billed yearly" footnote.
 
+import { toast } from "@/components/ui/sonner.js";
 import {
   type BillingInterval,
   PLAN_PRICES,
@@ -17,6 +18,18 @@ interface PlanCardProps {
   plan: PlanCopy;
   interval: BillingInterval;
   isActive: boolean;
+}
+
+// Per SPEC §12 the CTAs are intentional no-ops in this prototype. Showing
+// nothing on click feels broken though; surface a toast that explains the
+// state without lying about what we'd do. Active-tier and Enterprise get
+// dedicated copy.
+function ctaToastMessage(planId: string, isActive: boolean): string {
+  if (isActive) return "You're already on this plan.";
+  if (planId === "enterprise")
+    return "Contact sales is coming soon — for now, reach out via email.";
+  if (planId === "free") return "You're already on the free tier (or close to it).";
+  return "Billing isn't enabled yet — paid plans launch soon.";
 }
 
 const PLAN_ACCENTS: Record<string, { gradient: string; border: string; glow: string }> = {
@@ -170,7 +183,7 @@ export function PlanCard({ plan, interval, isActive }: PlanCardProps) {
           on hover, wiping out the gradient and leaving transparent text). */}
       <button
         type="button"
-        onClick={() => {}}
+        onClick={() => toast(ctaToastMessage(plan.id, isActive))}
         style={{
           marginTop: 22,
           width: "100%",
