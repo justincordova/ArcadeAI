@@ -13,6 +13,7 @@ import { discoverRoutes } from "./routes/discover.js";
 import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
+import { ogRoutes } from "./routes/og.js";
 import { playRoutes } from "./routes/play.js";
 
 // Validate env vars first so misconfiguration fails fast with a clear message
@@ -97,6 +98,7 @@ await app.register(meRoutes);
 await app.register(gamesRoutes);
 await app.register(playRoutes);
 await app.register(discoverRoutes);
+await app.register(ogRoutes);
 await app.register(billingRoutes);
 
 const port = env.PORT;

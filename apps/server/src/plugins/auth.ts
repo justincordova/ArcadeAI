@@ -80,7 +80,10 @@ export function registerAuthGuard(app: FastifyInstance) {
       path.startsWith("/api/play/") ||
       // /api/discover is anonymous-browsable. Sessions hydrate `liked`
       // state when present, but the route doesn't require auth.
-      path === "/api/discover"
+      path === "/api/discover" ||
+      // /api/og/:slug.png returns the OG/Twitter unfurl image for a
+      // public game; crawlers don't carry sessions.
+      path.startsWith("/api/og/")
     ) {
       return;
     }

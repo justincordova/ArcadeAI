@@ -31,6 +31,7 @@ export async function loadPublicGame(slug: string): Promise<{
   genre: string | null;
   likeCount: number;
   playCount: number;
+  thumbnail: string | null;
 } | null> {
   const rows = await db
     .select({
@@ -44,6 +45,7 @@ export async function loadPublicGame(slug: string): Promise<{
       genre: games.genre,
       likeCount: games.likeCount,
       playCount: games.playCount,
+      thumbnail: games.thumbnail,
     })
     .from(games)
     .where(and(eq(games.publicSlug, slug), eq(games.isPublic, true)))
@@ -71,5 +73,6 @@ export async function loadPublicGame(slug: string): Promise<{
     genre: row.genre,
     likeCount: row.likeCount,
     playCount: row.playCount,
+    thumbnail: row.thumbnail,
   };
 }

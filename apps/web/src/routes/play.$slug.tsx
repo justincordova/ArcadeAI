@@ -9,6 +9,7 @@ import { useEffect } from "react";
 import { LogoFull } from "../components/Logo.js";
 import { GameIframe } from "../components/builder/GameIframe.js";
 import { useSession } from "../hooks/useSession.js";
+import { API_BASE } from "../lib/api/client.js";
 import {
   type PublicGame,
   fetchPublicGame,
@@ -17,6 +18,7 @@ import {
   remixPublicGame,
   unlikeGame,
 } from "../lib/api/games.js";
+import { setDocumentHead } from "../lib/document-head.js";
 
 interface PlaySearch {
   intent?: string;
@@ -54,6 +56,24 @@ function PlayPage() {
     if (!game) return;
     recordPlay(slug);
   }, [slug, game?.id]);
+
+  // Set <title>, <meta name="description">, og:* and twitter:* so unfurls
+  // and tab titles are correct. og:image points at the API route which
+  // serves the captured thumbnail (or a fallback PNG).
+  useEffect(() => {
+    if (!game) return;
+    const ogImage = `${API_BASE}/api/og/${slug}.png`;
+    const url = `${window.location.origin}/play/${slug}`;
+    const description = `Play "${game.title}" by ${game.ownerDisplayName} — built on ArcadeAI from a single prompt.`;
+    return setDocumentHead({
+      title: `${game.title} · ArcadeAI`,
+      description,
+      ogTitle: game.title,
+      ogDescription: description,
+      ogImage,
+      ogUrl: url,
+    });
+  }, [slug, game]);
 
   const remixMutation = useMutation({
     mutationFn: () => remixPublicGame(slug),

@@ -12,9 +12,10 @@ import { DiscoverCard } from "@/components/discover/DiscoverCard.js";
 import { DiscoverFilters } from "@/components/discover/DiscoverFilters.js";
 import { useSession } from "@/hooks/useSession.js";
 import { type DiscoverGame, type DiscoverSort, fetchDiscover } from "@/lib/api/games.js";
+import { setDocumentHead } from "@/lib/document-head.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface DiscoverSearch {
   sort?: DiscoverSort;
@@ -55,6 +56,16 @@ function DiscoverPage() {
     () => query.data?.pages.flatMap((p) => p.items) ?? [],
     [query.data]
   );
+
+  useEffect(() => {
+    return setDocumentHead({
+      title: "Discover · ArcadeAI",
+      description:
+        "Browse playable games other people built from a single prompt. Like the ones you love, remix anything into your own library.",
+      ogTitle: "ArcadeAI · Discover",
+      ogDescription: "Playable games built from a prompt. Browse, play, remix.",
+    });
+  }, []);
 
   function setSort(next: DiscoverSort) {
     void navigate({
