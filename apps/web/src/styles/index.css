@@ -1,88 +1,133 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800;900&family=Geist+Mono:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&family=Geist:wght@300;400;500;600;700;800;900&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* ── Theme tokens — registered with Tailwind so utility classes work ──
-   These act as fallback/default values; the :root and .light blocks
-   below provide the actual cascading values used at runtime.
+/* ── Theme tokens ──────────────────────────────────────────────────────────
+   Cabinet Neon palette. The accent story moved from the generic
+   violet→cyan gradient (used by ~every prompt-to-X tool in 2024) to a
+   saturated magenta primary with cyan as a supporting note. The legacy
+   --color-accent-violet-* tokens are retained as aliases so existing
+   components that hard-code the old gradient keep working until
+   migrated; new components should reach for --color-accent-primary,
+   --color-accent-secondary, and --gradient-brand.
 */
 @theme {
-  --color-bg: #09090f;
-  --color-surface: #111118;
-  --color-surface-raised: #18181f;
-  --color-surface-overlay: #1f1f2e;
-  --color-border: #252535;
-  --color-border-subtle: #1a1a28;
-  --color-text-primary: #e8e8f0;
-  --color-text-secondary: #7878a0;
-  --color-text-muted: #4a4a68;
-  --color-text-accent: #a78bfa;
-  --color-accent-violet: #7c3aed;
-  --color-accent-violet-light: #a78bfa;
-  --color-accent-cyan: #06b6d4;
-  --color-accent-cyan-light: #67e8f9;
-  --color-success: #22d3a0;
-  --color-warning: #f59e0b;
-  --color-danger: #f43f5e;
+  --color-bg: #08070d;
+  --color-surface: #0f0e16;
+  --color-surface-raised: #16151f;
+  --color-surface-overlay: #1d1c2a;
+  --color-border: #24232f;
+  --color-border-subtle: #18171f;
+  --color-text-primary: #ece9f5;
+  --color-text-secondary: #8a86a8;
+  --color-text-muted: #4f4d65;
+  --color-text-accent: #ff3ea5;
+
+  /* New primary accent — saturated magenta. Reads as "neon" against the
+     near-black background and is distinctive in a sea of violet/cyan. */
+  --color-accent-primary: #ff3ea5;
+  --color-accent-primary-soft: #ff7bc5;
+  --color-accent-secondary: #4cdfe8;
+  --color-accent-secondary-soft: #95eef3;
+
+  /* Legacy aliases — keep components rendering until each is migrated.
+     New code MUST NOT reference these. */
+  --color-accent-violet: #ff3ea5;
+  --color-accent-violet-light: #ff7bc5;
+  --color-accent-cyan: #4cdfe8;
+  --color-accent-cyan-light: #95eef3;
+
+  --color-success: #2ee8a4;
+  --color-warning: #ffb547;
+  --color-danger: #ff4d6d;
   --color-danger-muted: #4c1a28;
+
+  /* Brand gradient — magenta → cyan. Sweep is shallower than a 135deg
+     diagonal so it reads more like a horizontal arcade marquee. */
+  --gradient-brand: linear-gradient(105deg, #ff3ea5 0%, #b14de8 55%, #4cdfe8 100%);
+  --gradient-brand-soft: linear-gradient(
+    105deg,
+    rgba(255, 62, 165, 0.15) 0%,
+    rgba(76, 223, 232, 0.15) 100%
+  );
 }
 
 /* ── Dark theme (default) ── */
 :root {
-  --color-bg: #09090f;
-  --color-surface: #111118;
-  --color-surface-raised: #18181f;
-  --color-surface-overlay: #1f1f2e;
-  --color-border: #252535;
-  --color-border-subtle: #1a1a28;
+  --color-bg: #08070d;
+  --color-surface: #0f0e16;
+  --color-surface-raised: #16151f;
+  --color-surface-overlay: #1d1c2a;
+  --color-border: #24232f;
+  --color-border-subtle: #18171f;
 
-  --color-text-primary: #e8e8f0;
-  --color-text-secondary: #7878a0;
-  --color-text-muted: #4a4a68;
-  --color-text-accent: #a78bfa;
+  --color-text-primary: #ece9f5;
+  --color-text-secondary: #8a86a8;
+  --color-text-muted: #4f4d65;
+  --color-text-accent: #ff3ea5;
 
-  /* Accent colors are theme-invariant (the gradient is the same brand mark
-     in both modes). Only their interplay with surfaces/text shifts. */
-  --color-accent-violet: #7c3aed;
-  --color-accent-violet-light: #a78bfa;
-  --color-accent-cyan: #06b6d4;
-  --color-accent-cyan-light: #67e8f9;
+  --color-accent-primary: #ff3ea5;
+  --color-accent-primary-soft: #ff7bc5;
+  --color-accent-secondary: #4cdfe8;
+  --color-accent-secondary-soft: #95eef3;
 
-  --color-success: #22d3a0;
-  --color-warning: #f59e0b;
-  --color-danger: #f43f5e;
+  --color-accent-violet: #ff3ea5;
+  --color-accent-violet-light: #ff7bc5;
+  --color-accent-cyan: #4cdfe8;
+  --color-accent-cyan-light: #95eef3;
+
+  --color-success: #2ee8a4;
+  --color-warning: #ffb547;
+  --color-danger: #ff4d6d;
   --color-danger-muted: #4c1a28;
+
+  --gradient-brand: linear-gradient(105deg, #ff3ea5 0%, #b14de8 55%, #4cdfe8 100%);
+  --gradient-brand-soft: linear-gradient(
+    105deg,
+    rgba(255, 62, 165, 0.15) 0%,
+    rgba(76, 223, 232, 0.15) 100%
+  );
 }
 
 /* ── Light theme ──
-   Cream surface palette with desaturated neon accents. Pure white kills
-   the arcade feel and full-saturation neon on white burns the eye, so
-   we soften both. Token names are identical to dark mode — every component
-   keeps using var(--color-*) and rebrands automatically.
+   Cream surface with desaturated neon. Pure white kills the arcade
+   feel; magenta/cyan at full saturation burns on a light surface, so
+   we drop them a few shades.
 */
 .light {
-  --color-bg: #fafaf6;
+  --color-bg: #faf8f1;
   --color-surface: #ffffff;
-  --color-surface-raised: #f4f4ee;
-  --color-surface-overlay: #ebebe2;
-  --color-border: #e0e0d4;
-  --color-border-subtle: #ececec;
+  --color-surface-raised: #f3efe3;
+  --color-surface-overlay: #e8e2d2;
+  --color-border: #ddd6c5;
+  --color-border-subtle: #ebe6d8;
 
-  --color-text-primary: #1a1a24;
-  --color-text-secondary: #4a4a68;
-  --color-text-muted: #9090a8;
-  --color-text-accent: #6d28d9;
+  --color-text-primary: #14111f;
+  --color-text-secondary: #4a4664;
+  --color-text-muted: #8b8799;
+  --color-text-accent: #c4187c;
 
-  /* Toned-down accents for legibility on cream */
-  --color-accent-violet: #6d28d9;
-  --color-accent-violet-light: #8b5cf6;
-  --color-accent-cyan: #0891b2;
-  --color-accent-cyan-light: #06b6d4;
+  --color-accent-primary: #c4187c;
+  --color-accent-primary-soft: #e35aa0;
+  --color-accent-secondary: #1e9ba8;
+  --color-accent-secondary-soft: #4cc4ce;
 
-  --color-success: #059669;
-  --color-warning: #d97706;
-  --color-danger: #dc2626;
-  --color-danger-muted: #fee2e2;
+  --color-accent-violet: #c4187c;
+  --color-accent-violet-light: #e35aa0;
+  --color-accent-cyan: #1e9ba8;
+  --color-accent-cyan-light: #4cc4ce;
+
+  --color-success: #16855e;
+  --color-warning: #c2780a;
+  --color-danger: #d32647;
+  --color-danger-muted: #fce4e8;
+
+  --gradient-brand: linear-gradient(105deg, #c4187c 0%, #8b3bb0 55%, #1e9ba8 100%);
+  --gradient-brand-soft: linear-gradient(
+    105deg,
+    rgba(196, 24, 124, 0.1) 0%,
+    rgba(30, 155, 168, 0.1) 100%
+  );
 }
 
 /* ── Base resets ── */
@@ -95,20 +140,67 @@
 html {
   background-color: var(--color-bg);
   color: var(--color-text-primary);
-  /* Display font for headings, mono for code/UI labels */
+  /* Body uses Geist for paragraphs; display headings & wordmark use
+     Space Grotesk; UI labels and code use IBM Plex Mono. The
+     `font-family: inherit` selector below keeps form controls etc.
+     in mono since most of the codebase sets `fontFamily: 'inherit'`
+     on inputs/buttons to mean "the UI font" — which we want to be
+     the mono. (Existing convention; keeping it.) */
   font-family: "Geist", ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Mono elements keep Geist Mono */
+/* Display headings — used for marketing surfaces (sign-in, pricing,
+   discover hero). Apply via .font-display. Body H1/H2 still inherit
+   Geist by default to keep the change scoped. */
+.font-display {
+  font-family: "Space Grotesk", "Geist", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Mono — UI labels, kbd hints, code, the wordmark glyphs */
 code,
 pre,
 kbd,
 samp,
 .font-mono,
 [style*="font-family: inherit"] {
-  font-family: "Geist Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+  font-family: "IBM Plex Mono", "Geist Mono", ui-monospace, "Cascadia Code", Menlo, Consolas,
+    monospace;
+}
+
+/* ── Scanline texture — used on identity surfaces (hero, sign-in card,
+   discover hero). Apply via .scanlines. Subtle: 2px stripe at 6% alpha.
+   The .light theme dims it further since cream + dark stripes is too
+   loud at the same opacity. */
+.scanlines {
+  position: relative;
+}
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(255, 255, 255, 0.04) 0px,
+    rgba(255, 255, 255, 0.04) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: overlay;
+  border-radius: inherit;
+}
+.light .scanlines::after {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.03) 0px,
+    rgba(0, 0, 0, 0.03) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: multiply;
 }
 
 /* ── Route fade-in animation ── */
@@ -148,6 +240,19 @@ samp,
   }
 }
 
+/* ── Subtle marquee shimmer for brand surfaces ── */
+@keyframes brand-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar {
   width: 6px;
@@ -166,12 +271,12 @@ samp,
 
 /* ── Selection ── */
 ::selection {
-  background: rgba(124, 58, 237, 0.35);
+  background: rgba(255, 62, 165, 0.35);
   color: var(--color-text-primary);
 }
 
 /* ── Focus ── */
 :focus-visible {
-  outline: 2px solid var(--color-accent-violet);
+  outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
 }

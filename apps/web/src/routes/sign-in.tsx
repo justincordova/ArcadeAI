@@ -86,37 +86,51 @@ function SignInPage() {
           position: "fixed",
           inset: 0,
           backgroundImage:
-            "linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px)",
+            "linear-gradient(rgba(255,62,165,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,62,165,0.04) 1px, transparent 1px)",
           backgroundSize: "48px 48px",
           pointerEvents: "none",
         }}
       />
-      {/* Glow orbs */}
+      {/* Glow orbs — magenta hot-spot left of center, cyan secondary right */}
       <div
         aria-hidden="true"
         style={{
           position: "fixed",
-          top: "20%",
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: 600,
-          height: 300,
-          background: "radial-gradient(ellipse, rgba(124,58,237,0.12) 0%, transparent 70%)",
+          top: "12%",
+          left: "30%",
+          width: 520,
+          height: 320,
+          background: "radial-gradient(ellipse, rgba(255,62,165,0.18) 0%, transparent 65%)",
           pointerEvents: "none",
+          filter: "blur(8px)",
+        }}
+      />
+      <div
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          top: "30%",
+          left: "60%",
+          width: 420,
+          height: 280,
+          background: "radial-gradient(ellipse, rgba(76,223,232,0.12) 0%, transparent 70%)",
+          pointerEvents: "none",
+          filter: "blur(8px)",
         }}
       />
 
       <div className="relative w-full max-w-sm">
         {/* Card */}
         <div
-          className="relative overflow-hidden rounded-2xl p-8"
+          className="scanlines relative overflow-hidden rounded-2xl p-8"
           style={{
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
-            boxShadow: "0 0 0 1px rgba(124,58,237,0.1), 0 24px 64px rgba(0,0,0,0.6)",
+            boxShadow:
+              "0 0 0 1px rgba(255,62,165,0.12), 0 24px 64px rgba(0,0,0,0.65), 0 0 80px rgba(255,62,165,0.06)",
           }}
         >
-          {/* Gradient top edge */}
+          {/* Gradient top edge — brand marquee */}
           <div
             aria-hidden="true"
             style={{
@@ -125,27 +139,39 @@ function SignInPage() {
               left: 0,
               right: 0,
               height: 2,
-              background: "linear-gradient(90deg, #7c3aed 0%, #06b6d4 100%)",
+              backgroundImage: "var(--gradient-brand)",
+              backgroundSize: "200% 100%",
+              animation: "brand-shimmer 6s ease-in-out infinite",
             }}
           />
 
           {/* Logo */}
           <div className="mb-8 flex flex-col items-center gap-3">
-            <LogoMark size={40} />
+            <LogoMark size={44} />
             <div className="text-center">
               <h1
-                className="font-mono text-2xl font-bold"
+                className="font-display"
                 style={{
-                  background: "linear-gradient(135deg, #a78bfa 0%, #06b6d4 100%)",
+                  fontSize: 28,
+                  fontWeight: 700,
+                  letterSpacing: "-0.02em",
+                  backgroundImage: "var(--gradient-brand)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   backgroundClip: "text",
+                  lineHeight: 1.05,
                 }}
               >
-                ArcadeAI
+                Arcade<span style={{ fontWeight: 500, opacity: 0.85 }}>AI</span>
               </h1>
-              <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                Build browser games with AI
+              <p
+                className="mt-2 text-sm"
+                style={{
+                  color: "var(--color-text-secondary)",
+                  letterSpacing: "0.01em",
+                }}
+              >
+                Prompt. Play. Remix.
               </p>
             </div>
           </div>
@@ -173,7 +199,7 @@ function SignInPage() {
               }}
               onMouseEnter={(e) => {
                 if (pending === null)
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.5)";
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,62,165,0.5)";
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
@@ -195,7 +221,7 @@ function SignInPage() {
               }}
               onMouseEnter={(e) => {
                 if (pending === null)
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.5)";
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,62,165,0.5)";
               }}
               onMouseLeave={(e) => {
                 (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
