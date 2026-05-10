@@ -26,12 +26,17 @@ interface BuilderProps {
   initialCode?: string;
   initialMessages?: Message[];
   gameId?: string | null;
+  initialPrompt?: string;
 }
 
 // Builder for /game/new — first generation only
-function GenerationBuilder({ initialCode = "", initialMessages = [] }: BuilderProps) {
+function GenerationBuilder({
+  initialCode = "",
+  initialMessages = [],
+  initialPrompt = "",
+}: BuilderProps) {
   const { status, gameId, code, error, start, stop, attachIframe } = useStreamedGeneration();
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState(initialPrompt);
   const isStreaming = status === "streaming";
   const displayCode = code || initialCode;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -697,7 +702,12 @@ function BuilderLayout({
   );
 }
 
-export function Builder({ initialCode = "", initialMessages = [], gameId }: BuilderProps) {
+export function Builder({
+  initialCode = "",
+  initialMessages = [],
+  gameId,
+  initialPrompt,
+}: BuilderProps) {
   if (gameId) {
     return (
       <RefinementBuilder
@@ -707,5 +717,11 @@ export function Builder({ initialCode = "", initialMessages = [], gameId }: Buil
       />
     );
   }
-  return <GenerationBuilder initialCode={initialCode} initialMessages={initialMessages} />;
+  return (
+    <GenerationBuilder
+      initialCode={initialCode}
+      initialMessages={initialMessages}
+      initialPrompt={initialPrompt}
+    />
+  );
 }

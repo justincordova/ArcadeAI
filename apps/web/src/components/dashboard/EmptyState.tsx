@@ -1,8 +1,19 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import type React from "react";
 
+const SUGGESTION_PROMPTS: Record<string, string> = {
+  Snake: "A classic snake game on a 20x20 grid with a growing tail and food pellets",
+  Breakout: "A breakout/brick-breaker game with a paddle, ball, and rows of colorful bricks",
+  "Flappy Bird clone": "A flappy bird clone — tap space to flap, dodge pipes, score points",
+  Asteroids:
+    "An asteroids game with a ship that wraps around the screen and floating rocks to shoot",
+  "Pong with AI": "Pong with an AI opponent that tracks the ball with slight imperfection",
+  "Pac-Man": "A simple pac-man game with a small maze, dots to collect, and one ghost chaser",
+};
+
 export function EmptyState() {
+  const navigate = useNavigate();
   return (
     <div
       style={{
@@ -79,23 +90,34 @@ export function EmptyState() {
           maxWidth: 480,
         }}
       >
-        {["Snake", "Breakout", "Flappy Bird clone", "Asteroids", "Pong with AI", "Pac-Man"].map(
-          (label) => (
-            <span
-              key={label}
-              style={{
-                padding: "4px 12px",
-                borderRadius: 9999,
-                fontSize: 12,
-                color: "var(--color-text-muted)",
-                border: "1px solid var(--color-border)",
-                background: "var(--color-surface)",
-              }}
-            >
-              {label}
-            </span>
-          )
-        )}
+        {Object.entries(SUGGESTION_PROMPTS).map(([label, prompt]) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => navigate({ to: "/game/new", search: { prompt } })}
+            style={{
+              padding: "4px 12px",
+              borderRadius: 9999,
+              fontSize: 12,
+              color: "var(--color-text-muted)",
+              border: "1px solid var(--color-border)",
+              background: "var(--color-surface)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "all 0.12s",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.4)";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
+              (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-muted)";
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
     </div>
   );
