@@ -13,6 +13,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { DiffViewer } from "./DiffViewer.js";
 import { ErrorBanner } from "./ErrorBanner.js";
 import { GameIframe } from "./GameIframe.js";
 import { type Message, MessageBubble } from "./MessageBubble.js";
@@ -107,6 +108,12 @@ function RefinementBuilder({
   const [refineTrigger, setRefineTrigger] = useState(0);
   const [repairStatus, setRepairStatus] = useState<RepairStatus>("idle");
   const [reloadKey, setReloadKey] = useState(0);
+  // Snapshot of the code as it was when the most recent refinement
+  // fired. The DiffViewer uses this against finalCode to render the
+  // before/after. Cleared when the parent's `["game", id]` query
+  // refetches and replaces initialMessages — at that point the diff
+  // is "stale" (history) and we drop the live-diff treatment.
+  const [previousCodeSnapshot, setPreviousCodeSnapshot] = useState<string | null>(null);
   const isStreaming = status === "streaming";
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
@@ -125,6 +132,11 @@ function RefinementBuilder({
 
   useEffect(() => {
     setLocalMessages(initialMessages);
+    // History was just refetched — drop the live-diff snapshot. The
+    // summary bubble for the just-completed turn still renders, but
+    // without the "Show changes" pill (we no longer have its
+    // before-snapshot in scope).
+    setPreviousCodeSnapshot(null);
   }, [initialMessages]);
 
   const displayCode = streamingCode || repairedCode || finalCode || initialCode;
@@ -146,6 +158,12 @@ function RefinementBuilder({
       createdAt: Date.now(),
     };
     setLocalMessages((prev) => [...prev, optimisticMsg]);
+
+    // Capture the pre-refinement code for the DiffViewer. Prefer the
+    // last-known good `finalCode` (if a previous refinement ran in
+    // this same session); otherwise fall back to `initialCode` (the
+    // server-loaded snapshot).
+    setPreviousCodeSnapshot(finalCode ?? initialCode);
 
     setRefineTrigger((n) => n + 1);
     refine(trimmed);
@@ -207,6 +225,13 @@ function RefinementBuilder({
         onThumbnail={handleThumbnail}
         reloadKey={reloadKey}
         onRestart={() => setReloadKey((n) => n + 1)}
+        diffPair={
+          // Only render the inline diff once streaming has settled into
+          // a finalCode and we still hold the before-snapshot.
+          previousCodeSnapshot !== null && finalCode !== null && !isStreaming
+            ? { previous: previousCodeSnapshot, next: finalCode }
+            : null
+        }
         streamLabel="Refining..."
         submitLabel="Refine"
       />
@@ -233,6 +258,13 @@ interface BuilderLayoutProps {
   onThumbnail: (gameId: string, dataUrl: string) => void;
   reloadKey: number;
   onRestart: () => void;
+  /**
+   * Before/after code for the live (most-recent) refinement turn. When
+   * present, the DiffViewer renders under the last `summary` message
+   * and lets the user expand a +/− line view. Null for generation flow
+   * and for history loaded from the server.
+   */
+  diffPair?: { previous: string; next: string } | null;
   streamLabel: string;
   submitLabel: string;
 }
@@ -286,6 +318,7 @@ function BuilderLayout({
   onThumbnail,
   reloadKey,
   onRestart,
+  diffPair,
   streamLabel,
   submitLabel,
 }: BuilderLayoutProps) {
@@ -550,13 +583,21 @@ function BuilderLayout({
             </div>
           )}
 
-          {messages.map((msg, i) => (
-            <MessageBubble
-              key={msg.id}
-              msg={msg}
-              isLast={i === messages.length - 1 && !isStreaming}
-            />
-          ))}
+          {messages.map((msg, i) => {
+            const isLastMessage = i === messages.length - 1;
+            // Attach the diff viewer under the last `summary` bubble
+            // when we still have the live before/after in scope.
+            const attachDiff =
+              isLastMessage && msg.kind === "summary" && !isStreaming && diffPair !== null;
+            return (
+              <div key={msg.id}>
+                <MessageBubble msg={msg} isLast={isLastMessage && !isStreaming} />
+                {attachDiff && diffPair && (
+                  <DiffViewer previousCode={diffPair.previous} newCode={diffPair.next} />
+                )}
+              </div>
+            );
+          })}
 
           {isStreaming && <StreamingIndicator label={streamLabel} />}
           {isStreaming && <StreamingCodePreview code={streamingCode} />}
