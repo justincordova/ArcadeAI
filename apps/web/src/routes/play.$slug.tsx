@@ -75,7 +75,7 @@ function PlayPage() {
   }
 
   if (isLoading) {
-    return <CenteredMessage>Loading game…</CenteredMessage>;
+    return <PlayLoading />;
   }
 
   if (isError || !game) {
@@ -178,10 +178,13 @@ function PlayPage() {
               style={{
                 fontSize: 11,
                 color: "var(--color-text-muted)",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
                 overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
+                lineHeight: 1.45,
               }}
+              title={`by ${game.ownerDisplayName} · "${game.originalPrompt}"`}
             >
               by {game.ownerDisplayName} · "{game.originalPrompt}"
             </p>
@@ -193,6 +196,36 @@ function PlayPage() {
           )}
         </footer>
       </main>
+    </div>
+  );
+}
+
+function PlayLoading() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "100vh",
+        gap: 14,
+        background: "var(--color-bg)",
+      }}
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          width: 28,
+          height: 28,
+          borderRadius: "50%",
+          border: "2px solid rgba(124,58,237,0.18)",
+          borderTopColor: "rgba(124,58,237,0.85)",
+          animation: "play-spin 0.8s linear infinite",
+        }}
+      />
+      <p style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Loading game…</p>
+      <style>{"@keyframes play-spin { to { transform: rotate(360deg); } }"}</style>
     </div>
   );
 }
