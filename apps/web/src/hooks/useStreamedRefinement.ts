@@ -45,6 +45,14 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
         if (name === "chunk" && typeof d.delta === "string") {
           accumulatedRef.current += d.delta;
           setStreamingCode(accumulatedRef.current);
+          return;
+        }
+        // Diff summary lands after `done` (server emits done immediately
+        // so the UI unlocks; the summary follows once GPT-mini returns).
+        // Re-invalidate so the new `summary` message in the DB shows up
+        // in the chat panel.
+        if (name === "summary") {
+          queryClient.invalidateQueries({ queryKey: ["game", gameId] });
         }
       },
       onQuotaExceeded: quotaMessage,

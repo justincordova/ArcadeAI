@@ -118,12 +118,19 @@ export async function fetchPublicGame(slug: string): Promise<PublicGame | null> 
   return res.json() as Promise<PublicGame>;
 }
 
+// Empty-body POSTs need a literal "{}" payload when Content-Type is set
+// to application/json — Fastify's default JSON parser rejects an empty
+// body as "Body cannot be empty when content-type is set to
+// 'application/json'". The CSRF guard requires the JSON content-type
+// (csrf.ts) for state-changing requests, so we can't drop the header.
+
 /** Fire-and-forget play counter. Failures are silently ignored. */
 export function recordPlay(slug: string): void {
   fetch(`${API}/api/play/${slug}/play`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
+    body: "{}",
   }).catch(() => {
     /* silent */
   });
@@ -140,6 +147,7 @@ export async function likeGame(slug: string): Promise<LikeResponse> {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
   if (res.status === 401) throw new Error("Sign in to like");
   if (!res.ok) throw new Error("Failed to like game");
@@ -151,6 +159,7 @@ export async function unlikeGame(slug: string): Promise<LikeResponse> {
     method: "DELETE",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
   if (res.status === 401) throw new Error("Sign in to like");
   if (!res.ok) throw new Error("Failed to unlike game");

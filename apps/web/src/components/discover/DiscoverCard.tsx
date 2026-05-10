@@ -76,6 +76,12 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
         }
       }
     },
+    onSettled: () => {
+      // Sync the public-play-page query for this slug so a navigation
+      // to /play/:slug after liking from discover doesn't briefly show
+      // stale like state.
+      queryClient.invalidateQueries({ queryKey: ["public-game", game.slug] });
+    },
   });
 
   function handleLikeClick(e: React.MouseEvent) {

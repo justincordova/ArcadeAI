@@ -132,11 +132,14 @@ function RefinementBuilder({
 
   useEffect(() => {
     setLocalMessages(initialMessages);
-    // History was just refetched — drop the live-diff snapshot. The
-    // summary bubble for the just-completed turn still renders, but
-    // without the "Show changes" pill (we no longer have its
-    // before-snapshot in scope).
-    setPreviousCodeSnapshot(null);
+    // Note: we intentionally don't clear previousCodeSnapshot here.
+    // The server emits `done` before the diff summary completes, which
+    // triggers a refetch (refreshing initialMessages). If we cleared
+    // the snapshot here, the subsequent summary refetch would arrive
+    // without a before-snapshot in scope and the DiffViewer would
+    // never render. The snapshot is reset on the next user submit
+    // (handleSubmit) — the only point where "previous code" semantically
+    // becomes stale.
   }, [initialMessages]);
 
   const displayCode = streamingCode || repairedCode || finalCode || initialCode;
@@ -330,6 +333,12 @@ function BuilderLayout({
   const { data: me } = useSession();
   const [sidebarWidth, setSidebarWidth] = useState<number>(getStoredSidebarWidth);
   const [resizing, setResizing] = useState(false);
+  // Keep the latest width in a ref so the mouseup persister reads the
+  // final value without re-binding the listener on every pixel of drag.
+  const sidebarWidthRef = useRef(sidebarWidth);
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
 
   // Drag-to-resize the chat sidebar. Mouse-move runs while a drag is active;
   // we attach to window so the cursor can leave the handle without losing
@@ -343,7 +352,7 @@ function BuilderLayout({
     function onUp() {
       setResizing(false);
       try {
-        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidthRef.current));
       } catch {}
     }
     window.addEventListener("mousemove", onMove);
@@ -356,7 +365,7 @@ function BuilderLayout({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-  }, [resizing, sidebarWidth]);
+  }, [resizing]);
 
   // Cost preview text (#44). Free + lifetime cap on shows trial counters;
   // everyone else sees credit cost vs remaining monthly balance. Admin
@@ -514,8 +523,8 @@ function BuilderLayout({
                   height: 40,
                   borderRadius: 12,
                   background:
-                    "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.15) 100%)",
-                  border: "1px solid rgba(124,58,237,0.2)",
+                    "linear-gradient(135deg, rgba(255,62,165,0.15) 0%, rgba(76,223,232,0.15) 100%)",
+                  border: "1px solid rgba(255,62,165,0.2)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -531,7 +540,7 @@ function BuilderLayout({
                   <defs>
                     <linearGradient id="builder-plus" x1="0%" y1="0%" x2="100%" y2="100%">
                       <stop offset="0%" stopColor="#a78bfa" />
-                      <stop offset="100%" stopColor="#06b6d4" />
+                      <stop offset="100%" stopColor="#4cdfe8" />
                     </linearGradient>
                   </defs>
                 </svg>
@@ -563,7 +572,7 @@ function BuilderLayout({
                         (e.currentTarget as HTMLButtonElement).style.background =
                           "var(--color-surface-raised)";
                         (e.currentTarget as HTMLButtonElement).style.borderColor =
-                          "rgba(124,58,237,0.3)";
+                          "rgba(255,62,165,0.3)";
                         (e.currentTarget as HTMLButtonElement).style.color =
                           "var(--color-text-primary)";
                       }}
@@ -626,7 +635,7 @@ function BuilderLayout({
               transition: "border-color 0.15s",
             }}
             onFocusCapture={(e) => {
-              (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(124,58,237,0.4)";
+              (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,62,165,0.4)";
             }}
             onBlurCapture={(e) => {
               (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-border)";
@@ -728,7 +737,7 @@ function BuilderLayout({
                     borderRadius: 8,
                     border: "none",
                     background: canSubmit
-                      ? "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)"
+                      ? "linear-gradient(135deg, #ff3ea5 0%, #4cdfe8 100%)"
                       : "var(--color-border)",
                     color: canSubmit ? "#fff" : "var(--color-text-muted)",
                     cursor: canSubmit ? "pointer" : "not-allowed",
@@ -767,7 +776,7 @@ function BuilderLayout({
             bottom: 0,
             width: 6,
             cursor: "col-resize",
-            background: resizing ? "rgba(124,58,237,0.4)" : "transparent",
+            background: resizing ? "rgba(255,62,165,0.4)" : "transparent",
             border: "none",
             padding: 0,
             zIndex: 5,
@@ -775,7 +784,7 @@ function BuilderLayout({
           }}
           onMouseEnter={(e) => {
             if (!resizing) {
-              (e.currentTarget as HTMLButtonElement).style.background = "rgba(124,58,237,0.2)";
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,62,165,0.2)";
             }
           }}
           onMouseLeave={(e) => {

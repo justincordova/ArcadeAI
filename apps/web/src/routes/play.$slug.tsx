@@ -109,27 +109,37 @@ function PlayPage() {
     if (!me) {
       navigate({
         to: "/sign-in",
-        search: { next: `/play/${slug}` },
+        search: { next: `/play/${slug}?intent=like` },
       });
       return;
     }
     likeMutation.mutate();
   }
 
-  // Post-sign-in redirect: when arriving with ?intent=remix and an
-  // authenticated session, fire the remix immediately. Once running, the
-  // mutation resets navigation so this effect runs at most once per visit.
+  // Post-sign-in redirect: when arriving with ?intent=remix or ?intent=like
+  // and an authenticated session, fire the corresponding action immediately.
+  // Each mutation only runs once per visit — onSuccess/onError on the
+  // mutation handle re-entrancy.
   useEffect(() => {
+    if (!me) return;
     if (
       intent === "remix" &&
-      me &&
       !remixMutation.isPending &&
       !remixMutation.isSuccess &&
       !remixMutation.isError
     ) {
       remixMutation.mutate();
+    } else if (
+      intent === "like" &&
+      game &&
+      !game.liked &&
+      !likeMutation.isPending &&
+      !likeMutation.isSuccess &&
+      !likeMutation.isError
+    ) {
+      likeMutation.mutate();
     }
-  }, [intent, me, remixMutation]);
+  }, [intent, me, game, remixMutation, likeMutation]);
 
   function handleRemixClick() {
     if (!me) {

@@ -674,22 +674,32 @@ export async function gamesRoutes(app: FastifyInstance) {
         await markSucceeded(logId).catch(() => {});
       }
 
+      // Emit `done` immediately so the UI flips out of the streaming
+      // state and the user can play the refined game without waiting on
+      // the diff summary call. The SSE hook keeps reading after `done`,
+      // so the summary event below still reaches the client.
+      if (!clientClosed) {
+        if (streamError) {
+          writeSSE(reply, "error", { message: streamError.message });
+        } else {
+          writeSSE(reply, "done", {});
+        }
+      }
+
       // Diff summary — fire after success only. Generates a 1-2 sentence
-      // "what changed" recap on GPT-mini and persists as a `summary` message
-      // so the chat panel can render it as an AI-side bubble. Failure here
-      // is non-fatal; the stream has already succeeded by this point.
-      let summaryText: string | null = null;
-      let summaryId: string | null = null;
+      // "what changed" recap on GPT-mini and persists as a `summary`
+      // message so the chat panel can render it as an AI-side bubble.
+      // Failure is non-fatal; the stream has already succeeded.
       if (!streamError && accumulatedCode && accumulatedCode !== game.currentCode) {
         try {
-          summaryText = await generateDiffSummary({
+          const summaryText = await generateDiffSummary({
             feedback,
             previousCode: game.currentCode ?? "",
             newCode: accumulatedCode,
             logger: request.log,
           });
           if (summaryText) {
-            summaryId = randomUUID();
+            const summaryId = randomUUID();
             await db.insert(messages).values({
               id: summaryId,
               gameId: id,
@@ -697,6 +707,9 @@ export async function gamesRoutes(app: FastifyInstance) {
               content: summaryText,
               createdAt: Date.now(),
             });
+            if (!clientClosed) {
+              writeSSE(reply, "summary", { id: summaryId, content: summaryText });
+            }
           }
         } catch {
           // Summary is best-effort; suppress and move on.
@@ -706,14 +719,6 @@ export async function gamesRoutes(app: FastifyInstance) {
       stopHeartbeat();
 
       if (!clientClosed) {
-        if (streamError) {
-          writeSSE(reply, "error", { message: streamError.message });
-        } else {
-          if (summaryText && summaryId) {
-            writeSSE(reply, "summary", { id: summaryId, content: summaryText });
-          }
-          writeSSE(reply, "done", {});
-        }
         endSSE(reply);
       }
     } finally {
