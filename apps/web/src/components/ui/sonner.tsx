@@ -13,7 +13,7 @@ export function Toaster() {
           toast:
             "border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-[0_8px_24px_rgba(0,0,0,0.4)]",
           description: "text-[var(--color-text-secondary)]",
-          actionButton: "bg-gradient-to-br from-[#7c3aed] to-[#06b6d4] text-white",
+          actionButton: "bg-gradient-to-br from-[#ff3ea5] to-[#4cdfe8] text-white",
           cancelButton: "bg-[var(--color-surface-raised)] text-[var(--color-text-secondary)]",
           error: "border-[rgba(244,63,94,0.4)]",
           success: "border-[rgba(34,211,160,0.4)]",

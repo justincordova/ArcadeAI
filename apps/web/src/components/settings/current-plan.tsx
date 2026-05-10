@@ -50,17 +50,17 @@ export function CurrentPlan() {
           fontWeight: 600,
           fontFamily: "inherit",
           background:
-            "linear-gradient(135deg, rgba(124,58,237,0.12) 0%, rgba(6,182,212,0.12) 100%)",
-          border: "1px solid rgba(124,58,237,0.2)",
+            "linear-gradient(135deg, rgba(255,62,165,0.12) 0%, rgba(76,223,232,0.12) 100%)",
+          border: "1px solid rgba(255,62,165,0.2)",
           color: "var(--color-accent-violet-light)",
           textDecoration: "none",
           transition: "all 0.15s",
         }}
         onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
-          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(124,58,237,0.4)";
+          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,62,165,0.4)";
         }}
         onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
-          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(124,58,237,0.2)";
+          (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,62,165,0.2)";
         }}
       >
         Manage plan

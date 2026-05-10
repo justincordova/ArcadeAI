@@ -39,7 +39,7 @@ export function ErrorBanner({ message }: { message: string }) {
             fontSize: 12,
             fontWeight: 600,
             textDecoration: "none",
-            background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
+            background: "linear-gradient(135deg, #ff3ea5 0%, #4cdfe8 100%)",
             color: "#fff",
           }}
         >

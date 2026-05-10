@@ -61,9 +61,9 @@ export function EmptyState() {
           fontWeight: 700,
           fontFamily: "inherit",
           textDecoration: "none",
-          background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
+          background: "linear-gradient(135deg, #ff3ea5 0%, #4cdfe8 100%)",
           color: "#fff",
-          boxShadow: "0 4px 20px rgba(124,58,237,0.35)",
+          boxShadow: "0 4px 20px rgba(255,62,165,0.35)",
           transition: "opacity 0.15s, transform 0.15s",
         }}
         onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
@@ -107,7 +107,7 @@ export function EmptyState() {
               transition: "all 0.12s",
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.4)";
+              (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,62,165,0.4)";
               (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
             }}
             onMouseLeave={(e) => {

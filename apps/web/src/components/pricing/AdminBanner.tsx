@@ -6,8 +6,8 @@ export function AdminBanner() {
         borderRadius: 12,
         padding: "14px 20px",
         textAlign: "center",
-        background: "linear-gradient(135deg, rgba(124,58,237,0.1) 0%, rgba(6,182,212,0.1) 100%)",
-        border: "1px solid rgba(124,58,237,0.25)",
+        background: "linear-gradient(135deg, rgba(255,62,165,0.1) 0%, rgba(76,223,232,0.1) 100%)",
+        border: "1px solid rgba(255,62,165,0.25)",
       }}
     >
       <p

@@ -103,7 +103,7 @@ export function DisplayName() {
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           onFocus={(e) => {
-            (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(124,58,237,0.5)";
+            (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(255,62,165,0.5)";
           }}
           maxLength={80}
           style={inputStyle}

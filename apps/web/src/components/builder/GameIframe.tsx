@@ -64,7 +64,7 @@ export function GameIframe({
             position: "absolute",
             inset: 0,
             backgroundImage:
-              "linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px)",
+              "linear-gradient(rgba(255,62,165,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(255,62,165,0.04) 1px, transparent 1px)",
             backgroundSize: "40px 40px",
             pointerEvents: "none",
           }}
@@ -79,7 +79,7 @@ export function GameIframe({
             transform: "translate(-50%, -50%)",
             width: 400,
             height: 200,
-            background: "radial-gradient(ellipse, rgba(124,58,237,0.07) 0%, transparent 70%)",
+            background: "radial-gradient(ellipse, rgba(255,62,165,0.07) 0%, transparent 70%)",
             pointerEvents: "none",
           }}
         />
@@ -99,8 +99,8 @@ export function GameIframe({
               height: 56,
               borderRadius: 16,
               background:
-                "linear-gradient(135deg, rgba(124,58,237,0.1) 0%, rgba(6,182,212,0.1) 100%)",
-              border: "1px solid rgba(124,58,237,0.15)",
+                "linear-gradient(135deg, rgba(255,62,165,0.1) 0%, rgba(76,223,232,0.1) 100%)",
+              border: "1px solid rgba(255,62,165,0.15)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -110,7 +110,7 @@ export function GameIframe({
               <defs>
                 <linearGradient id="iframe-grad" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.5" />
-                  <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.5" />
+                  <stop offset="100%" stopColor="#4cdfe8" stopOpacity="0.5" />
                 </linearGradient>
               </defs>
               <path

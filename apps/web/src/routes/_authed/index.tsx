@@ -89,7 +89,7 @@ function GridIcon({ active }: { active: boolean }) {
       <defs>
         <linearGradient id="view-grad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#a78bfa" />
-          <stop offset="100%" stopColor="#06b6d4" />
+          <stop offset="100%" stopColor="#4cdfe8" />
         </linearGradient>
       </defs>
     </svg>
@@ -129,7 +129,7 @@ function ListIcon({ active }: { active: boolean }) {
       <defs>
         <linearGradient id="view-grad2" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#a78bfa" />
-          <stop offset="100%" stopColor="#06b6d4" />
+          <stop offset="100%" stopColor="#4cdfe8" />
         </linearGradient>
       </defs>
     </svg>
@@ -222,7 +222,7 @@ function Dashboard() {
           position: "fixed",
           inset: 0,
           backgroundImage:
-            "linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px)",
+            "linear-gradient(rgba(255,62,165,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,62,165,0.03) 1px, transparent 1px)",
           backgroundSize: "48px 48px",
           pointerEvents: "none",
           zIndex: 0,
@@ -236,7 +236,7 @@ function Dashboard() {
           right: -80,
           width: 480,
           height: 480,
-          background: "radial-gradient(ellipse, rgba(124,58,237,0.07) 0%, transparent 70%)",
+          background: "radial-gradient(ellipse, rgba(255,62,165,0.07) 0%, transparent 70%)",
           pointerEvents: "none",
           zIndex: 0,
         }}
@@ -338,10 +338,10 @@ function Dashboard() {
                 fontWeight: 600,
                 fontFamily: "inherit",
                 textDecoration: "none",
-                background: "linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%)",
+                background: "linear-gradient(135deg, #ff3ea5 0%, #4cdfe8 100%)",
                 color: "#fff",
                 transition: "opacity 0.15s",
-                boxShadow: "0 2px 12px rgba(124,58,237,0.3)",
+                boxShadow: "0 2px 12px rgba(255,62,165,0.3)",
               }}
               onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
                 (e.currentTarget as HTMLAnchorElement).style.opacity = "0.88";

@@ -39,14 +39,14 @@ export function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }
           fontSize: 13,
           lineHeight: 1.55,
           background: isUser
-            ? "linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(6,182,212,0.2) 100%)"
+            ? "linear-gradient(135deg, rgba(255,62,165,0.3) 0%, rgba(76,223,232,0.2) 100%)"
             : isSummary
-              ? "linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(6,182,212,0.06) 100%)"
+              ? "linear-gradient(135deg, rgba(255,62,165,0.06) 0%, rgba(76,223,232,0.06) 100%)"
               : "var(--color-surface-raised)",
           border: isUser
-            ? "1px solid rgba(124,58,237,0.3)"
+            ? "1px solid rgba(255,62,165,0.3)"
             : isSummary
-              ? "1px solid rgba(124,58,237,0.18)"
+              ? "1px solid rgba(255,62,165,0.18)"
               : "1px solid var(--color-border)",
           color: isSummary ? "var(--color-text-secondary)" : "var(--color-text-primary)",
           wordBreak: "break-word",

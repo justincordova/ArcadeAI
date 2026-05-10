@@ -80,7 +80,7 @@ function IconButton({
       onMouseEnter={(e) => {
         if (!disabled) {
           (e.currentTarget as HTMLButtonElement).style.color = "var(--color-text-primary)";
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(124,58,237,0.4)";
+          (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,62,165,0.4)";
         }
       }}
       onMouseLeave={(e) => {

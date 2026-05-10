@@ -237,7 +237,7 @@ export function GameCard({ game, view }: GameCardProps) {
             display: "flex",
             alignItems: "center",
             borderRadius: 10,
-            border: `1px solid ${hovered ? "rgba(124,58,237,0.25)" : "var(--color-border)"}`,
+            border: `1px solid ${hovered ? "rgba(255,62,165,0.25)" : "var(--color-border)"}`,
             background: hovered ? "var(--color-surface)" : "transparent",
             transition: "all 0.15s",
             position: "relative",
@@ -287,7 +287,7 @@ export function GameCard({ game, view }: GameCardProps) {
                     alignItems: "center",
                     justifyContent: "center",
                     background:
-                      "linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(6,182,212,0.06) 100%)",
+                      "linear-gradient(135deg, rgba(255,62,165,0.06) 0%, rgba(76,223,232,0.06) 100%)",
                   }}
                 >
                   <svg width="16" height="16" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -300,7 +300,7 @@ export function GameCard({ game, view }: GameCardProps) {
                         y2="100%"
                       >
                         <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.35" />
-                        <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#4cdfe8" stopOpacity="0.35" />
                       </linearGradient>
                     </defs>
                     <path
@@ -352,7 +352,7 @@ export function GameCard({ game, view }: GameCardProps) {
                   style={{
                     width: "100%",
                     background: "var(--color-surface-overlay)",
-                    border: "1px solid rgba(124,58,237,0.4)",
+                    border: "1px solid rgba(255,62,165,0.4)",
                     borderRadius: 6,
                     padding: "3px 8px",
                     fontSize: 13,
@@ -399,7 +399,7 @@ export function GameCard({ game, view }: GameCardProps) {
         style={{
           position: "relative",
           borderRadius: 12,
-          border: `1px solid ${hovered ? "rgba(124,58,237,0.3)" : "var(--color-border)"}`,
+          border: `1px solid ${hovered ? "rgba(255,62,165,0.3)" : "var(--color-border)"}`,
           background: "var(--color-surface)",
           transition: "all 0.2s",
           overflow: "hidden",
@@ -445,14 +445,14 @@ export function GameCard({ game, view }: GameCardProps) {
                   alignItems: "center",
                   justifyContent: "center",
                   background:
-                    "linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(6,182,212,0.06) 100%)",
+                    "linear-gradient(135deg, rgba(255,62,165,0.06) 0%, rgba(76,223,232,0.06) 100%)",
                 }}
               >
                 <svg width="28" height="28" viewBox="0 0 32 32" fill="none" aria-hidden="true">
                   <defs>
                     <linearGradient id={`card-grad-${game.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
                       <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.4" />
+                      <stop offset="100%" stopColor="#4cdfe8" stopOpacity="0.4" />
                     </linearGradient>
                   </defs>
                   <path
@@ -490,7 +490,7 @@ export function GameCard({ game, view }: GameCardProps) {
                   position: "absolute",
                   inset: 0,
                   background:
-                    "linear-gradient(135deg, rgba(124,58,237,0.08) 0%, rgba(6,182,212,0.08) 100%)",
+                    "linear-gradient(135deg, rgba(255,62,165,0.08) 0%, rgba(76,223,232,0.08) 100%)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -561,7 +561,7 @@ export function GameCard({ game, view }: GameCardProps) {
               style={{
                 width: "100%",
                 borderRadius: 6,
-                border: "1px solid rgba(124,58,237,0.4)",
+                border: "1px solid rgba(255,62,165,0.4)",
                 background: "var(--color-surface-overlay)",
                 padding: "4px 8px",
                 fontSize: 13,

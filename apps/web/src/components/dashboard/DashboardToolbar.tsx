@@ -92,7 +92,7 @@ export function DashboardToolbar({
             transition: "border-color 0.15s",
           }}
           onFocus={(e) => {
-            (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(124,58,237,0.4)";
+            (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(255,62,165,0.4)";
           }}
           onBlur={(e) => {
             (e.currentTarget as HTMLInputElement).style.borderColor = "var(--color-border)";
@@ -198,9 +198,9 @@ function FilterPill({
         fontSize: 11,
         fontWeight: 600,
         fontFamily: "inherit",
-        border: active ? "1px solid rgba(124,58,237,0.4)" : "1px solid var(--color-border)",
+        border: active ? "1px solid rgba(255,62,165,0.4)" : "1px solid var(--color-border)",
         background: active
-          ? "linear-gradient(135deg, rgba(124,58,237,0.12) 0%, rgba(6,182,212,0.12) 100%)"
+          ? "linear-gradient(135deg, rgba(255,62,165,0.12) 0%, rgba(76,223,232,0.12) 100%)"
           : "var(--color-surface)",
         color: active ? "var(--color-text-primary)" : "var(--color-text-muted)",
         cursor: "pointer",

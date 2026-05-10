@@ -84,7 +84,7 @@ export function PlanBadgeDropdown({
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
         borderRadius: 14,
-        boxShadow: "0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,58,237,0.08)",
+        boxShadow: "0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,62,165,0.08)",
         overflow: "hidden",
         zIndex: 100,
       }}
@@ -162,19 +162,19 @@ export function PlanBadgeDropdown({
             fontWeight: 600,
             fontFamily: "inherit",
             background:
-              "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.15) 100%)",
-            border: "1px solid rgba(124,58,237,0.25)",
+              "linear-gradient(135deg, rgba(255,62,165,0.15) 0%, rgba(76,223,232,0.15) 100%)",
+            border: "1px solid rgba(255,62,165,0.25)",
             color: "var(--color-accent-violet-light)",
             textDecoration: "none",
             transition: "all 0.15s",
           }}
           onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
             (e.currentTarget as HTMLAnchorElement).style.background =
-              "linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(6,182,212,0.25) 100%)";
+              "linear-gradient(135deg, rgba(255,62,165,0.25) 0%, rgba(76,223,232,0.25) 100%)";
           }}
           onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
             (e.currentTarget as HTMLAnchorElement).style.background =
-              "linear-gradient(135deg, rgba(124,58,237,0.15) 0%, rgba(6,182,212,0.15) 100%)";
+              "linear-gradient(135deg, rgba(255,62,165,0.15) 0%, rgba(76,223,232,0.15) 100%)";
           }}
         >
           View plans &amp; pricing

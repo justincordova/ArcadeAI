@@ -37,7 +37,7 @@ export function IntervalToggle({ value, onChange }: IntervalToggleProps) {
             transition: "all 0.15s",
             background:
               value === interval
-                ? "linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(6,182,212,0.25) 100%)"
+                ? "linear-gradient(135deg, rgba(255,62,165,0.25) 0%, rgba(76,223,232,0.25) 100%)"
                 : "transparent",
             color: value === interval ? "var(--color-text-primary)" : "var(--color-text-muted)",
           }}

@@ -22,8 +22,8 @@ export function NewGameTile() {
         }}
         onMouseEnter={(e) => {
           const el = e.currentTarget as HTMLDivElement;
-          el.style.borderColor = "rgba(124,58,237,0.5)";
-          el.style.background = "rgba(124,58,237,0.05)";
+          el.style.borderColor = "rgba(255,62,165,0.5)";
+          el.style.background = "rgba(255,62,165,0.05)";
         }}
         onMouseLeave={(e) => {
           const el = e.currentTarget as HTMLDivElement;
@@ -53,7 +53,7 @@ export function NewGameTile() {
             <defs>
               <linearGradient id="new-game-grad" x1="0%" y1="0%" x2="100%" y2="100%">
                 <stop offset="0%" stopColor="#a78bfa" />
-                <stop offset="100%" stopColor="#06b6d4" />
+                <stop offset="100%" stopColor="#4cdfe8" />
               </linearGradient>
             </defs>
           </svg>

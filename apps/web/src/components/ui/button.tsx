@@ -13,12 +13,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         // Primary CTA — violet → cyan gradient. Matches the existing visual
-        // identity (search the codebase for "linear-gradient(135deg, #7c3aed").
+        // identity (search the codebase for "linear-gradient(135deg, #ff3ea5").
         primary:
-          "bg-gradient-to-br from-[#7c3aed] to-[#06b6d4] text-white shadow-[0_2px_12px_rgba(124,58,237,0.3)] hover:opacity-90",
+          "bg-gradient-to-br from-[#ff3ea5] to-[#4cdfe8] text-white shadow-[0_2px_12px_rgba(255,62,165,0.3)] hover:opacity-90",
         // Secondary — outlined neutral.
         secondary:
-          "border border-[var(--color-border)] bg-[var(--color-surface-raised)] text-[var(--color-text-primary)] hover:border-[rgba(124,58,237,0.5)]",
+          "border border-[var(--color-border)] bg-[var(--color-surface-raised)] text-[var(--color-text-primary)] hover:border-[rgba(255,62,165,0.5)]",
         // Ghost — text only, hover background.
         ghost:
           "bg-transparent text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-raised)] hover:text-[var(--color-text-primary)]",
