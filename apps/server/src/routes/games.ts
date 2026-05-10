@@ -361,8 +361,10 @@ export async function gamesRoutes(app: FastifyInstance) {
         title: games.title,
         thumbnail: games.thumbnail,
         updatedAt: games.updatedAt,
+        createdAt: games.createdAt,
         isPublic: games.isPublic,
         publicSlug: games.publicSlug,
+        genre: games.genre,
       })
       .from(games)
       .where(eq(games.userId, userId))

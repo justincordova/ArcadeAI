@@ -7,8 +7,10 @@ export interface GameSummary {
   title: string;
   thumbnail: string | null;
   updatedAt: number;
+  createdAt: number;
   isPublic: boolean;
   publicSlug: string | null;
+  genre: string | null;
 }
 
 export interface PublicGame {

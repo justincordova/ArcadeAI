@@ -1,12 +1,17 @@
+import {
+  DashboardToolbar,
+  type GenreFilter,
+  type SortKey,
+} from "@/components/dashboard/DashboardToolbar.js";
 import { EmptyState } from "@/components/dashboard/EmptyState.js";
 import { GameCardSkeletons } from "@/components/dashboard/GameCardSkeleton.js";
 import { GameGrid } from "@/components/dashboard/GameGrid.js";
-import { GAMES_QUERY_KEY, listGames } from "@/lib/api/games.js";
+import { GAMES_QUERY_KEY, type GameSummary, listGames } from "@/lib/api/games.js";
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/_authed/")({
   component: Dashboard,
@@ -15,6 +20,8 @@ export const Route = createFileRoute("/_authed/")({
 type ViewMode = "grid" | "list";
 
 const VIEW_KEY = "dashboard-view";
+const SORT_KEY = "dashboard-sort";
+const GENRE_KEY = "dashboard-genre";
 
 function getStoredView(): ViewMode {
   try {
@@ -22,6 +29,22 @@ function getStoredView(): ViewMode {
     if (v === "list" || v === "grid") return v;
   } catch {}
   return "grid";
+}
+
+function getStoredSort(): SortKey {
+  try {
+    const v = localStorage.getItem(SORT_KEY);
+    if (v === "updated" || v === "created" || v === "title") return v;
+  } catch {}
+  return "updated";
+}
+
+function getStoredGenre(): GenreFilter {
+  try {
+    const v = localStorage.getItem(GENRE_KEY);
+    if (typeof v === "string" && v.length > 0) return v as GenreFilter;
+  } catch {}
+  return "all";
 }
 
 function GridIcon({ active }: { active: boolean }) {
@@ -115,6 +138,9 @@ function ListIcon({ active }: { active: boolean }) {
 
 function Dashboard() {
   const [view, setView] = useState<ViewMode>(getStoredView);
+  const [query, setQuery] = useState("");
+  const [genre, setGenre] = useState<GenreFilter>(getStoredGenre);
+  const [sort, setSort] = useState<SortKey>(getStoredSort);
 
   const { data, isLoading } = useQuery({
     queryKey: GAMES_QUERY_KEY,
@@ -128,7 +154,58 @@ function Dashboard() {
     } catch {}
   }
 
+  function handleSortChange(next: SortKey) {
+    setSort(next);
+    try {
+      localStorage.setItem(SORT_KEY, next);
+    } catch {}
+  }
+
+  function handleGenreChange(next: GenreFilter) {
+    setGenre(next);
+    try {
+      localStorage.setItem(GENRE_KEY, next);
+    } catch {}
+  }
+
   const games = data ?? [];
+
+  // Available genre filters — only show pills for genres that actually
+  // appear in the user's library.
+  const availableGenres = useMemo(() => {
+    const set = new Set<string>();
+    for (const g of games) {
+      if (g.genre) set.add(g.genre);
+    }
+    return Array.from(set).sort();
+  }, [games]);
+
+  const filteredGames = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    let out = games as GameSummary[];
+    if (q) {
+      out = out.filter((g) => g.title.toLowerCase().includes(q));
+    }
+    if (genre !== "all") {
+      out = out.filter((g) => g.genre === genre);
+    }
+    const sorted = [...out];
+    switch (sort) {
+      case "updated":
+        sorted.sort((a, b) => b.updatedAt - a.updatedAt);
+        break;
+      case "created":
+        sorted.sort((a, b) => b.createdAt - a.createdAt);
+        break;
+      case "title":
+        sorted.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+    }
+    return sorted;
+  }, [games, query, genre, sort]);
+
+  const hasGames = games.length > 0;
+  const hasResults = filteredGames.length > 0;
 
   return (
     <div
@@ -195,16 +272,18 @@ function Dashboard() {
             >
               My Games
             </h1>
-            {!isLoading && games.length > 0 && (
+            {!isLoading && hasGames && (
               <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 4 }}>
-                {games.length} {games.length === 1 ? "game" : "games"}
+                {filteredGames.length === games.length
+                  ? `${games.length} ${games.length === 1 ? "game" : "games"}`
+                  : `${filteredGames.length} of ${games.length}`}
               </p>
             )}
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {/* View toggle */}
-            {!isLoading && games.length > 0 && (
+            {!isLoading && hasGames && (
               <div
                 style={{
                   display: "flex",
@@ -277,15 +356,71 @@ function Dashboard() {
           </div>
         </div>
 
+        {/* Toolbar — only when the library has games */}
+        {!isLoading && hasGames && (
+          <DashboardToolbar
+            query={query}
+            onQueryChange={setQuery}
+            genres={availableGenres}
+            genre={genre}
+            onGenreChange={handleGenreChange}
+            sort={sort}
+            onSortChange={handleSortChange}
+          />
+        )}
+
         {/* Content */}
         {isLoading ? (
           <GameCardSkeletons view={view} />
-        ) : games.length === 0 ? (
+        ) : !hasGames ? (
           <EmptyState />
+        ) : !hasResults ? (
+          <NoResults
+            onClear={() => {
+              setQuery("");
+              handleGenreChange("all");
+            }}
+          />
         ) : (
-          <GameGrid games={games} view={view} />
+          <GameGrid games={filteredGames} view={view} />
         )}
       </div>
+    </div>
+  );
+}
+
+function NoResults({ onClear }: { onClear: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingTop: 80,
+        paddingBottom: 80,
+        textAlign: "center",
+      }}
+    >
+      <p style={{ fontSize: 14, color: "var(--color-text-secondary)", marginBottom: 14 }}>
+        No games match your filters.
+      </p>
+      <button
+        type="button"
+        onClick={onClear}
+        style={{
+          padding: "7px 14px",
+          borderRadius: 8,
+          border: "1px solid var(--color-border)",
+          background: "var(--color-surface)",
+          color: "var(--color-text-secondary)",
+          fontSize: 12,
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        Clear filters
+      </button>
     </div>
   );
 }
