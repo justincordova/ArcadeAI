@@ -1,8 +1,16 @@
-// One row in the chat panel. Both `prompt` and `feedback` kinds are user
-// messages — they render right-aligned with a violet→cyan gradient bubble
-// labeled "You". Any other kind renders left-aligned in the surface tone
-// labeled "AI". The list is intentionally short — every other kind is
-// reserved for future server-emitted content (e.g. system notes).
+// One row in the chat panel.
+//
+//  - `prompt` and `feedback` kinds are user messages — they render
+//    right-aligned with a violet→cyan gradient bubble labeled "You".
+//  - `summary` kind is an AI-generated diff recap after a refinement. It
+//    renders left-aligned in surface tone with a "Changes" label and a
+//    leading sparkle icon to distinguish it from a future plain "AI"
+//    bubble. Italic body so it visually nests under the user feedback
+//    that triggered it.
+//  - Any other future kind also renders left-aligned in surface tone
+//    with a generic "AI" label.
+
+import { Sparkles } from "lucide-react";
 
 interface Message {
   id: string;
@@ -13,6 +21,7 @@ interface Message {
 
 export function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }) {
   const isUser = msg.kind === "prompt" || msg.kind === "feedback";
+  const isSummary = msg.kind === "summary";
   return (
     <div
       style={{
@@ -31,13 +40,34 @@ export function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }
           lineHeight: 1.55,
           background: isUser
             ? "linear-gradient(135deg, rgba(124,58,237,0.3) 0%, rgba(6,182,212,0.2) 100%)"
-            : "var(--color-surface-raised)",
-          border: isUser ? "1px solid rgba(124,58,237,0.3)" : "1px solid var(--color-border)",
-          color: "var(--color-text-primary)",
+            : isSummary
+              ? "linear-gradient(135deg, rgba(124,58,237,0.06) 0%, rgba(6,182,212,0.06) 100%)"
+              : "var(--color-surface-raised)",
+          border: isUser
+            ? "1px solid rgba(124,58,237,0.3)"
+            : isSummary
+              ? "1px solid rgba(124,58,237,0.18)"
+              : "1px solid var(--color-border)",
+          color: isSummary ? "var(--color-text-secondary)" : "var(--color-text-primary)",
           wordBreak: "break-word",
+          fontStyle: isSummary ? "italic" : "normal",
+          display: "flex",
+          gap: 8,
+          alignItems: "flex-start",
         }}
       >
-        {msg.content}
+        {isSummary && (
+          <Sparkles
+            size={12}
+            strokeWidth={1.8}
+            style={{
+              flexShrink: 0,
+              marginTop: 3,
+              color: "rgba(167,139,250,0.7)",
+            }}
+          />
+        )}
+        <span>{msg.content}</span>
       </div>
       <span
         style={{
@@ -47,7 +77,7 @@ export function MessageBubble({ msg, isLast }: { msg: Message; isLast: boolean }
           letterSpacing: "0.02em",
         }}
       >
-        {isUser ? "You" : "AI"}
+        {isUser ? "You" : isSummary ? "Changes" : "AI"}
       </span>
     </div>
   );

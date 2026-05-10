@@ -17,6 +17,7 @@ import { endSSE, startHeartbeat, writeSSE, writeSSEHeaders } from "../lib/sse.js
 import { categorizeError } from "../services/llm/categorize-error.js";
 import { classifyPrompt } from "../services/llm/classify.js";
 import { streamGame, streamRefinement, streamRepair } from "../services/llm/client.js";
+import { generateDiffSummary } from "../services/llm/diff-summary.js";
 import { embedPrompt } from "../services/llm/embed.js";
 import { buildGenerationSystemPrompt } from "../services/llm/prompts/generation/index.js";
 import { REPAIR_SYSTEM_PROMPT, buildRepairUserMessage } from "../services/llm/prompts/repair.js";
@@ -673,12 +674,44 @@ export async function gamesRoutes(app: FastifyInstance) {
         await markSucceeded(logId).catch(() => {});
       }
 
+      // Diff summary — fire after success only. Generates a 1-2 sentence
+      // "what changed" recap on GPT-mini and persists as a `summary` message
+      // so the chat panel can render it as an AI-side bubble. Failure here
+      // is non-fatal; the stream has already succeeded by this point.
+      let summaryText: string | null = null;
+      let summaryId: string | null = null;
+      if (!streamError && accumulatedCode && accumulatedCode !== game.currentCode) {
+        try {
+          summaryText = await generateDiffSummary({
+            feedback,
+            previousCode: game.currentCode ?? "",
+            newCode: accumulatedCode,
+            logger: request.log,
+          });
+          if (summaryText) {
+            summaryId = randomUUID();
+            await db.insert(messages).values({
+              id: summaryId,
+              gameId: id,
+              kind: "summary",
+              content: summaryText,
+              createdAt: Date.now(),
+            });
+          }
+        } catch {
+          // Summary is best-effort; suppress and move on.
+        }
+      }
+
       stopHeartbeat();
 
       if (!clientClosed) {
         if (streamError) {
           writeSSE(reply, "error", { message: streamError.message });
         } else {
+          if (summaryText && summaryId) {
+            writeSSE(reply, "summary", { id: summaryId, content: summaryText });
+          }
           writeSSE(reply, "done", {});
         }
         endSSE(reply);

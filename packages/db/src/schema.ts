@@ -15,7 +15,7 @@ const GENRE_VALUES = [
   "runner",
   "other",
 ] as const;
-const MESSAGE_KIND_VALUES = ["prompt", "feedback"] as const;
+const MESSAGE_KIND_VALUES = ["prompt", "feedback", "summary"] as const;
 const USAGE_ACTION_VALUES = ["generation", "refinement", "repair"] as const;
 const THEME_VALUES = ["dark", "light", "system"] as const;
 
