@@ -3,7 +3,19 @@ import { GPT_MINI, computeCost } from "@arcadeai/shared";
 import { generateText } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 
-const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Lazily construct the OpenAI client so a missing OPENAI_API_KEY surfaces a
+// clear error at the call site instead of silently constructing a client
+// with apiKey: undefined that 401s on first use. Mirrors embed.ts.
+let cachedClient: ReturnType<typeof createOpenAI> | null = null;
+function getOpenAI() {
+  if (cachedClient) return cachedClient;
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required for code summarization. Set it in .env.");
+  }
+  cachedClient = createOpenAI({ apiKey });
+  return cachedClient;
+}
 
 const SUMMARIZE_SYSTEM_PROMPT =
   "Summarize this single-file HTML game into a structural digest for another model that will rewrite parts of it. Include: function signatures (name + params), top-level constants and their roles, brief outline of the main game loop and state machine. Do NOT reproduce the full code. Be terse.";
@@ -11,7 +23,7 @@ const SUMMARIZE_SYSTEM_PROMPT =
 export async function summarizeCode(html: string, logger?: FastifyBaseLogger): Promise<string> {
   const start = Date.now();
   const { text, usage } = await generateText({
-    model: openai(GPT_MINI),
+    model: getOpenAI()(GPT_MINI),
     system: SUMMARIZE_SYSTEM_PROMPT,
     prompt: html,
   });
