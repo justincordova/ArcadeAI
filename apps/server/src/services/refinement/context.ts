@@ -18,9 +18,14 @@ interface RefinementContext {
   prompt: string;
 }
 
-// Anything above this many tokens of game code triggers summarization to keep
-// the refinement prompt within Claude's working context comfortably.
-const SUMMARIZATION_THRESHOLD_TOKENS = 2000;
+// Anything above this many tokens of game code triggers summarization. The
+// previous 2000-token threshold tripped on every successful generation
+// (typical games are 6-10 KB ≈ 2.5-4K tokens), forcing Claude to refine a
+// structural digest instead of the real code — both costly and quality-
+// degrading. Sonnet 4.6 has a 1M-token context window, so 16K is generous
+// without risking truncation. Summarization only matters as a guardrail for
+// pathologically large games (e.g. 60K+ tokens after many refinements).
+const SUMMARIZATION_THRESHOLD_TOKENS = 16000;
 
 export async function buildRefinementContext({
   game,
