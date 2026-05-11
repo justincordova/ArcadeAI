@@ -24,7 +24,7 @@ REQUIRED UX:
 
 INPUT HANDLING:
 - Use a keyState map (keydown sets true, keyup sets false). Never use event-driven movement — it feels laggy.
-- Example: const keys = {}; addEventListener('keydown', e => keys[e.code] = true); addEventListener('keyup', e => keys[e.code] = false);
+- Pick one of e.key (lowercased), e.code, or e.keyCode and use it consistently for both writes and reads. Do not mix them in the same file.
 
 ERROR REPORTING:
 - Wrap the game loop in try/catch.
