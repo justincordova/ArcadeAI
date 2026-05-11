@@ -15,6 +15,15 @@ const GENRE_BUCKETS = new Set([
   "other",
 ]);
 
+// Minimum cosine similarity (= 1 - distance) for a curated example to be
+// considered relevant enough to inject as a few-shot reference. The library
+// is small (~20 entries across 8 buckets), so the global-nearest match for an
+// off-genre prompt can be a poor fit. Injecting an unrelated 2K-token example
+// with the framing "build something in this style" actively misleads the
+// model. Below this floor, return null and let the route fall back to the
+// base contract alone. Tune from production `rag retrieveExample hit` logs.
+const MIN_SIMILARITY = 0.4;
+
 interface Logger {
   warn: (obj: unknown, msg?: string) => void;
   info: (obj: unknown, msg?: string) => void;
@@ -110,6 +119,25 @@ export async function retrieveExample({
 
     const r = row as { id: string; html: string; distance: number };
     const similarity = 1 - r.distance;
+
+    // Reject below the similarity floor so we don't inject an irrelevant
+    // reference. The log still captures the rejected candidate so the
+    // threshold can be tuned from real traffic.
+    if (similarity < MIN_SIMILARITY) {
+      log?.info(
+        {
+          ragExampleId: r.id,
+          similarity,
+          genreFilter: useGenreFilter ? genre : null,
+          fellBackToGlobal: !useGenreFilter,
+          reason: "below_similarity_floor",
+          floor: MIN_SIMILARITY,
+        },
+        "rag retrieveExample rejected"
+      );
+      return null;
+    }
+
     log?.info(
       {
         ragExampleId: r.id,
