@@ -1,5 +1,4 @@
 export const SONNET = "claude-sonnet-4-6";
-export const OPUS = "claude-opus-4-7";
 export const GPT_MINI = "gpt-4.1-mini";
 export const EMBEDDING = "text-embedding-3-small";
 
@@ -7,7 +6,6 @@ export const EMBEDDING = "text-embedding-3-small";
 // Update these if provider pricing changes; no other code references list prices directly.
 export const MODEL_PRICES: Record<string, { input: number; output: number }> = {
   [SONNET]: { input: 3.0, output: 15.0 },
-  [OPUS]: { input: 15.0, output: 75.0 },
   [GPT_MINI]: { input: 0.4, output: 1.6 },
   [EMBEDDING]: { input: 0.02, output: 0.0 },
 };
