@@ -751,6 +751,14 @@ export async function gamesRoutes(app: FastifyInstance) {
       return sendError(reply, 404, notFoundError());
     }
 
+    // Repair requires existing code. Without this guard, a failed initial
+    // generation that left currentCode = "" would send the model an empty
+    // "Current code:" block, burning tokens to produce a fresh game without
+    // RAG context.
+    if (!game.currentCode) {
+      return sendError(reply, 400, validationError("Game has no code to repair"));
+    }
+
     // Concurrency cap: repair counts against the same 1-stream-per-user limit
     try {
       acquire(userId);
@@ -779,7 +787,7 @@ export async function gamesRoutes(app: FastifyInstance) {
         category,
         message: gameError.message,
         stack: gameError.stack,
-        code: game.currentCode ?? "",
+        code: game.currentCode,
       });
 
       const ac = new AbortController();
