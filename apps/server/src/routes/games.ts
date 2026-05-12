@@ -21,6 +21,7 @@ import { generateDiffSummary } from "../services/llm/diff-summary.js";
 import { embedPrompt } from "../services/llm/embed.js";
 import { buildGenerationSystemPrompt } from "../services/llm/prompts/generation/index.js";
 import { REPAIR_SYSTEM_PROMPT, buildRepairUserMessage } from "../services/llm/prompts/repair.js";
+import { sanitizeHtmlOutput } from "../services/llm/sanitize-output.js";
 import { generateTitle } from "../services/llm/title.js";
 import { retrieveExample } from "../services/rag/retrieve.js";
 import { buildRefinementContext } from "../services/refinement/context.js";
@@ -289,18 +290,33 @@ export async function gamesRoutes(app: FastifyInstance) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
-      // Persist only on success. A mid-stream failure (timeout, output-cap
-      // truncation, model error) leaves accumulatedCode as malformed HTML
-      // that won't parse — saving it would create a permanently-broken
-      // game row with no recovery path (the repair flow needs valid code
-      // to fix). Leaving currentCode as the empty default is the existing
-      // "this generation failed" signal — the dashboard renders the
-      // placeholder and the user can delete or re-prompt.
+      // Sanitize before persistence. The model occasionally violates the
+      // "output ONLY raw HTML" contract by prepending a prose preamble or
+      // wrapping in markdown fences; we strip those defensively. Returns
+      // null when no <!DOCTYPE / <html opener is found at all — treated
+      // as a stream error so credits refund and the game row is left in
+      // the "generation failed" state.
+      let sanitizedCode: string | null = null;
       if (!streamError) {
+        sanitizedCode = sanitizeHtmlOutput(accumulatedCode);
+        if (!sanitizedCode) {
+          streamError = new Error("Model output contained no recognizable HTML");
+          request.log.warn(
+            { rawLength: accumulatedCode.length, head: accumulatedCode.slice(0, 200) },
+            "generation output rejected by sanitizer"
+          );
+        }
+      }
+
+      // Persist only on success. A mid-stream failure (timeout, output-cap
+      // truncation, model error, sanitizer rejection) leaves currentCode
+      // as the empty default — the existing "this generation failed"
+      // signal — and the user can delete or re-prompt.
+      if (!streamError && sanitizedCode) {
         try {
           await db
             .update(games)
-            .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
+            .set({ currentCode: sanitizedCode, updatedAt: Date.now() })
             .where(eq(games.id, id));
         } catch {
           // Persistence failure is logged-and-swallowed
@@ -697,14 +713,26 @@ export async function gamesRoutes(app: FastifyInstance) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
-      // Persist accumulated code whether or not the client disconnected,
-      // so a user cancel doesn't silently discard work already streamed.
-      // Only skip on a server-side stream error (the model failed).
+      // Sanitize before persistence — see generation route comment for
+      // the rationale. A bad refinement would otherwise overwrite a
+      // working game with a prose-prefixed broken document.
+      let sanitizedCode: string | null = null;
       if (!streamError && accumulatedCode) {
+        sanitizedCode = sanitizeHtmlOutput(accumulatedCode);
+        if (!sanitizedCode) {
+          streamError = new Error("Model output contained no recognizable HTML");
+          request.log.warn(
+            { rawLength: accumulatedCode.length, head: accumulatedCode.slice(0, 200) },
+            "refinement output rejected by sanitizer"
+          );
+        }
+      }
+
+      if (!streamError && sanitizedCode) {
         try {
           await db
             .update(games)
-            .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
+            .set({ currentCode: sanitizedCode, updatedAt: Date.now() })
             .where(eq(games.id, id));
         } catch {
           // persistence failure is non-fatal
@@ -737,12 +765,12 @@ export async function gamesRoutes(app: FastifyInstance) {
       // "what changed" recap on GPT-mini and persists as a `summary`
       // message so the chat panel can render it as an AI-side bubble.
       // Failure is non-fatal; the stream has already succeeded.
-      if (!streamError && accumulatedCode && accumulatedCode !== game.currentCode) {
+      if (!streamError && sanitizedCode && sanitizedCode !== game.currentCode) {
         try {
           const summaryText = await generateDiffSummary({
             feedback,
             previousCode: game.currentCode ?? "",
-            newCode: accumulatedCode,
+            newCode: sanitizedCode,
             logger: request.log,
           });
           if (summaryText) {
@@ -867,12 +895,29 @@ export async function gamesRoutes(app: FastifyInstance) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
+      // Sanitize before persistence — see generation route comment for
+      // the rationale. This was the failure mode that prompted the
+      // helper: a repair returned an explanatory paragraph followed by
+      // the HTML, and saving the prose preamble verbatim broke the
+      // game until a manual SQL fix.
+      let sanitizedRepair: string | null = null;
       if (!streamError && accumulated) {
+        sanitizedRepair = sanitizeHtmlOutput(accumulated);
+        if (!sanitizedRepair) {
+          streamError = new Error("Model output contained no recognizable HTML");
+          request.log.warn(
+            { rawLength: accumulated.length, head: accumulated.slice(0, 200) },
+            "repair output rejected by sanitizer"
+          );
+        }
+      }
+
+      if (!streamError && sanitizedRepair) {
         // Persist repaired code
         try {
           await db
             .update(games)
-            .set({ currentCode: accumulated, updatedAt: Date.now() })
+            .set({ currentCode: sanitizedRepair, updatedAt: Date.now() })
             .where(eq(games.id, id));
         } catch {
           // persistence failure is non-fatal
