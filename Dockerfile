@@ -14,6 +14,8 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
+ENV VITE_API_BASE=""
+
 RUN bun run --filter @arcadeai/web build
 
 ENV DATABASE_PATH=/data/arcadeai.db
