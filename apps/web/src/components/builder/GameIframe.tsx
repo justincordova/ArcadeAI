@@ -11,6 +11,14 @@ interface GameIframeProps {
    * from a fresh state. Used by the "restart" preview-header button.
    */
   reloadKey?: number;
+  /**
+   * Focus the iframe's contentWindow after each load so keyboard input
+   * goes straight to the game without requiring the user to click into
+   * it first. Use on the public play page where there is nothing else
+   * to focus; leave off in the Builder where focus belongs in the
+   * prompt textarea.
+   */
+  autoFocus?: boolean;
 }
 
 export function GameIframe({
@@ -19,6 +27,7 @@ export function GameIframe({
   onIframeReady,
   onThumbnail,
   reloadKey = 0,
+  autoFocus = false,
 }: GameIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -29,12 +38,29 @@ export function GameIframe({
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      if (e.source !== iframeRef.current?.contentWindow) return;
+      const sameSource = e.source === iframeRef.current?.contentWindow;
+      if (e.data?.type === "thumbnail") {
+        console.log("[thumb] parent received thumbnail message", {
+          sameSource,
+          hasDataUrl: !!e.data?.dataUrl,
+          dataUrlLength: typeof e.data?.dataUrl === "string" ? e.data.dataUrl.length : 0,
+          gameId,
+          hasOnThumbnail: !!onThumbnail,
+        });
+      }
+      if (!sameSource) return;
 
       if (e.data?.type === "game-error") {
         console.error("[game-error]", e.data.message, e.data.stack);
       } else if (e.data?.type === "thumbnail" && e.data.dataUrl && gameId && onThumbnail) {
+        console.log("[thumb] calling onThumbnail with dataUrl of length", e.data.dataUrl.length);
         onThumbnail(gameId, e.data.dataUrl);
+      } else if (e.data?.type === "thumbnail") {
+        console.warn("[thumb] thumbnail message present but skipped", {
+          hasDataUrl: !!e.data?.dataUrl,
+          gameId,
+          hasOnThumbnail: !!onThumbnail,
+        });
       }
     };
     window.addEventListener("message", handler);
@@ -163,6 +189,18 @@ export function GameIframe({
       allow="fullscreen"
       style={{ width: "100%", height: "100%", border: "none", display: "block" }}
       title="Game preview"
+      onLoad={
+        autoFocus
+          ? (e) => {
+              // Move keyboard focus into the iframe so the user can press
+              // Space (etc.) immediately without first clicking the game.
+              // contentWindow.focus() requires the iframe to be focusable,
+              // which it is by default; the sandbox attribute does not
+              // strip focusability.
+              (e.currentTarget as HTMLIFrameElement).contentWindow?.focus();
+            }
+          : undefined
+      }
     />
   );
 }

@@ -168,7 +168,10 @@ function PlayPage() {
       style={{
         display: "flex",
         flexDirection: "column",
-        minHeight: "100vh",
+        // Fixed viewport height so the inner flex:1 chain has a real height
+        // to resolve against. With minHeight, the iframe (height:100%) had
+        // no resolved parent height and collapsed, cropping the canvas.
+        height: "100vh",
         background: "var(--color-bg)",
         color: "var(--color-text-primary)",
       }}
@@ -268,7 +271,7 @@ function PlayPage() {
         }}
       >
         <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-          <GameIframe code={game.currentCode} gameId={null} />
+          <GameIframe code={game.currentCode} gameId={null} autoFocus />
         </div>
 
         <footer
