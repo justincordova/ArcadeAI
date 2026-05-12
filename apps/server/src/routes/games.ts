@@ -272,14 +272,22 @@ export async function gamesRoutes(app: FastifyInstance) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
 
-      // Persist whatever we have
-      try {
-        await db
-          .update(games)
-          .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
-          .where(eq(games.id, id));
-      } catch {
-        // Persistence failure is logged-and-swallowed
+      // Persist only on success. A mid-stream failure (timeout, output-cap
+      // truncation, model error) leaves accumulatedCode as malformed HTML
+      // that won't parse — saving it would create a permanently-broken
+      // game row with no recovery path (the repair flow needs valid code
+      // to fix). Leaving currentCode as the empty default is the existing
+      // "this generation failed" signal — the dashboard renders the
+      // placeholder and the user can delete or re-prompt.
+      if (!streamError) {
+        try {
+          await db
+            .update(games)
+            .set({ currentCode: accumulatedCode, updatedAt: Date.now() })
+            .where(eq(games.id, id));
+        } catch {
+          // Persistence failure is logged-and-swallowed
+        }
       }
 
       // Finalize: markSucceeded or refund (mutually exclusive, each runs once)

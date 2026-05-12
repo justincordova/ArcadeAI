@@ -7,17 +7,32 @@ const anthropic = createAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "",
 });
 
-// Server-side LLM timeouts. Generation and refinement get 90s — enough
-// for a slow-but-healthy Anthropic response on a cold model. Repair gets
-// 60s because output is shorter and we don't want a stuck repair to block
-// the user's next attempt.
+// Server-side LLM timeouts. Sized to accommodate the maxOutputTokens
+// ceiling on each call: at ~80 output tok/sec, 16K tokens needs ~200s
+// in the worst case, so generation/refinement get 180s with a 20s buffer
+// at the model end. Repair is shorter because the output is shorter
+// (it's a bug fix, not a rewrite) and we don't want a stuck repair to
+// block the user's next attempt.
 //
 // The timeout is composed with the user's AbortController via
 // AbortSignal.any so a user cancel still aborts immediately.
 export const LLM_TIMEOUT_MS = {
-  generation: 90_000,
-  refinement: 90_000,
-  repair: 60_000,
+  generation: 180_000,
+  refinement: 180_000,
+  repair: 90_000,
+} as const;
+
+// Per-call output ceilings. The 8192 default truncated mid-stream on
+// non-trivial games (e.g. ~19K-char dance/parkour titles ran out mid-
+// statement, leaving the iframe with unparseable JS and a blank canvas).
+// Sonnet 4.6 supports up to 64K output tokens; 16K covers ~50K chars of
+// HTML/JS — plenty for any reasonable game without inviting runaway
+// generations. Repair stays smaller because the output should be a
+// targeted patch, not a rewrite.
+const MAX_OUTPUT_TOKENS = {
+  generation: 16_000,
+  refinement: 16_000,
+  repair: 8_192,
 } as const;
 
 /**
@@ -62,7 +77,7 @@ export async function streamGame({
     system,
     messages: [{ role: "user", content: prompt }],
     abortSignal: composed,
-    maxOutputTokens: 8192,
+    maxOutputTokens: MAX_OUTPUT_TOKENS.generation,
   });
   // Cleanup the timer once usage settles (success or error).
   void Promise.resolve(result.usage)
@@ -90,7 +105,7 @@ export async function streamRefinement({
     system,
     messages: [{ role: "user", content: prompt }],
     abortSignal: composed,
-    maxOutputTokens: 8192,
+    maxOutputTokens: MAX_OUTPUT_TOKENS.refinement,
   });
   void Promise.resolve(result.usage)
     .then(() => cleanup())
@@ -117,7 +132,7 @@ export async function streamRepair({
     system,
     messages: [{ role: "user", content: userMessage }],
     abortSignal: composed,
-    maxOutputTokens: 8192,
+    maxOutputTokens: MAX_OUTPUT_TOKENS.repair,
   });
   void Promise.resolve(result.usage)
     .then(() => cleanup())
