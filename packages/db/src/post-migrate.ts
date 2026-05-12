@@ -11,14 +11,18 @@ import { loadSqliteVec, selectCustomSqliteIfNeeded } from "./sqlite-vec-loader.j
 export function runPostMigrate(dbPath: string) {
   selectCustomSqliteIfNeeded();
   const sqlite = new Database(dbPath);
+  // Wrap in try/finally so a failure during loadSqliteVec or the CREATE
+  // statement still closes the DB handle. Otherwise the WAL/SHM files
+  // are left attached to a process-wide handle that never goes away.
+  try {
+    loadSqliteVec(sqlite);
 
-  loadSqliteVec(sqlite);
+    sqlite.exec(
+      "CREATE VIRTUAL TABLE IF NOT EXISTS rag_embeddings USING vec0(id text primary key, genre text, embedding float[1536])"
+    );
 
-  sqlite.exec(
-    "CREATE VIRTUAL TABLE IF NOT EXISTS rag_embeddings USING vec0(id text primary key, genre text, embedding float[1536])"
-  );
-
-  console.log("[post-migrate] rag_embeddings vec0 virtual table ready");
-
-  sqlite.close();
+    console.log("[post-migrate] rag_embeddings vec0 virtual table ready");
+  } finally {
+    sqlite.close();
+  }
 }

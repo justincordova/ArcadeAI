@@ -21,8 +21,13 @@ import { getSession } from "../plugins/auth.js";
 import { likeGame, recordPlay, unlikeGame } from "../services/discover/likes.js";
 import { InsufficientCreditsError, markSucceeded, recordRemix } from "../services/usage/charge.js";
 
+// Slugs are generated as the first 8 chars of a UUIDv4 with dashes stripped
+// (see routes/games.ts publish handler). They're exactly 8 lowercase hex
+// characters. Tightening the schema here means a request with a malformed
+// slug 400s before we run a needless DB lookup — and prevents the slug
+// regex in og.ts / loadPublicGame from ever seeing pathological input.
 const SlugParams = z.object({
-  slug: z.string().min(1).max(64),
+  slug: z.string().regex(/^[0-9a-f]{8}$/i, "Invalid slug format"),
 });
 
 export async function playRoutes(app: FastifyInstance) {
@@ -182,7 +187,11 @@ export async function playRoutes(app: FastifyInstance) {
     const game = await loadPublicGame(parseResult.data.slug);
     if (!game) return sendError(reply, 404, notFoundError());
 
-    await recordPlay(game.id);
+    // recordPlay is documented as fire-and-forget and swallows its own
+    // errors. Don't `await` it — letting the response return immediately
+    // shaves a DB write off every public play-page load, and the counter
+    // update still completes in the background.
+    void recordPlay(game.id);
     return reply.send({ ok: true });
   });
 

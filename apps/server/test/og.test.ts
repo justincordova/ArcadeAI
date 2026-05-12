@@ -90,16 +90,16 @@ describe("GET /api/og/:slug.png", () => {
 
   test("returns fallback PNG when game has no thumbnail", async () => {
     const { id } = insertTestUser(testDb.sqlite);
-    insertGame({ userId: id, publicSlug: "nothumb1", thumbnail: null });
+    insertGame({ userId: id, publicSlug: "0badcafe", thumbnail: null });
 
-    const res = await app.inject({ method: "GET", url: "/api/og/nothumb1.png" });
+    const res = await app.inject({ method: "GET", url: "/api/og/0badcafe.png" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("image/png");
     expect(res.rawPayload.length).toBeGreaterThan(0);
   });
 
   test("returns fallback PNG (not 404) for unknown slug", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/og/unknownx.png" });
+    const res = await app.inject({ method: "GET", url: "/api/og/deadbeef.png" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("image/png");
   });
@@ -108,25 +108,30 @@ describe("GET /api/og/:slug.png", () => {
     const { id } = insertTestUser(testDb.sqlite);
     insertGame({
       userId: id,
-      publicSlug: "broken01",
+      publicSlug: "b0bacafe",
       thumbnail: "not-a-valid-data-url",
     });
 
-    const res = await app.inject({ method: "GET", url: "/api/og/broken01.png" });
+    const res = await app.inject({ method: "GET", url: "/api/og/b0bacafe.png" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("image/png");
+  });
+
+  test("400s on a malformed slug rather than running a DB lookup", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/og/nothex!1.png" });
+    expect(res.statusCode).toBe(400);
   });
 
   test("does not serve thumbnails for private games (treated as not found)", async () => {
     const { id } = insertTestUser(testDb.sqlite);
     insertGame({
       userId: id,
-      publicSlug: "private1",
+      publicSlug: "0ff11ce0",
       isPublic: false,
       thumbnail: TINY_PNG_DATA_URL,
     });
 
-    const res = await app.inject({ method: "GET", url: "/api/og/private1.png" });
+    const res = await app.inject({ method: "GET", url: "/api/og/0ff11ce0.png" });
     // Returns the fallback (200) rather than the actual thumbnail
     expect(res.statusCode).toBe(200);
     // Fallback bytes are static; they won't equal the per-game thumbnail

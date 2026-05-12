@@ -13,10 +13,11 @@ import { z } from "zod";
 import { notFoundError, sendError, validationError } from "../lib/errors.js";
 import { loadPublicGame } from "../lib/ownership.js";
 
+// Slugs are 8 lowercase hex chars (see routes/games.ts publish handler).
+// The ".png" suffix is consumed by the route path so the param is the
+// bare slug. Tightening the regex avoids burning a DB lookup on garbage.
 const SlugParams = z.object({
-  // Match the slug pattern; ".png" suffix is consumed by the route path,
-  // so the param itself is the bare slug.
-  slug: z.string().min(1).max(64),
+  slug: z.string().regex(/^[0-9a-f]{8}$/i, "Invalid slug format"),
 });
 
 // 16:9 placeholder PNG — small dark gradient. Generated as a tiny

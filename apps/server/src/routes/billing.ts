@@ -1,10 +1,11 @@
-import { users } from "@arcadeai/db";
+import { accounts, users } from "@arcadeai/db";
 import { TIER_CREDIT_LIMITS } from "@arcadeai/shared";
+import type { LinkedProvider, Theme } from "@arcadeai/shared";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../lib/db.js";
-import { sendError, validationError } from "../lib/errors.js";
+import { notFoundError, sendError, validationError } from "../lib/errors.js";
 import { nextUtcMidnight, nextUtcMonthStart } from "../services/usage/reset.js";
 
 const ChangePlanBody = z.object({
@@ -27,11 +28,30 @@ export async function billingRoutes(app: FastifyInstance) {
 
     const { tier } = parseResult.data;
     const { user } = request.authSession;
-    const u = user as Record<string, unknown>;
-    const currentTier = (u.tier ?? "free") as string;
+
+    // Read tier from the DB, not the session payload. The Better Auth
+    // session caches `user.tier` from the time the session was issued —
+    // if the row changed since (e.g. via a previous call to this very
+    // route, or a manual SQL adjustment), the cached value is stale and
+    // the admin-bypass guard below would let an admin's tier be changed.
+    const currentRows = await db
+      .select({
+        tier: users.tier,
+        creditsRemainingDaily: users.creditsRemainingDaily,
+        creditsRemainingMonthly: users.creditsRemainingMonthly,
+      })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    const current = currentRows[0];
+    if (!current) {
+      // User row deleted between auth-guard and this read — possible if the
+      // user deleted their account in another tab. Treat as 404.
+      return sendError(reply, 404, notFoundError("User not found"));
+    }
 
     // Admin tier cannot be changed via billing
-    if (currentTier === "admin") {
+    if (current.tier === "admin") {
       return sendError(reply, 400, validationError("Admin tier cannot be changed via billing"));
     }
 
@@ -39,19 +59,6 @@ export async function billingRoutes(app: FastifyInstance) {
     const dailyResetAt = nextUtcMidnight(now);
     const monthlyResetAt = nextUtcMonthStart(now);
     const limits = TIER_CREDIT_LIMITS[tier];
-
-    // Read current balance so the downgrade rule (#46) can preserve it. The
-    // user table is the source of truth; credits_remaining_* live there.
-    const currentRows = await db
-      .select({
-        creditsRemainingDaily: users.creditsRemainingDaily,
-        creditsRemainingMonthly: users.creditsRemainingMonthly,
-      })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1);
-    // biome-ignore lint/style/noNonNullAssertion: authSession guarantees the row exists
-    const current = currentRows[0]!;
 
     // SPEC §10 + plan #46: an UPGRADE bumps to the new tier's allotment
     // immediately so paid users get the credits they paid for. A DOWNGRADE
@@ -75,17 +82,35 @@ export async function billingRoutes(app: FastifyInstance) {
       })
       .where(eq(users.id, user.id));
 
-    // Return shape matching GET /api/me so client can setQueryData(['me'], response)
+    // Reload the full user row so we return the same shape GET /api/me
+    // does — including lifetime counters and linked providers. Without
+    // these fields, the client's setQueryData(["me"], response) wipes
+    // them from cache and the pricing/usage UI shows undefined.
+    const fresh = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+    const u = fresh[0];
+    if (!u) return sendError(reply, 404, notFoundError("User not found"));
+
+    const accountRows = await db
+      .select({ providerId: accounts.providerId })
+      .from(accounts)
+      .where(eq(accounts.userId, user.id));
+    const linkedProviders = accountRows
+      .map((r) => r.providerId)
+      .filter((p): p is LinkedProvider => p === "google" || p === "github");
+
     return reply.send({
-      id: user.id,
-      email: user.email,
-      displayName: u.displayName ?? user.name ?? "",
-      tier,
-      theme: (u.theme ?? "dark") as string,
-      creditsRemainingDaily: nextDaily,
-      creditsRemainingMonthly: nextMonthly,
-      dailyResetAt,
-      monthlyResetAt,
+      id: u.id,
+      email: u.email,
+      displayName: u.displayName,
+      tier: u.tier,
+      theme: (u.theme as Theme) ?? "dark",
+      creditsRemainingDaily: u.creditsRemainingDaily,
+      creditsRemainingMonthly: u.creditsRemainingMonthly,
+      dailyResetAt: u.dailyResetAt,
+      monthlyResetAt: u.monthlyResetAt,
+      lifetimeGenerationsUsed: u.lifetimeGenerationsUsed,
+      lifetimeRefinementsUsed: u.lifetimeRefinementsUsed,
+      linkedProviders,
     });
   });
 }

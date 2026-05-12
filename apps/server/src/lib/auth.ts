@@ -81,6 +81,22 @@ export const auth = betterAuth({
         required: false,
         defaultValue: 0,
       },
+      // Lifetime counters — declared here so Better Auth's session type
+      // exposes them on `user.lifetime*Used`. No route reads them off the
+      // session today (every credit check goes through applyResets which
+      // hits the DB), but declaring them keeps the session shape and the
+      // DB schema in sync, which avoids a category of future-maintainer
+      // surprises.
+      lifetimeGenerationsUsed: {
+        type: "number",
+        required: false,
+        defaultValue: 0,
+      },
+      lifetimeRefinementsUsed: {
+        type: "number",
+        required: false,
+        defaultValue: 0,
+      },
       theme: {
         type: "string",
         required: false,
