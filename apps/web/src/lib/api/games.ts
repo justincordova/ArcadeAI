@@ -94,6 +94,10 @@ export async function publishGame(id: string): Promise<PublishResponse> {
   const res = await fetch(`${API}/api/games/${id}/publish`, {
     method: "POST",
     credentials: "include",
+    // Empty JSON body keeps the CSRF guard happy (state-changing /api/*
+    // requests must declare application/json; see plugins/csrf.ts).
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
   if (!res.ok) throw new Error("Failed to publish game");
   return res.json() as Promise<PublishResponse>;
@@ -103,6 +107,8 @@ export async function unpublishGame(id: string): Promise<void> {
   const res = await fetch(`${API}/api/games/${id}/unpublish`, {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
   if (!res.ok) throw new Error("Failed to unpublish game");
 }
@@ -211,6 +217,8 @@ export async function remixPublicGame(slug: string): Promise<RemixResponse> {
   const res = await fetch(`${API}/api/play/${slug}/remix`, {
     method: "POST",
     credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
   if (res.status === 401) {
     throw new Error("Sign in to remix");
