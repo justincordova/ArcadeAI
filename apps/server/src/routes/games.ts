@@ -40,15 +40,21 @@ import { applyResets } from "../services/usage/reset.js";
  * reasons are observability metadata — they show up on `usage_log` rows so
  * we can answer "what's the dominant failure mode?" from logs alone.
  *
+ * With background-stream semantics, client disconnect no longer aborts the
+ * LLM — generations finish even if the user navigates away. So `AbortError`
+ * is now produced almost exclusively by the server-side timeout
+ * (`withTimeout`), and is classified by the error message first.
+ *
  * Decisions:
- *  - `AbortError` → `abort` (user closed the tab; LLM SDK propagates as abort)
  *  - error message contains "timeout" / "timed out" → `timeout`
+ *  - `AbortError` (without a timeout message) → `abort` (rare; reserved
+ *    for any future explicit-cancel pathway)
  *  - everything else (LLM 5xx, stream parse failure, etc.) → `llm_error`
  */
 function classifyRefundReason(err: Error): RefundReason {
-  if (err.name === "AbortError") return "abort";
   const msg = err.message.toLowerCase();
   if (msg.includes("timeout") || msg.includes("timed out")) return "timeout";
+  if (err.name === "AbortError") return "abort";
   return "llm_error";
 }
 
@@ -193,12 +199,23 @@ export async function gamesRoutes(app: FastifyInstance) {
       // streams. The stop function is called in the finally block below.
       const stopHeartbeat = startHeartbeat(reply);
 
+      // Background-stream semantics: when the SSE client disconnects (tab
+      // close, navigation away, network drop), we stop writing SSE frames
+      // but DO NOT abort the LLM call. The model finishes, the result is
+      // persisted to current_code, credits are charged as a success. The
+      // user returns to /game/<id> later and sees the completed game. This
+      // matches "fire-and-forget" UX: starting a generation is a commitment;
+      // navigating away doesn't waste the work.
+      //
+      // The AbortController exists only to satisfy the LLM-stream signal
+      // parameter — it's never aborted from this route. The server-side
+      // timeout inside withTimeout() is the only signal that can cancel
+      // the in-flight LLM call.
       const ac = new AbortController();
       let clientClosed = false;
 
       request.raw.on("close", () => {
         clientClosed = true;
-        ac.abort();
       });
 
       // Pre-LLM parallel fanout (SPEC §7): classify genre, embed prompt,
@@ -629,12 +646,14 @@ export async function gamesRoutes(app: FastifyInstance) {
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: game.title });
       const stopHeartbeat = startHeartbeat(reply);
 
+      // Same background-stream semantics as the generation route — closing
+      // the tab mid-refinement lets the LLM finish; the new code is
+      // persisted and credits are consumed.
       const ac = new AbortController();
       let clientClosed = false;
 
       request.raw.on("close", () => {
         clientClosed = true;
-        ac.abort();
       });
 
       let accumulatedCode = "";
@@ -798,11 +817,13 @@ export async function gamesRoutes(app: FastifyInstance) {
         code: game.currentCode,
       });
 
+      // Same background-stream semantics as the generation route — closing
+      // the tab mid-repair lets the LLM finish; the repaired code is
+      // persisted. Repair is credit-free so there's no charge to consider.
       const ac = new AbortController();
       let clientClosed = false;
       request.raw.on("close", () => {
         clientClosed = true;
-        ac.abort();
       });
 
       let accumulated = "";
