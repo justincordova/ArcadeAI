@@ -221,6 +221,17 @@ function RefinementBuilder({
   const overlayStatus: OverlayStatus =
     repairStatus === "repairing" ? "repairing" : isStreaming ? "generating" : "idle";
 
+  // Mid-generation revisit: the user submitted on /game/new, navigated
+  // away, then opened the game while it's still generating. Show the
+  // same experience as the initial GenerationBuilder — "Generating..."
+  // label and a clean chat panel that doesn't surface the prompt as if
+  // it were a refinement turn.
+  const isRevisitMidGeneration = externalStreaming && !initialCode;
+  const streamLabel = isRevisitMidGeneration ? "Generating..." : "Refining...";
+  const visibleMessages = isRevisitMidGeneration
+    ? localMessages.filter((m) => m.kind !== "prompt")
+    : localMessages;
+
   return (
     <RepairController
       gameId={gameId}
@@ -236,7 +247,7 @@ function RefinementBuilder({
       onStatusChange={setRepairStatus}
     >
       <BuilderLayout
-        messages={localMessages}
+        messages={visibleMessages}
         isStreaming={isStreaming}
         overlayStatus={overlayStatus}
         displayCode={displayCode}
@@ -260,7 +271,7 @@ function RefinementBuilder({
             ? { previous: previousCodeSnapshot, next: finalCode }
             : null
         }
-        streamLabel="Refining..."
+        streamLabel={streamLabel}
         submitLabel="Refine"
       />
     </RepairController>
