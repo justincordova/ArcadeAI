@@ -59,33 +59,35 @@ export function useStreamedGeneration(): StreamedGenerationState {
         queryClient.invalidateQueries({ queryKey: ["me"] });
 
         const id = gameIdRef.current;
-        const iframe = iframeRef.current;
 
-        // Thumbnail capture timing is delicate:
+        // Thumbnail capture sequence:
         //
-        // 1. The iframe `srcDoc` was rewritten on the LAST streamed chunk,
-        //    so the document is still parsing when `onDone` fires. The
-        //    wrapper script (which listens for 'capture-thumbnail') has
-        //    not been registered yet — a postMessage now would be dropped.
-        // 2. Even after the load fires, the game's init() + first
-        //    render() haven't run, so canvas.toDataURL() captures a blank
-        //    black surface. We wait one more beat so the title screen is
-        //    actually drawn.
-        // 3. After the iframe responds with the data URL, the parent
-        //    POSTs to /api/games/:id/thumbnail — we must give that POST
-        //    time to start before navigating away (the component
-        //    unmounts on route change and aborts in-flight fetches).
-        //
-        // The sequence: wait for iframe load → 600ms for first frame →
-        // post capture-thumbnail → 600ms for round-trip + POST start →
-        // navigate. Total ~1.2s after `done`. A timeout fallback handles
-        // the case where `load` already fired before we attached the
-        // listener (rare but possible if the iframe is small).
-        const captureAndNavigate = () => {
+        // 1. The iframe only mounts AFTER this onDone returns and React
+        //    re-renders with isStreaming=false (we defer srcDoc until
+        //    streaming completes to avoid SyntaxErrors from partial
+        //    HTML). So iframeRef.current is null right now; we have to
+        //    poll for it to populate.
+        // 2. Once the ref populates, wait for the iframe's `load` event
+        //    so the wrapper script is registered and the canvas exists.
+        // 3. Wait a beat for the game's init() + first render() to draw
+        //    the title screen — else canvas.toDataURL captures blank
+        //    black.
+        // 4. postMessage('capture-thumbnail'), wait for the iframe to
+        //    respond and the parent's POST /thumbnail to start.
+        // 5. Navigate to /game/<id>. The POST completes against a row
+        //    that exists on disk so it's safe even after this component
+        //    unmounts.
+
+        const captureAndNavigate = (iframe: HTMLIFrameElement) => {
+          // Wait for the game's title screen to actually draw before
+          // we ask for a snapshot.
           setTimeout(() => {
-            if (iframe?.contentWindow) {
-              iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+            const live = iframeRef.current;
+            if (live?.contentWindow) {
+              live.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
             }
+            // Give the iframe time to respond and the parent's POST a
+            // moment to start before we navigate away.
             setTimeout(() => {
               if (id) {
                 void navigate({ to: "/game/$id", params: { id }, replace: true });
@@ -94,28 +96,50 @@ export function useStreamedGeneration(): StreamedGenerationState {
           }, 600);
         };
 
-        if (!iframe) {
-          // No iframe ref — just navigate. Edge case, should not happen
-          // in normal flow because the iframe is mounted as soon as the
-          // first chunk arrives.
-          if (id) void navigate({ to: "/game/$id", params: { id }, replace: true });
-          return;
-        }
-
-        // `load` fires after the freshly-replaced srcDoc finishes parsing
-        // AND running its inline scripts (which includes the wrapper).
-        // If it already fired before we attach the listener, the fallback
-        // setTimeout kicks in.
-        let started = false;
-        const start = () => {
-          if (started) return;
-          started = true;
-          iframe.removeEventListener("load", start);
-          captureAndNavigate();
+        const armCaptureOnLoad = (iframe: HTMLIFrameElement) => {
+          // `load` fires after the iframe parses its srcDoc and runs
+          // inline scripts (which includes the wrapper). If it already
+          // fired before we attached, the fallback timeout kicks in.
+          let started = false;
+          const run = () => {
+            if (started) return;
+            started = true;
+            iframe.removeEventListener("load", run);
+            captureAndNavigate(iframe);
+          };
+          iframe.addEventListener("load", run);
+          // Fallback: 1.5s in case load already fired between the React
+          // commit and our event listener registration.
+          setTimeout(run, 1500);
         };
-        iframe.addEventListener("load", start);
-        // Fallback: 1s timeout in case `load` already fired.
-        setTimeout(start, 1000);
+
+        // Poll for the iframe to mount. Because the srcDoc-defer fix
+        // moved iframe mount to AFTER onDone, the ref is reliably null
+        // here. React typically commits the next render within one
+        // tick, so usually the first or second poll succeeds.
+        const startedAt = Date.now();
+        const MAX_WAIT_MS = 3000;
+        const POLL_INTERVAL_MS = 50;
+
+        const waitForIframe = () => {
+          const iframe = iframeRef.current;
+          if (iframe) {
+            armCaptureOnLoad(iframe);
+            return;
+          }
+          if (Date.now() - startedAt > MAX_WAIT_MS) {
+            // Iframe never mounted (component unmounted, or some other
+            // edge case). Skip capture and navigate so the user isn't
+            // stranded on /game/new with a completed but un-navigated
+            // stream. Thumbnail can still be regenerated by playing the
+            // game and triggering a manual restart later.
+            if (id) void navigate({ to: "/game/$id", params: { id }, replace: true });
+            return;
+          }
+          setTimeout(waitForIframe, POLL_INTERVAL_MS);
+        };
+
+        waitForIframe();
       },
       onError() {
         // Server-side error refunds credits (SPEC §10) — refresh bars

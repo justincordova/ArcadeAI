@@ -49,29 +49,12 @@ export function GameIframe({
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
-      const sameSource = e.source === iframeRef.current?.contentWindow;
-      if (e.data?.type === "thumbnail") {
-        console.log("[thumb] parent received thumbnail message", {
-          sameSource,
-          hasDataUrl: !!e.data?.dataUrl,
-          dataUrlLength: typeof e.data?.dataUrl === "string" ? e.data.dataUrl.length : 0,
-          gameId,
-          hasOnThumbnail: !!onThumbnail,
-        });
-      }
-      if (!sameSource) return;
+      if (e.source !== iframeRef.current?.contentWindow) return;
 
       if (e.data?.type === "game-error") {
         console.error("[game-error]", e.data.message, e.data.stack);
       } else if (e.data?.type === "thumbnail" && e.data.dataUrl && gameId && onThumbnail) {
-        console.log("[thumb] calling onThumbnail with dataUrl of length", e.data.dataUrl.length);
         onThumbnail(gameId, e.data.dataUrl);
-      } else if (e.data?.type === "thumbnail") {
-        console.warn("[thumb] thumbnail message present but skipped", {
-          hasDataUrl: !!e.data?.dataUrl,
-          gameId,
-          hasOnThumbnail: !!onThumbnail,
-        });
       }
     };
     window.addEventListener("message", handler);
