@@ -128,6 +128,7 @@ await app.register(ogRoutes);
 await app.register(billingRoutes);
 
 const webDistPath = new URL("../../web/dist", import.meta.url).pathname;
+app.log.info({ webDistPath, exists: existsSync(webDistPath), isDev }, "checking web dist path");
 if (!isDev && existsSync(webDistPath)) {
   await app.register(fastifyStatic, {
     root: webDistPath,
@@ -141,6 +142,8 @@ if (!isDev && existsSync(webDistPath)) {
     // biome-ignore lint/suspicious/noExplicitAny: fastify-static augments FastifyReply at runtime
     return (reply as any).sendFile("index.html");
   });
+} else if (!isDev) {
+  app.log.warn({ webDistPath }, "web dist directory not found, skipping static file serving");
 }
 
 const port = env.PORT;
