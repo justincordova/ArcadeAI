@@ -128,10 +128,9 @@ await app.register(ogRoutes);
 await app.register(billingRoutes);
 
 const webDistPath = new URL("../../web/dist", import.meta.url).pathname;
-if (!isDev && existsSync(webDistPath)) {
+if (existsSync(webDistPath)) {
   await app.register(fastifyStatic, {
     root: webDistPath,
-    prefix: "/",
     wildcard: false,
   });
   app.setNotFoundHandler((request, reply) => {
