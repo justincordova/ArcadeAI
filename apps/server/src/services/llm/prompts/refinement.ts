@@ -30,4 +30,8 @@ ERROR REPORTING:
 - Wrap the game loop in try/catch.
 - On error, postMessage to parent: parent.postMessage({type:'game-error', message: e.message, stack: e.stack}, '*');
 - Also register: window.addEventListener('error', e => parent.postMessage({type:'game-error', message: e.message, stack: e.error?.stack}, '*'));
-- And: window.addEventListener('unhandledrejection', e => parent.postMessage({type:'game-error', message: String(e.reason)}, '*'));`;
+- And: window.addEventListener('unhandledrejection', e => parent.postMessage({type:'game-error', message: String(e.reason)}, '*'));
+
+LENGTH BUDGET:
+- Aim for around 10,000 characters of HTML+JS total. If the current code is already near or past that, do not grow it meaningfully — apply the requested change and trim equivalent fat elsewhere.
+- The output WILL be truncated if it grows much past this budget. A complete refined game beats a half-written ambitious one.`;

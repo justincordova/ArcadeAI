@@ -32,4 +32,10 @@ ERROR REPORTING:
 - Also register: window.addEventListener('error', e => parent.postMessage({type:'game-error', message: e.message, stack: e.error?.stack}, '*'));
 - And: window.addEventListener('unhandledrejection', e => parent.postMessage({type:'game-error', message: String(e.reason)}, '*'));
 
+LENGTH BUDGET:
+- Aim for around 10,000 characters of HTML+JS total. Reference games this size are complete and fun.
+- Prioritize a working game loop, input handling, and core mechanic FIRST. Add polish, particles, juice, and extra screens only if budget remains.
+- Be concise: short variable names where reasonable, no decorative comments, no defensive checks the game can't actually hit. Every line should earn its place.
+- The output WILL be truncated if it grows much past this budget, leaving the game unplayable. A complete simple game beats a half-written ambitious one.
+
 Make the game fun, polished, and immediately playable. Use smooth animation and good game feel.`;
