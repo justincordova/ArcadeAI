@@ -864,7 +864,8 @@ function BuilderLayout({
                 width: 8,
                 height: 8,
                 borderRadius: "50%",
-                background: displayCode ? "var(--color-success)" : "var(--color-text-muted)",
+                background:
+                  displayCode && !isStreaming ? "var(--color-success)" : "var(--color-text-muted)",
               }}
             />
             <span
@@ -876,7 +877,7 @@ function BuilderLayout({
                 textTransform: "uppercase",
               }}
             >
-              {displayCode ? "Live Preview" : "Preview"}
+              {displayCode && !isStreaming ? "Live Preview" : "Preview"}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -895,6 +896,7 @@ function BuilderLayout({
             onIframeReady={onIframeReady}
             onThumbnail={onThumbnail}
             reloadKey={reloadKey}
+            isStreaming={isStreaming}
           />
           <StatusOverlay status={resolvedOverlay} />
         </div>

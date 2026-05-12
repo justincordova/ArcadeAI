@@ -19,6 +19,16 @@ interface GameIframeProps {
    * prompt textarea.
    */
   autoFocus?: boolean;
+  /**
+   * While true, do NOT render the iframe even if `code` is non-empty.
+   * Each streamed chunk rewrote srcDoc which forced the browser to
+   * re-parse partial, unterminated HTML — producing dozens of console
+   * SyntaxErrors and a flickering preview. Keep the placeholder until
+   * streaming completes; the StatusOverlay on top conveys the
+   * 'Generating...' state, and the source panel in the chat shows
+   * live progress.
+   */
+  isStreaming?: boolean;
 }
 
 export function GameIframe({
@@ -28,6 +38,7 @@ export function GameIframe({
   onThumbnail,
   reloadKey = 0,
   autoFocus = false,
+  isStreaming = false,
 }: GameIframeProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -67,7 +78,10 @@ export function GameIframe({
     return () => window.removeEventListener("message", handler);
   }, [gameId, onThumbnail]);
 
-  if (!code) {
+  // Render the placeholder when there's no code OR we're still streaming.
+  // Streaming a partial HTML document via srcDoc forces the browser to
+  // re-parse unterminated JavaScript on every chunk — see the prop comment.
+  if (!code || isStreaming) {
     return (
       <div
         style={{
