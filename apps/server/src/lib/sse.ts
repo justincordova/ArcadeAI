@@ -24,12 +24,32 @@ export function writeSSEHeaders(reply: FastifyReply, request: FastifyRequest) {
 }
 
 export function writeSSE(reply: FastifyReply, event: string, data: unknown) {
+  // Guard against writing to a socket that the client has already torn
+  // down. `reply.raw.destroyed` flips synchronously inside Node when the
+  // peer's FIN/RST arrives — the `request.raw.on("close")` listener that
+  // the SSE routes register flips a separate flag, but there's a small
+  // window where the event has fired but the listener hasn't run yet
+  // (or vice versa). Without this guard, a transient mid-chunk write
+  // failure throws ERR_STREAM_WRITE_AFTER_END, which the route catches
+  // as a stream error — refunding credits and abandoning generation
+  // work that the LLM is still producing.
+  if (reply.raw.destroyed || reply.raw.writableEnded) return;
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  reply.raw.write(payload);
+  try {
+    reply.raw.write(payload);
+  } catch {
+    // Socket closed mid-write; treat as a non-fatal disconnect. The
+    // route's close handler / finally block owns cleanup.
+  }
 }
 
 export function endSSE(reply: FastifyReply) {
-  reply.raw.end();
+  if (reply.raw.destroyed || reply.raw.writableEnded) return;
+  try {
+    reply.raw.end();
+  } catch {
+    // Socket already closed; ignore.
+  }
 }
 
 /**

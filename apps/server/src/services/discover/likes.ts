@@ -29,23 +29,25 @@ export async function likeGame(gameId: string, userId: string): Promise<LikeResu
     const row = rows[0];
     if (!row || !row.isPublic) return null;
 
-    // INSERT OR IGNORE → idempotent. We then check the actual existence
-    // to decide whether to bump the counter.
-    const existing = await tx
-      .select({ gameId: gameLikes.gameId })
-      .from(gameLikes)
-      .where(and(eq(gameLikes.gameId, gameId), eq(gameLikes.userId, userId)))
-      .limit(1);
+    // INSERT OR IGNORE → idempotent. Drive the "did anything change"
+    // signal off the actual insert outcome rather than a pre-check SELECT.
+    // Under bun:sqlite's BEGIN DEFERRED transactions, a concurrent like
+    // from the same user could pass the pre-check, then collide with the
+    // unique index on insert. `.onConflictDoNothing()` collapses that race
+    // into the idempotent "already liked, no-op" branch instead of a 500.
+    const inserted = await tx
+      .insert(gameLikes)
+      .values({
+        gameId,
+        userId,
+        createdAt: Date.now(),
+      })
+      .onConflictDoNothing()
+      .returning({ gameId: gameLikes.gameId });
 
-    if (existing[0]) {
+    if (inserted.length === 0) {
       return { liked: true, changed: false, likeCount: row.likeCount };
     }
-
-    await tx.insert(gameLikes).values({
-      gameId,
-      userId,
-      createdAt: Date.now(),
-    });
 
     await tx
       .update(games)

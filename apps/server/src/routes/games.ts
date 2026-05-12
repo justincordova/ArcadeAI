@@ -139,6 +139,13 @@ export async function gamesRoutes(app: FastifyInstance) {
     }
 
     // From here on, we must always release(userId) on every exit path.
+    // `stopHeartbeat` is hoisted so the `finally` clause can call it even
+    // if an exception escapes between `startHeartbeat()` and the explicit
+    // `stopHeartbeat()` call. Previously a throw between those two points
+    // (e.g. from `retrieveExample` or any await before the model stream
+    // started) left a setInterval running forever, writing :keep-alive
+    // frames to a destroyed socket on every tick.
+    let stopHeartbeat: (() => void) | null = null;
     try {
       const id = randomUUID();
       const now = Date.now();
@@ -198,7 +205,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       // Heartbeat keeps the connection warm against intermediate proxy idle
       // timeouts during the long pre-LLM fanout and the multi-second model
       // streams. The stop function is called in the finally block below.
-      const stopHeartbeat = startHeartbeat(reply);
+      stopHeartbeat = startHeartbeat(reply);
 
       // Background-stream semantics: when the SSE client disconnects (tab
       // close, navigation away, network drop), we stop writing SSE frames
@@ -312,29 +319,50 @@ export async function gamesRoutes(app: FastifyInstance) {
       // truncation, model error, sanitizer rejection) leaves currentCode
       // as the empty default — the existing "this generation failed"
       // signal — and the user can delete or re-prompt.
+      //
+      // If the persistence itself fails, treat it as a stream error so we
+      // refund credits and surface the failure to the client. Previously
+      // this was silently swallowed, leaving the user with empty code,
+      // `inProgress=false`, and no error — a confusing dead state.
       if (!streamError && sanitizedCode) {
         try {
           await db
             .update(games)
             .set({ currentCode: sanitizedCode, updatedAt: Date.now() })
             .where(eq(games.id, id));
-        } catch {
-          // Persistence failure is logged-and-swallowed
+        } catch (err) {
+          streamError = err instanceof Error ? err : new Error("Persistence failed");
+          request.log.error(
+            { err: streamError.message, gameId: id },
+            "failed to persist generated code"
+          );
         }
       }
 
-      // Finalize: markSucceeded or refund (mutually exclusive, each runs once)
+      // Finalize: markSucceeded or refund (mutually exclusive, each runs once).
+      // Errors from these calls used to be silently swallowed, which meant a
+      // refund failure left the user overcharged with no observability and
+      // a markSucceeded failure left the usage_log row indistinguishable from
+      // an in-flight stream. Log both so ops can spot drift.
       if (streamError) {
         await refund(logId, {
           logger: request.log,
           reason: classifyRefundReason(streamError),
-        }).catch(() => {});
+        }).catch((err) => {
+          request.log.error(
+            { err: err instanceof Error ? err.message : String(err), logId },
+            "credit refund failed; user may be overcharged"
+          );
+        });
       } else {
         // Success (including user-cancel per SPEC §14: credits not refunded on cancel)
-        await markSucceeded(logId).catch(() => {});
+        await markSucceeded(logId).catch((err) => {
+          request.log.error(
+            { err: err instanceof Error ? err.message : String(err), logId },
+            "markSucceeded failed; usage_log row left in in-flight state"
+          );
+        });
       }
-
-      stopHeartbeat();
 
       if (!clientClosed) {
         if (streamError) {
@@ -345,6 +373,7 @@ export async function gamesRoutes(app: FastifyInstance) {
         endSSE(reply);
       }
     } finally {
+      stopHeartbeat?.();
       release(userId);
     }
   });
@@ -487,18 +516,33 @@ export async function gamesRoutes(app: FastifyInstance) {
     if (!slug) {
       // Generate a unique slug. 8 hex chars = 4 billion options; collisions
       // are vanishingly rare but the unique-index will reject duplicates so
-      // we retry up to 3 times before giving up.
+      // we retry up to 3 times before giving up. ONLY swallow UNIQUE
+      // collisions — masking other DB errors (timeout, schema mismatch,
+      // disk full) as "retrying for collision" hides real failures and
+      // produces a misleading 500 after the loop completes.
+      let lastErr: unknown;
       for (let attempt = 0; attempt < 3; attempt++) {
         const candidate = randomUUID().replace(/-/g, "").slice(0, 8);
         try {
           await db.update(games).set({ publicSlug: candidate }).where(eq(games.id, id));
           slug = candidate;
           break;
-        } catch {
-          // unique constraint hit; retry
+        } catch (err) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          // bun:sqlite surfaces unique-index violations as
+          // "UNIQUE constraint failed: ..." or with SQLITE_CONSTRAINT.
+          // Anything else is non-retryable.
+          if (!/UNIQUE|SQLITE_CONSTRAINT/i.test(msg)) {
+            throw err;
+          }
         }
       }
       if (!slug) {
+        request.log.error(
+          { err: lastErr instanceof Error ? lastErr.message : String(lastErr) },
+          "exhausted slug-collision retries"
+        );
         return sendError(reply, 500, {
           code: "INTERNAL_ERROR",
           message: "Could not generate public slug; please retry",
@@ -619,6 +663,8 @@ export async function gamesRoutes(app: FastifyInstance) {
       throw err;
     }
 
+    // See generation route for the rationale on hoisting stopHeartbeat.
+    let stopHeartbeat: (() => void) | null = null;
     try {
       // Deduct credits. Same TOCTOU/refund considerations as POST /api/games.
       let logId: string;
@@ -673,14 +719,21 @@ export async function gamesRoutes(app: FastifyInstance) {
         // Failure here is post-deduct, pre-stream — feedback insert, history
         // load, or context build. All three are persistence/IO; classify
         // accordingly. validation_error is reserved for upstream zod failures.
-        await refund(logId, { logger: request.log, reason: "persistence_error" }).catch(() => {});
+        await refund(logId, { logger: request.log, reason: "persistence_error" }).catch(
+          (refundErr) => {
+            request.log.error(
+              { err: refundErr instanceof Error ? refundErr.message : String(refundErr), logId },
+              "credit refund failed during pre-stream setup; user may be overcharged"
+            );
+          }
+        );
         throw err;
       }
 
       reply.hijack();
       writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: game.title });
-      const stopHeartbeat = startHeartbeat(reply);
+      stopHeartbeat = startHeartbeat(reply);
 
       // Same background-stream semantics as the generation route — closing
       // the tab mid-refinement lets the LLM finish; the new code is
@@ -734,19 +787,37 @@ export async function gamesRoutes(app: FastifyInstance) {
             .update(games)
             .set({ currentCode: sanitizedCode, updatedAt: Date.now() })
             .where(eq(games.id, id));
-        } catch {
-          // persistence failure is non-fatal
+        } catch (err) {
+          // Treat persistence failure as a stream error — same rationale as
+          // the generation route: refund credits and surface the error to
+          // the client instead of leaving an inconsistent partial state.
+          streamError = err instanceof Error ? err : new Error("Persistence failed");
+          request.log.error(
+            { err: streamError.message, gameId: id },
+            "failed to persist refined code"
+          );
         }
       }
 
-      // Finalize credits
+      // Finalize credits. See generation route for rationale on logging
+      // both branches instead of silently swallowing.
       if (streamError) {
         await refund(logId, {
           logger: request.log,
           reason: classifyRefundReason(streamError),
-        }).catch(() => {});
+        }).catch((err) => {
+          request.log.error(
+            { err: err instanceof Error ? err.message : String(err), logId },
+            "credit refund failed; user may be overcharged"
+          );
+        });
       } else {
-        await markSucceeded(logId).catch(() => {});
+        await markSucceeded(logId).catch((err) => {
+          request.log.error(
+            { err: err instanceof Error ? err.message : String(err), logId },
+            "markSucceeded failed; usage_log row left in in-flight state"
+          );
+        });
       }
 
       // Emit `done` immediately so the UI flips out of the streaming
@@ -791,12 +862,11 @@ export async function gamesRoutes(app: FastifyInstance) {
         }
       }
 
-      stopHeartbeat();
-
       if (!clientClosed) {
         endSSE(reply);
       }
     } finally {
+      stopHeartbeat?.();
       release(userId);
     }
   });
@@ -844,15 +914,31 @@ export async function gamesRoutes(app: FastifyInstance) {
       throw err;
     }
 
+    // See generation route for the rationale on hoisting stopHeartbeat.
+    let stopHeartbeat: (() => void) | null = null;
     try {
       // Open SSE before log insert so the client gets meta promptly
       reply.hijack();
       writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: game.id, placeholderTitle: game.title });
-      const stopHeartbeat = startHeartbeat(reply);
+      stopHeartbeat = startHeartbeat(reply);
 
-      // Insert observability row (credits_charged=0 per SPEC §10)
-      const { logId } = await logRepair(userId, game.id);
+      // Insert observability row (credits_charged=0 per SPEC §10).
+      // Wrapped so a DB hiccup here doesn't leave the client with a meta
+      // event and no follow-up — write an error frame, end the stream,
+      // and bail. The repair is free so there are no credits to refund.
+      let logId: string;
+      try {
+        ({ logId } = await logRepair(userId, game.id));
+      } catch (err) {
+        request.log.error(
+          { err: err instanceof Error ? err.message : String(err) },
+          "repair logRepair failed"
+        );
+        writeSSE(reply, "error", { message: "Failed to start repair" });
+        endSSE(reply);
+        return;
+      }
 
       // Categorize error (soft-fail per plan §3)
       const { category } = await categorizeError(gameError, request.log);
@@ -913,19 +999,31 @@ export async function gamesRoutes(app: FastifyInstance) {
       }
 
       if (!streamError && sanitizedRepair) {
-        // Persist repaired code
+        // Persist repaired code. Repair is free so there's no credit to
+        // refund — but if the write fails we still want to flip the
+        // log row to surface the failure (no markRepairSucceeded) and
+        // signal the client via an error frame.
         try {
           await db
             .update(games)
             .set({ currentCode: sanitizedRepair, updatedAt: Date.now() })
             .where(eq(games.id, id));
-        } catch {
-          // persistence failure is non-fatal
+        } catch (err) {
+          streamError = err instanceof Error ? err : new Error("Persistence failed");
+          request.log.error(
+            { err: streamError.message, gameId: id },
+            "failed to persist repaired code"
+          );
         }
-        await markRepairSucceeded(logId).catch(() => {});
       }
-
-      stopHeartbeat();
+      if (!streamError) {
+        await markRepairSucceeded(logId).catch((err) => {
+          request.log.error(
+            { err: err instanceof Error ? err.message : String(err), logId },
+            "markRepairSucceeded failed; repair_log row left in in-flight state"
+          );
+        });
+      }
 
       if (!clientClosed) {
         if (streamError) {
@@ -936,6 +1034,7 @@ export async function gamesRoutes(app: FastifyInstance) {
         endSSE(reply);
       }
     } finally {
+      stopHeartbeat?.();
       release(userId);
     }
   });
