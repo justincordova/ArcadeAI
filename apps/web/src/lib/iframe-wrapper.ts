@@ -48,19 +48,27 @@ export function injectWrapper(html: string): string {
 
   // Inject CSP into <head> (or at start if no <head>). Browsers respect
   // the first CSP header/meta they see, so this needs to be early.
+  //
+  // The regex is intentionally case-insensitive and tolerant of attributes
+  // (`<head class="x">` etc.). A previous case-sensitive `indexOf("<head>")`
+  // would silently miss a model-generated `<HEAD>` or `<Head>`, falling
+  // through to the "prepend" branch — but prepending the meta tag BEFORE
+  // `<!doctype html>` puts the document into quirks mode and browsers
+  // refuse to honor <meta http-equiv="Content-Security-Policy"> outside of
+  // a real <head>. Net result of the old bug: such a game ran with NO CSP.
   let withCsp: string;
-  const headIdx = html.indexOf("<head>");
-  if (headIdx !== -1) {
-    const insertAt = headIdx + "<head>".length;
+  const headMatch = html.match(/<head\b[^>]*>/i);
+  if (headMatch && headMatch.index !== undefined) {
+    const insertAt = headMatch.index + headMatch[0].length;
     withCsp = html.slice(0, insertAt) + CSP_META + html.slice(insertAt);
   } else {
     // No <head> — prepend so it parses before the first script
     withCsp = CSP_META + html;
   }
 
-  const bodyIdx = withCsp.lastIndexOf("</body>");
-  if (bodyIdx !== -1) {
-    return withCsp.slice(0, bodyIdx) + scriptTag + withCsp.slice(bodyIdx);
+  const bodyMatch = withCsp.match(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i);
+  if (bodyMatch && bodyMatch.index !== undefined) {
+    return withCsp.slice(0, bodyMatch.index) + scriptTag + withCsp.slice(bodyMatch.index);
   }
   return withCsp + scriptTag;
 }

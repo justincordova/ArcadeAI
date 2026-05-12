@@ -41,7 +41,13 @@ function buildHeaders(request: FastifyRequest, drop: Set<string>): Headers {
 }
 
 function buildRequestUrl(request: FastifyRequest): string {
-  const base = `${request.protocol}://${request.hostname}:${process.env.PORT ?? 3000}`;
+  // Pin the URL Better Auth sees to the operator-configured BETTER_AUTH_URL.
+  // Reading `request.protocol` / `request.hostname` would honor `Host` and
+  // `X-Forwarded-*` headers in some Fastify configurations, letting a
+  // client-controlled hostname propagate into OAuth state validation,
+  // callback URL construction, and log lines. The configured env value is
+  // already the canonical origin Better Auth expects.
+  const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
   return new URL(request.url, base).toString();
 }
 

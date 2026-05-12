@@ -42,6 +42,8 @@ const BaseSchema = z.object({
 
 const PROD_REQUIRED_KEYS = [
   "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
+  "WEB_ORIGIN",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
   "GITHUB_CLIENT_ID",
@@ -49,6 +51,17 @@ const PROD_REQUIRED_KEYS = [
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
 ] as const;
+
+// Sentinel values that must never appear in a production environment.
+// BETTER_AUTH_SECRET has a development fallback baked into lib/auth.ts —
+// if that fallback ever leaked into production via misconfiguration, every
+// session signed by it would be forgeable. Reject it explicitly here so
+// startup fails loudly rather than booting with a publicly-known key.
+const FORBIDDEN_PROD_VALUES: Partial<Record<(typeof PROD_REQUIRED_KEYS)[number], string[]>> = {
+  BETTER_AUTH_SECRET: ["dev-secret-change-me"],
+  WEB_ORIGIN: ["http://localhost:5173"],
+  BETTER_AUTH_URL: ["http://localhost:3000"],
+};
 
 export type Env = z.infer<typeof BaseSchema>;
 
@@ -71,12 +84,23 @@ export function loadEnv(): Env {
   }
 
   // Production strictness: collect every missing required key and surface
-  // them all at once.
+  // them all at once. Also reject dev-fallback values (e.g. the literal
+  // BETTER_AUTH_SECRET we use locally) that would silently downgrade
+  // security if they leaked into a production deploy.
   if (result.data.NODE_ENV === "production") {
-    const missing = PROD_REQUIRED_KEYS.filter((k) => !result.data[k]);
-    if (missing.length > 0) {
-      const lines = missing.map((k) => `  - ${k}: required in production`).join("\n");
-      throw new Error(`Environment validation failed:\n${lines}`);
+    const problems: string[] = [];
+    for (const k of PROD_REQUIRED_KEYS) {
+      if (!result.data[k]) {
+        problems.push(`  - ${k}: required in production`);
+        continue;
+      }
+      const forbidden = FORBIDDEN_PROD_VALUES[k];
+      if (forbidden?.includes(String(result.data[k]))) {
+        problems.push(`  - ${k}: development-only value not permitted in production`);
+      }
+    }
+    if (problems.length > 0) {
+      throw new Error(`Environment validation failed:\n${problems.join("\n")}`);
     }
   }
 

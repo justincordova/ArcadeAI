@@ -29,12 +29,20 @@ export function registerCsrfGuard(app: FastifyInstance) {
     if (path.startsWith("/api/auth/")) return;
 
     const ct = (request.headers["content-type"] ?? "").toString().toLowerCase();
-    // Empty body POSTs (e.g. /api/games/:id/publish carries no payload but
-    // is JSON-by-convention) often arrive without a content-type header.
-    // Accept those — there's nothing for an attacker to gain by submitting
-    // an empty form-encoded body.
-    if (ct === "" && !request.headers["content-length"]) return;
-
+    // Strictly require application/json on every state-changing /api/* call.
+    //
+    // Previously this guard allowed empty-content-type POSTs (e.g. publish,
+    // delete, like) on the theory that "there's nothing to gain by submitting
+    // an empty form-encoded body". That ignored the actual CSRF surface:
+    // these endpoints take state purely from URL params + the session cookie,
+    // so an empty-body cross-origin POST/DELETE IS a state-changing action
+    // (publish, unpublish, delete, like, remix, change-plan, etc.).
+    //
+    // The frontend always sends `{}` with `Content-Type: application/json`
+    // for these calls (see apps/web/src/lib/api/games.ts and lib/api/me.ts),
+    // so the previous bypass was load-bearing for nothing. Closing it forces
+    // non-simple-request status on every state-changing call, which in turn
+    // forces a CORS preflight that our allow-list (WEB_ORIGIN only) gates.
     if (!ct.startsWith("application/json")) {
       return sendError(reply, 415, {
         code: "VALIDATION_ERROR",

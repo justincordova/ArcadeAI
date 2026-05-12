@@ -75,14 +75,23 @@ describe("loadEnv — development mode", () => {
 });
 
 describe("loadEnv — production mode", () => {
+  function setProdRequiredKeys() {
+    process.env.BETTER_AUTH_SECRET = "secret";
+    process.env.BETTER_AUTH_URL = "https://auth.example.com";
+    process.env.WEB_ORIGIN = "https://app.example.com";
+    process.env.GOOGLE_CLIENT_ID = "g";
+    process.env.GOOGLE_CLIENT_SECRET = "g";
+    process.env.GITHUB_CLIENT_ID = "h";
+    process.env.GITHUB_CLIENT_SECRET = "h";
+    process.env.ANTHROPIC_API_KEY = "a";
+    process.env.OPENAI_API_KEY = "o";
+  }
+
   test("rejects missing BETTER_AUTH_SECRET in production", () => {
     process.env.NODE_ENV = "production";
-    process.env.GOOGLE_CLIENT_ID = "x";
-    process.env.GOOGLE_CLIENT_SECRET = "x";
-    process.env.GITHUB_CLIENT_ID = "x";
-    process.env.GITHUB_CLIENT_SECRET = "x";
-    process.env.ANTHROPIC_API_KEY = "x";
-    process.env.OPENAI_API_KEY = "x";
+    setProdRequiredKeys();
+    const k = "BETTER_AUTH_SECRET";
+    delete process.env[k];
     expect(() => loadEnv()).toThrow(/BETTER_AUTH_SECRET/);
   });
 
@@ -96,18 +105,46 @@ describe("loadEnv — production mode", () => {
 
   test("succeeds in production with all required keys present", () => {
     process.env.NODE_ENV = "production";
-    process.env.BETTER_AUTH_SECRET = "secret";
-    process.env.GOOGLE_CLIENT_ID = "g";
-    process.env.GOOGLE_CLIENT_SECRET = "g";
-    process.env.GITHUB_CLIENT_ID = "h";
-    process.env.GITHUB_CLIENT_SECRET = "h";
-    process.env.ANTHROPIC_API_KEY = "a";
-    process.env.OPENAI_API_KEY = "o";
+    setProdRequiredKeys();
     expect(loadEnv().NODE_ENV).toBe("production");
+  });
+
+  test("rejects the dev-fallback BETTER_AUTH_SECRET in production", () => {
+    process.env.NODE_ENV = "production";
+    setProdRequiredKeys();
+    process.env.BETTER_AUTH_SECRET = "dev-secret-change-me";
+    expect(() => loadEnv()).toThrow(/BETTER_AUTH_SECRET/);
+  });
+
+  test("rejects the localhost WEB_ORIGIN default in production", () => {
+    process.env.NODE_ENV = "production";
+    setProdRequiredKeys();
+    process.env.WEB_ORIGIN = "http://localhost:5173";
+    expect(() => loadEnv()).toThrow(/WEB_ORIGIN/);
+  });
+
+  test("rejects the localhost BETTER_AUTH_URL default in production", () => {
+    process.env.NODE_ENV = "production";
+    setProdRequiredKeys();
+    process.env.BETTER_AUTH_URL = "http://localhost:3000";
+    expect(() => loadEnv()).toThrow(/BETTER_AUTH_URL/);
+  });
+
+  test("requires WEB_ORIGIN to be set in production", () => {
+    process.env.NODE_ENV = "production";
+    setProdRequiredKeys();
+    // Default is http://localhost:5173, which is now rejected. Confirm
+    // an explicit override is required.
+    const k = "WEB_ORIGIN";
+    delete process.env[k];
+    expect(() => loadEnv()).toThrow(/WEB_ORIGIN/);
   });
 
   test("error message lists multiple missing keys in one shot", () => {
     process.env.NODE_ENV = "production";
+    // Override the localhost defaults so we're testing "missing" not "forbidden"
+    process.env.WEB_ORIGIN = "https://app.example.com";
+    process.env.BETTER_AUTH_URL = "https://auth.example.com";
     let caught: unknown;
     try {
       loadEnv();
