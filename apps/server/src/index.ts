@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { activeCount, clear as clearActiveStreams } from "./lib/active-streams.js";
 import { db, sqlite } from "./lib/db.js";
@@ -124,6 +126,22 @@ await app.register(playRoutes);
 await app.register(discoverRoutes);
 await app.register(ogRoutes);
 await app.register(billingRoutes);
+
+const webDistPath = new URL("../../web/dist", import.meta.url).pathname;
+if (!isDev && existsSync(webDistPath)) {
+  await app.register(fastifyStatic, {
+    root: webDistPath,
+    prefix: "/",
+    wildcard: false,
+  });
+  app.setNotFoundHandler((request, reply) => {
+    if (request.url.startsWith("/api")) {
+      return reply.status(404).send({ code: "NOT_FOUND", message: "Not found" });
+    }
+    // biome-ignore lint/suspicious/noExplicitAny: fastify-static augments FastifyReply at runtime
+    return (reply as any).sendFile("index.html");
+  });
+}
 
 const port = env.PORT;
 
