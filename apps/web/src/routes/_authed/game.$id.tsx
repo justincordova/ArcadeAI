@@ -77,6 +77,13 @@ function GamePage() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["game", id],
     queryFn: () => fetchGame(id),
+    // Poll while a generation is in progress server-side (user navigated
+    // away mid-stream and came back). Stops once current_code lands.
+    // 1500ms balances perceived freshness against load: a 30s generation
+    // is ~20 polls, trivial. Cleared automatically once the predicate
+    // returns false.
+    refetchInterval: (query) =>
+      query.state.data?.inProgress && !query.state.data?.currentCode ? 1500 : false,
   });
 
   if (isLoading) {
@@ -88,6 +95,11 @@ function GamePage() {
   }
 
   return (
-    <Builder initialCode={data.currentCode} initialMessages={data.messages} gameId={data.id} />
+    <Builder
+      initialCode={data.currentCode}
+      initialMessages={data.messages}
+      gameId={data.id}
+      externalStreaming={data.inProgress && !data.currentCode}
+    />
   );
 }

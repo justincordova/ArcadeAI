@@ -45,6 +45,13 @@ export interface GameDetail {
   title: string;
   currentCode: string;
   messages: Array<{ id: string; kind: string; content: string; createdAt: number }>;
+  /**
+   * True while a generation is still streaming server-side (user
+   * navigated away mid-stream and came back). The /game/:id page polls
+   * the endpoint while this is true and shows a generating indicator
+   * until current_code is populated.
+   */
+  inProgress: boolean;
 }
 
 export async function listGames(): Promise<GameSummary[]> {

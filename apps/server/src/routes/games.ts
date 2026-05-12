@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { games, messages } from "@arcadeai/db";
-import { asc, desc, eq } from "drizzle-orm";
+import { games, messages, usageLog } from "@arcadeai/db";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
@@ -334,6 +334,16 @@ export async function gamesRoutes(app: FastifyInstance) {
   });
 
   // GET /api/games/:id — get game with messages
+  //
+  // `inProgress` is true while a generation for this game is still
+  // running server-side. This lets the client poll for completion when
+  // the user navigates away mid-generation and comes back — the page
+  // shows a "Generating..." overlay until the row drops out of the
+  // in-flight set, at which point current_code is populated.
+  //
+  // We only check `action = 'generation'` because refinement and repair
+  // preserve existing currentCode (the game stays playable in its
+  // previous state mid-stream — no need to suppress the iframe).
   app.get("/api/games/:id", async (request, reply) => {
     const parseResult = GameIdParams.safeParse(request.params);
     if (!parseResult.success) {
@@ -348,13 +358,23 @@ export async function gamesRoutes(app: FastifyInstance) {
       return sendError(reply, 404, notFoundError());
     }
 
-    const msgs = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.gameId, id))
-      .orderBy(asc(messages.createdAt));
+    const [msgs, inflight] = await Promise.all([
+      db.select().from(messages).where(eq(messages.gameId, id)).orderBy(asc(messages.createdAt)),
+      db
+        .select({ id: usageLog.id })
+        .from(usageLog)
+        .where(
+          and(
+            eq(usageLog.gameId, id),
+            eq(usageLog.action, "generation"),
+            eq(usageLog.succeeded, 0),
+            isNull(usageLog.refundedAt)
+          )
+        )
+        .limit(1),
+    ]);
 
-    return reply.send({ ...game, messages: msgs });
+    return reply.send({ ...game, messages: msgs, inProgress: inflight.length > 0 });
   });
 
   // DELETE /api/games/:id

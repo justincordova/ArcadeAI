@@ -29,6 +29,15 @@ interface BuilderProps {
   initialMessages?: Message[];
   gameId?: string | null;
   initialPrompt?: string;
+  /**
+   * True when /api/games/:id reports inProgress = true — a generation
+   * is running server-side but was started elsewhere (e.g. user
+   * submitted on /game/new, then navigated to dashboard, then came
+   * back to /game/:id mid-stream). The Builder shows its standard
+   * streaming overlay/indicator until the polled query refetches a
+   * non-empty currentCode.
+   */
+  externalStreaming?: boolean;
 }
 
 // Builder for /game/new — first generation only
@@ -105,6 +114,7 @@ function RefinementBuilder({
   initialCode = "",
   initialMessages = [],
   gameId,
+  externalStreaming = false,
 }: BuilderProps & { gameId: string }) {
   const queryClient = useQueryClient();
   const { status, streamingCode, finalCode, error, refine, stop, attachIframe } =
@@ -121,7 +131,11 @@ function RefinementBuilder({
   // refetches and replaces initialMessages — at that point the diff
   // is "stale" (history) and we drop the live-diff treatment.
   const [previousCodeSnapshot, setPreviousCodeSnapshot] = useState<string | null>(null);
-  const isStreaming = status === "streaming";
+  // Treat the page as streaming whether the user kicked off a local
+  // refinement or the server is finishing a generation started on
+  // /game/new. The local hook covers the first case; externalStreaming
+  // (polled from the GET /api/games/:id route) covers the second.
+  const isStreaming = status === "streaming" || externalStreaming;
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   function handleIframeReady(el: HTMLIFrameElement | null) {
@@ -620,7 +634,11 @@ function BuilderLayout({
           })}
 
           {isStreaming && <StreamingIndicator label={streamLabel} />}
-          {isStreaming && <StreamingCodePreview code={streamingCode} />}
+          {/* Hide the live source panel when there's nothing local to show
+              (e.g. resumed-stream view where the bytes are arriving
+              server-side only, not in this component's state). The
+              indicator above still communicates that work is happening. */}
+          {isStreaming && streamingCode && <StreamingCodePreview code={streamingCode} />}
 
           {error && <ErrorBanner message={error} />}
 
@@ -879,6 +897,7 @@ export function Builder({
   initialMessages = [],
   gameId,
   initialPrompt,
+  externalStreaming = false,
 }: BuilderProps) {
   if (gameId) {
     return (
@@ -886,6 +905,7 @@ export function Builder({
         initialCode={initialCode}
         initialMessages={initialMessages}
         gameId={gameId}
+        externalStreaming={externalStreaming}
       />
     );
   }
