@@ -59,27 +59,63 @@ export function useStreamedGeneration(): StreamedGenerationState {
         queryClient.invalidateQueries({ queryKey: ["me"] });
 
         const id = gameIdRef.current;
-
-        // Capture the thumbnail BEFORE navigating away. The iframe message
-        // round-trips (parent → iframe → parent → POST /thumbnail) and
-        // needs the iframe alive for the duration. We delay navigation
-        // long enough for the capture to fire and the postThumbnail call
-        // to start; the POST itself completes after navigation, which is
-        // fine — it's a fire-and-forget against `gameId` already on disk.
         const iframe = iframeRef.current;
-        if (iframe?.contentWindow) {
-          iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+
+        // Thumbnail capture timing is delicate:
+        //
+        // 1. The iframe `srcDoc` was rewritten on the LAST streamed chunk,
+        //    so the document is still parsing when `onDone` fires. The
+        //    wrapper script (which listens for 'capture-thumbnail') has
+        //    not been registered yet — a postMessage now would be dropped.
+        // 2. Even after the load fires, the game's init() + first
+        //    render() haven't run, so canvas.toDataURL() captures a blank
+        //    black surface. We wait one more beat so the title screen is
+        //    actually drawn.
+        // 3. After the iframe responds with the data URL, the parent
+        //    POSTs to /api/games/:id/thumbnail — we must give that POST
+        //    time to start before navigating away (the component
+        //    unmounts on route change and aborts in-flight fetches).
+        //
+        // The sequence: wait for iframe load → 600ms for first frame →
+        // post capture-thumbnail → 600ms for round-trip + POST start →
+        // navigate. Total ~1.2s after `done`. A timeout fallback handles
+        // the case where `load` already fired before we attached the
+        // listener (rare but possible if the iframe is small).
+        const captureAndNavigate = () => {
+          setTimeout(() => {
+            if (iframe?.contentWindow) {
+              iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+            }
+            setTimeout(() => {
+              if (id) {
+                void navigate({ to: "/game/$id", params: { id }, replace: true });
+              }
+            }, 600);
+          }, 600);
+        };
+
+        if (!iframe) {
+          // No iframe ref — just navigate. Edge case, should not happen
+          // in normal flow because the iframe is mounted as soon as the
+          // first chunk arrives.
+          if (id) void navigate({ to: "/game/$id", params: { id }, replace: true });
+          return;
         }
 
-        // Navigate to the per-game URL once streaming has completed. The
-        // 500ms delay matches the existing thumbnail capture timing and
-        // gives the iframe enough time to respond + POST before its
-        // parent component unmounts.
-        setTimeout(() => {
-          if (id) {
-            void navigate({ to: "/game/$id", params: { id }, replace: true });
-          }
-        }, 500);
+        // `load` fires after the freshly-replaced srcDoc finishes parsing
+        // AND running its inline scripts (which includes the wrapper).
+        // If it already fired before we attach the listener, the fallback
+        // setTimeout kicks in.
+        let started = false;
+        const start = () => {
+          if (started) return;
+          started = true;
+          iframe.removeEventListener("load", start);
+          captureAndNavigate();
+        };
+        iframe.addEventListener("load", start);
+        // Fallback: 1s timeout in case `load` already fired.
+        setTimeout(start, 1000);
       },
       onError() {
         // Server-side error refunds credits (SPEC §10) — refresh bars

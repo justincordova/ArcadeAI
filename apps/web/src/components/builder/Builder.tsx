@@ -11,7 +11,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Square } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { DiffViewer } from "./DiffViewer.js";
 import { ErrorBanner } from "./ErrorBanner.js";
@@ -63,11 +63,18 @@ function GenerationBuilder({
     setPrompt("");
   }
 
-  function handleThumbnail(id: string, dataUrl: string) {
-    postThumbnail(id, dataUrl)
-      .then(() => queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY }))
-      .catch((err) => console.warn("[thumbnail]", err));
-  }
+  // Memoize so GameIframe's message listener doesn't tear down and
+  // re-bind on every streaming chunk render. A listener swap during
+  // streaming would cause the iframe's `thumbnail` response to land in
+  // the gap between unbind and rebind and be dropped.
+  const handleThumbnail = useCallback(
+    (id: string, dataUrl: string) => {
+      postThumbnail(id, dataUrl)
+        .then(() => queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY }))
+        .catch((err) => console.warn("[thumbnail]", err));
+    },
+    [queryClient]
+  );
 
   return (
     <BuilderLayout
@@ -173,11 +180,15 @@ function RefinementBuilder({
     setPrompt("");
   }
 
-  function handleThumbnail(id: string, dataUrl: string) {
-    postThumbnail(id, dataUrl)
-      .then(() => queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY }))
-      .catch((err) => console.warn("[thumbnail]", err));
-  }
+  // Same memoization as GenerationBuilder — see comment there.
+  const handleThumbnail = useCallback(
+    (id: string, dataUrl: string) => {
+      postThumbnail(id, dataUrl)
+        .then(() => queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY }))
+        .catch((err) => console.warn("[thumbnail]", err));
+    },
+    [queryClient]
+  );
 
   function handleRepaired(code: string) {
     setRepairedCode(code);
