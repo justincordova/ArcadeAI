@@ -29,7 +29,25 @@ export type ErrorCode =
   | "INSUFFICIENT_CREDITS"
   | "FREE_TIER_EXHAUSTED"
   | "PAYLOAD_TOO_LARGE"
+  | "RATE_LIMITED"
   | "INTERNAL_ERROR";
+
+/**
+ * Map an HTTP status code to the canonical `ErrorCode` we expose to the
+ * client. Used by the global setErrorHandler so the frontend's `switch
+ * (body.code)` works for errors that bypass the explicit `sendError(...)`
+ * helpers — Fastify-native 404/415, body-parser 400s, rate-limit 429s,
+ * etc.
+ */
+export function codeForStatus(status: number): ErrorCode {
+  if (status === 401) return "UNAUTHORIZED";
+  if (status === 404) return "NOT_FOUND";
+  if (status === 409) return "CONFLICT";
+  if (status === 413) return "PAYLOAD_TOO_LARGE";
+  if (status === 429) return "RATE_LIMITED";
+  if (status >= 500) return "INTERNAL_ERROR";
+  return "VALIDATION_ERROR";
+}
 
 export function sendError(reply: FastifyReply, status: number, error: ApiError): FastifyReply {
   return reply.status(status).send(error);

@@ -77,19 +77,43 @@ registerRequestContext(app);
 // failure. The onResponse hook in request-context still emits the
 // per-request INFO line, so failed requests get exactly one ERROR + one
 // INFO, sharing the same requestId. SPEC §14.
+//
+// Errors that DO reach this handler are ones a route did NOT format with
+// `sendError(...)` — Fastify-native body-parser failures, automatic
+// 404 not-found, route-handler exceptions, etc. We map the HTTP status
+// back to a canonical `ErrorCode` so the frontend's `switch (body.code)`
+// works uniformly; the previous code unconditionally returned
+// VALIDATION_ERROR for any 4xx, which broke client-side branching on
+// 404 / 415 / etc.
+//
+// Messages on 5xx are scrubbed to "Internal Server Error" so we don't
+// leak stack snippets or upstream library internals. 4xx messages are
+// kept (they're typically zod / body-parser one-liners the client can
+// surface), except for the catchall NOT_FOUND / UNAUTHORIZED cases where
+// we substitute a stable string.
+import { codeForStatus } from "./lib/errors.js";
+
 app.setErrorHandler((err: Error & { statusCode?: number }, request, reply) => {
   request.log.error({ err }, "request failed");
   const statusCode = err.statusCode ?? 500;
+  const code = codeForStatus(statusCode);
+
+  let message: string;
   if (statusCode >= 500) {
-    return reply.status(statusCode).send({
-      code: "INTERNAL_ERROR",
-      message: "Internal Server Error",
-    });
+    message = "Internal Server Error";
+  } else if (code === "NOT_FOUND") {
+    message = "Not found";
+  } else if (code === "UNAUTHORIZED") {
+    message = "Unauthorized";
+  } else if (code === "RATE_LIMITED") {
+    // @fastify/rate-limit's errorResponseBuilder formats its own body
+    // and shouldn't reach this handler; fall back to a generic message.
+    message = "Rate limit exceeded";
+  } else {
+    message = err.message || "Request failed";
   }
-  return reply.status(statusCode).send({
-    code: "VALIDATION_ERROR",
-    message: err.message,
-  });
+
+  return reply.status(statusCode).send({ code, message });
 });
 
 // Routes

@@ -60,15 +60,23 @@ export async function billingRoutes(app: FastifyInstance) {
     const monthlyResetAt = nextUtcMonthStart(now);
     const limits = TIER_CREDIT_LIMITS[tier];
 
-    // SPEC §10 + plan #46: an UPGRADE bumps to the new tier's allotment
-    // immediately so paid users get the credits they paid for. A DOWNGRADE
-    // preserves the existing balance until the next monthly boundary —
-    // capping to the lower tier's monthly limit would punish the user for
-    // unspent credit they already legitimately had.
-    const isDowngrade = current.creditsRemainingMonthly > limits.monthly;
-    const nextMonthly = isDowngrade ? current.creditsRemainingMonthly : limits.monthly;
-    const isDowngradeDaily = current.creditsRemainingDaily > limits.daily;
-    const nextDaily = isDowngradeDaily ? current.creditsRemainingDaily : limits.daily;
+    // In a real-billing world (post-Stripe), downgrade preserves the
+    // existing balance until the next monthly boundary so a user who
+    // legitimately paid for credits isn't punished for unspent balance.
+    //
+    // In the prototype there is no payment ledger — "credits I already
+    // had" is indistinguishable from "credits I minted by upgrading
+    // free → creator (free of charge) and then downgrading back." That
+    // round-trip would leave a free-tier user with creator-tier credit
+    // balance, spendable the moment ENFORCE_LIFETIME_LIMITS_FOR_FREE
+    // flips off.
+    //
+    // We cap the balance on downgrade until real billing is in place
+    // and we can verify the source of the credit. Restore the original
+    // SPEC §10 preserve-on-downgrade behavior alongside the Stripe
+    // integration.
+    const nextMonthly = Math.min(current.creditsRemainingMonthly, limits.monthly);
+    const nextDaily = Math.min(current.creditsRemainingDaily, limits.daily);
 
     await db
       .update(users)

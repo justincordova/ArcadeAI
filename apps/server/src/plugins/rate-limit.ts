@@ -23,10 +23,16 @@ export async function registerRateLimit(app: FastifyInstance) {
     keyGenerator: (req: FastifyRequest) => req.ip,
     // onRequest runs before auth, so unauthenticated endpoints are rate-limited too
     hook: "onRequest",
+    // Return the canonical ApiError shape `{ code, message, details? }`
+    // so the frontend's switch-on-code logic (see lib/errors.ts and
+    // the SPEC §14 contract) handles 429 like every other error. The
+    // previous body shape was `{ statusCode, error, message }` — none
+    // of those field names match the contract, so the client surfaced
+    // 429s as generic stream errors with no retry guidance.
     errorResponseBuilder: (_req: FastifyRequest, ctx: RateLimitContext) => ({
-      statusCode: 429,
-      error: "Too Many Requests",
-      message: `Rate limit exceeded, retry in ${ctx.after}`,
+      code: "RATE_LIMITED",
+      message: `Rate limit exceeded. Retry in ${ctx.after}.`,
+      details: { retryAfter: ctx.after },
     }),
   });
 }
