@@ -76,6 +76,45 @@ export async function ogRoutes(app: FastifyInstance) {
 
     const mime = `image/${match[1]}`;
     const buf = Buffer.from(match[2] ?? "", "base64");
+
+    // Buffer.from silently drops invalid base64 characters — it never throws.
+    // A truncated or tampered thumbnail decodes to a short bag of bytes that
+    // we'd otherwise serve as `image/png`, then social-media crawlers cache
+    // the broken unfurl for an hour. Verify the magic bytes match the
+    // declared MIME and fall back to the placeholder when they don't.
+    if (!hasExpectedMagic(buf, match[1])) {
+      reply
+        .header("Content-Type", "image/png")
+        .header("Cache-Control", CACHE_HEADER)
+        .send(FALLBACK_PNG);
+      return;
+    }
+
     reply.header("Content-Type", mime).header("Cache-Control", CACHE_HEADER).send(buf);
   });
+}
+
+// Cheap magic-byte sniff for the three image types we accept. Returns
+// false if the buffer is too short or the leading bytes don't match.
+function hasExpectedMagic(buf: Buffer, kind: string | undefined): boolean {
+  if (buf.length < 12) return false;
+  if (kind === "png") {
+    return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  }
+  if (kind === "jpeg") {
+    return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  }
+  if (kind === "webp") {
+    return (
+      buf[0] === 0x52 &&
+      buf[1] === 0x49 &&
+      buf[2] === 0x46 &&
+      buf[3] === 0x46 &&
+      buf[8] === 0x57 &&
+      buf[9] === 0x45 &&
+      buf[10] === 0x42 &&
+      buf[11] === 0x50
+    );
+  }
+  return false;
 }

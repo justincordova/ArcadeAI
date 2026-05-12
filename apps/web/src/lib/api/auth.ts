@@ -7,21 +7,24 @@ export type { MeResponse };
 const API = API_BASE;
 
 /**
- * Fetch the current user. Returns `null` on 401 / network error so callers
- * (route guards, useSession) can treat unauthenticated as a normal state.
+ * Fetch the current user. Returns `null` on 401 so callers (route guards,
+ * useSession) can treat "no session" as a normal state. Throws on 5xx
+ * and on network failures so the route's error boundary can surface a
+ * meaningful "service unavailable" screen rather than bouncing a logged-in
+ * user to /sign-in (which then re-checks /api/me, gets 5xx again, and
+ * loops forever).
  *
  * Counterpart: routes that REQUIRE auth and want to surface failure should
  * call `patchMe` / `deleteMe` from `lib/api/me.ts`, which throw on error.
  */
 export async function fetchMeOrNull(): Promise<MeResponse | null> {
-  try {
-    const res = await fetch(`${API}/api/me`, { credentials: "include" });
-    if (res.status === 401) return null;
-    if (!res.ok) return null;
-    return (await res.json()) as MeResponse;
-  } catch {
-    return null;
+  const res = await fetch(`${API}/api/me`, { credentials: "include" });
+  if (res.status === 401) return null;
+  if (!res.ok) {
+    // 4xx (except 401) and 5xx are real errors — surface them.
+    throw new Error(`Failed to load profile (${res.status})`);
   }
+  return (await res.json()) as MeResponse;
 }
 
 export async function signOut(): Promise<void> {

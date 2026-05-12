@@ -81,6 +81,11 @@ export async function deleteGame(id: string): Promise<void> {
   const res = await fetch(`${API}/api/games/${id}`, {
     method: "DELETE",
     credentials: "include",
+    // Content-Type is required by the CSRF guard for every state-changing
+    // /api/* request (see apps/server/src/plugins/csrf.ts). DELETE carries
+    // no payload so we send an empty JSON object.
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
   if (!res.ok) throw new Error("Failed to delete game");
 }

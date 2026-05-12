@@ -22,6 +22,9 @@ export async function deleteMe(): Promise<void> {
   const res = await fetch(`${API}/api/me`, {
     method: "DELETE",
     credentials: "include",
+    // Content-Type is required by the CSRF guard (see plugins/csrf.ts).
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
   });
   if (!res.ok) throw new Error("Failed to delete account");
 }

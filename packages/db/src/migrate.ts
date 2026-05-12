@@ -27,11 +27,17 @@ const db = drizzle(sqlite);
 
 const migrationsFolder = fileURLToPath(new URL("./migrations", import.meta.url));
 
-console.log("[migrate] Running Drizzle migrations from:", migrationsFolder);
-migrate(db, { migrationsFolder });
-console.log("[migrate] Drizzle migrations complete.");
-
-sqlite.close();
+// Always close the DB handle even if the migration throws. Leaving it open
+// after a failure strands the WAL/SHM files in a state where the next
+// process opening the DB has to recover them, and on macOS/Linux it leaks
+// an open file descriptor for the lifetime of the parent process.
+try {
+  console.log("[migrate] Running Drizzle migrations from:", migrationsFolder);
+  migrate(db, { migrationsFolder });
+  console.log("[migrate] Drizzle migrations complete.");
+} finally {
+  sqlite.close();
+}
 
 console.log("[migrate] Running post-migrate steps...");
 runPostMigrate(dbPath);

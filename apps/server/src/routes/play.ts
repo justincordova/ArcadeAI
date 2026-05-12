@@ -130,7 +130,15 @@ export async function playRoutes(app: FastifyInstance) {
       await db
         .delete(games)
         .where(eq(games.id, newId))
-        .catch(() => {});
+        .catch((delErr) => {
+          // Cascade DELETE for messages is handled by the schema FK, so
+          // failure here is unusual (disk full, locked DB). Log it so we
+          // can spot orphaned remix rows in ops.
+          request.log.error(
+            { err: delErr instanceof Error ? delErr.message : String(delErr), gameId: newId },
+            "failed to clean up remix game after recordRemix failure"
+          );
+        });
       if (err instanceof InsufficientCreditsError) {
         return sendError(
           reply,
@@ -143,7 +151,14 @@ export async function playRoutes(app: FastifyInstance) {
 
     // Mark the remix log row succeeded synchronously — there's no streaming
     // work to await; the remix is "done" the moment the row is inserted.
-    await markSucceeded(logId).catch(() => {});
+    // Log the failure rather than swallow so a stuck in-flight row is
+    // visible in operations.
+    await markSucceeded(logId).catch((err) => {
+      request.log.error(
+        { err: err instanceof Error ? err.message : String(err), logId },
+        "markSucceeded failed for remix; usage_log row left in in-flight state"
+      );
+    });
 
     return reply.send({
       id: newId,

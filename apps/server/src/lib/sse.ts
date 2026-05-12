@@ -34,7 +34,17 @@ export function writeSSE(reply: FastifyReply, event: string, data: unknown) {
   // as a stream error — refunding credits and abandoning generation
   // work that the LLM is still producing.
   if (reply.raw.destroyed || reply.raw.writableEnded) return;
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  // JSON.stringify can throw on circular references — LLM SDK errors and
+  // certain object graphs (Response/Request, async generators, etc.) carry
+  // cause-chain refs that loop. Fall back to a generic frame so the route
+  // doesn't crash mid-stream and abandon the connection without a
+  // terminator frame.
+  let payload: string;
+  try {
+    payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  } catch {
+    payload = `event: ${event}\ndata: ${JSON.stringify({ message: "Serialization failed" })}\n\n`;
+  }
   try {
     reply.raw.write(payload);
   } catch {
