@@ -9,17 +9,14 @@ const anthropic = createAnthropic({
 
 // Server-side LLM timeouts. Sized to accommodate the maxOutputTokens
 // ceiling on each call: at ~80 output tok/sec, 16K tokens needs ~200s
-// in the worst case, so generation/refinement get 180s with a 20s buffer
-// at the model end. Repair is shorter because the output is shorter
-// (it's a bug fix, not a rewrite) and we don't want a stuck repair to
-// block the user's next attempt.
+// in the worst case, so all three get 180s.
 //
 // The timeout is composed with the user's AbortController via
 // AbortSignal.any so a user cancel still aborts immediately.
 export const LLM_TIMEOUT_MS = {
   generation: 180_000,
   refinement: 180_000,
-  repair: 90_000,
+  repair: 180_000,
 } as const;
 
 // Per-call output ceilings. The 8192 default truncated mid-stream on
@@ -27,12 +24,19 @@ export const LLM_TIMEOUT_MS = {
 // statement, leaving the iframe with unparseable JS and a blank canvas).
 // Sonnet 4.6 supports up to 64K output tokens; 16K covers ~50K chars of
 // HTML/JS — plenty for any reasonable game without inviting runaway
-// generations. Repair stays smaller because the output should be a
-// targeted patch, not a rewrite.
+// generations.
+//
+// Repair was previously 8192 on the theory that repairs should be
+// targeted patches, but in practice the prompt requires the model to
+// output the entire file again (no diff format). For a 15K-char game
+// that's ~5K tokens — most of the 8K cap is consumed before the
+// repaired body even starts, and the model frequently truncated mid-
+// statement, leaving worse code than it started with. Match generation
+// at 16K.
 const MAX_OUTPUT_TOKENS = {
   generation: 16_000,
   refinement: 16_000,
-  repair: 8_192,
+  repair: 16_000,
 } as const;
 
 /**
