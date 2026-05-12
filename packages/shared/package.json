@@ -3,6 +3,10 @@
   "type": "module",
   "main": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./genres.js": "./src/genres.ts",
+    "./models.js": "./src/models.ts",
+    "./plans.js": "./src/plans.ts",
+    "./types.js": "./src/types.ts"
   }
 }
