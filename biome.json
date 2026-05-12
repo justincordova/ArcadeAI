@@ -27,7 +27,8 @@
       "dist",
       ".tanstack",
       "apps/web/src/routeTree.gen.ts",
-      "packages/db/src/migrations"
+      "packages/db/src/migrations",
+      "apps/server/scripts/rag-embeddings"
     ]
   }
 }
