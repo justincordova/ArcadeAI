@@ -20,4 +20,4 @@ ENV DATABASE_PATH=/data/arcadeai.db
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "bun run db:migrate && bun run --filter @arcadeai/server dev"]
+CMD ["sh", "-c", "bun run db:migrate && bun run apps/server/src/index.ts"]
