@@ -310,6 +310,39 @@ describe("refund — idempotency and lifetime decrement", () => {
     expect(user?.credits_remaining_monthly).toBe(3000); // not 3200
   });
 
+  test("concurrent refunds do not double-credit (atomic claim guard)", async () => {
+    // Two refund() calls fired in parallel against the same logId must
+    // credit the user exactly once. Before the atomic-claim fix, both
+    // calls would pass the SELECT-then-check guard and run the unguarded
+    // UPDATE on users, doubling the credit.
+    const { deduct, refund } = await import("../src/services/usage/charge.js");
+    const { id: userId } = insertTestUser(testDb.sqlite, {
+      tier: "free",
+      creditsRemainingDaily: 500,
+      creditsRemainingMonthly: 3000,
+    });
+
+    const { logId } = await deduct(userId, "generation", null);
+
+    await Promise.all([refund(logId), refund(logId), refund(logId)]);
+
+    const user = testDb.sqlite
+      .query<
+        {
+          credits_remaining_daily: number;
+          credits_remaining_monthly: number;
+          lifetime_generations_used: number;
+        },
+        [string]
+      >(
+        `SELECT credits_remaining_daily, credits_remaining_monthly, lifetime_generations_used FROM "user" WHERE id = ?`
+      )
+      .get(userId);
+    expect(user?.credits_remaining_daily).toBe(500); // not 1500 or 1000
+    expect(user?.credits_remaining_monthly).toBe(3000); // not 9000 or 6000
+    expect(user?.lifetime_generations_used).toBe(0); // not negative or skipped
+  });
+
   test("admin refund: no credits change, no lifetime change (cost was 0)", async () => {
     const { deduct, refund } = await import("../src/services/usage/charge.js");
     const { id: userId } = insertTestUser(testDb.sqlite, {

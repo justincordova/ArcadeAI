@@ -317,7 +317,11 @@ export async function refund(
   logId: string,
   opts?: { logger?: FastifyBaseLogger; reason?: RefundReason }
 ): Promise<void> {
-  // Idempotency guard: only refund if refunded_at IS NULL (SPEC §10)
+  // Read the row to know how much to refund and whether to decrement the
+  // lifetime counter. The read itself is not the idempotency guard — that
+  // role belongs to the conditional UPDATE on `refunded_at` below, which
+  // atomically claims the refund. A concurrent racing refund() against the
+  // same logId will lose the UPDATE race (changes === 0) and skip crediting.
   const rows = await db
     .select({
       userId: usageLog.userId,
@@ -331,6 +335,17 @@ export async function refund(
 
   const row = rows[0];
   if (!row || row.refundedAt !== null) return; // already refunded or not found
+
+  // Atomically claim the refund. Only the call whose UPDATE actually
+  // changed a row (i.e. saw refunded_at IS NULL at write time) is allowed
+  // to credit the user and decrement the lifetime counter. This closes a
+  // TOCTOU between the SELECT above and the UPDATE that previously allowed
+  // two concurrent refunds to double-credit the user.
+  const claimStmt = sqlite.prepare(
+    "UPDATE usage_log SET refunded_at = ? WHERE id = ? AND refunded_at IS NULL"
+  );
+  const claimed = claimStmt.run(Date.now(), logId).changes;
+  if (claimed === 0) return; // lost the race; another refund() already credited.
 
   const cost = row.creditsCharged;
   const action = row.action as Action;
@@ -371,8 +386,6 @@ export async function refund(
         .where(eq(users.id, row.userId));
     }
   }
-
-  await db.update(usageLog).set({ refundedAt: Date.now() }).where(eq(usageLog.id, logId));
 
   // Observability log line per SPEC §10 / plan 13 §10.
   opts?.logger?.info(
