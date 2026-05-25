@@ -293,6 +293,18 @@ export async function gamesRoutes(app: FastifyInstance) {
             writeSSE(reply, "chunk", { delta });
           }
         }
+
+        // Detect output-cap truncation. When the model hits maxOutputTokens
+        // the stream drains cleanly with `finishReason: "length"` and the
+        // document is cut mid-statement — the sanitizer will still find a
+        // <!DOCTYPE and happily return the truncated body. Without this
+        // check we'd persist broken HTML and charge the user for it.
+        const finishReason = await result.finishReason;
+        if (finishReason === "length") {
+          streamError = new Error(
+            "Generation hit the output token limit. The game was cut off mid-way — please try again or simplify the prompt."
+          );
+        }
       } catch (err) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
@@ -762,6 +774,14 @@ export async function gamesRoutes(app: FastifyInstance) {
             writeSSE(reply, "chunk", { delta });
           }
         }
+
+        // Output-cap truncation guard — see generation route comment.
+        const finishReason = await result.finishReason;
+        if (finishReason === "length") {
+          streamError = new Error(
+            "Refinement hit the output token limit. The game was cut off mid-way — please try again or simplify the request."
+          );
+        }
       } catch (err) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
       }
@@ -976,6 +996,14 @@ export async function gamesRoutes(app: FastifyInstance) {
           if (!clientClosed) {
             writeSSE(reply, "chunk", { delta });
           }
+        }
+
+        // Output-cap truncation guard — see generation route comment.
+        const finishReason = await result.finishReason;
+        if (finishReason === "length") {
+          streamError = new Error(
+            "Repair hit the output token limit. Please try again or simplify the game first."
+          );
         }
       } catch (err) {
         streamError = err instanceof Error ? err : new Error("Unknown error");
