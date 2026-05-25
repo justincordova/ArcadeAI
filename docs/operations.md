@@ -59,6 +59,50 @@ the `cp` may need to grab the `-wal` and `-shm` siblings too — better to use
 macOS-only Homebrew-SQLite path in `packages/db/src/sqlite-vec-loader.ts` is
 a no-op there, so no extra system packages are needed.
 
+## Fly.io — Start / Stop / Deploy
+
+ArcadeAI runs on a single Fly Machine. The app is on the Fly load balancer,
+so `suspend` and `machines stop` are useless — incoming HTTP traffic wakes it
+immediately. Use the scale commands instead.
+
+### Stop the app (take it offline)
+
+```bash
+fly scale count 0
+```
+
+Removes the machine from the load balancer. No traffic reaches it, no billing
+for compute. Visitors get a 503.
+
+### Start the app (bring it back)
+
+```bash
+fly scale count 1
+```
+
+Spins up a new machine and reattaches it to the load balancer.
+
+### Check status
+
+```bash
+fly machines list
+fly status
+```
+
+### Redeploy (after pushing to main)
+
+```bash
+fly deploy
+```
+
+### Useful one-liners
+
+```bash
+fly logs                    # tail live logs
+fly ssh console             # shell into the running machine
+fly console                 # same thing, newer syntax
+```
+
 ## Health
 
 `GET /api/health` returns `200 { ok: true }`. Wire it as the orchestrator's
