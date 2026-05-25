@@ -15,7 +15,10 @@ export const Route = createFileRoute("/pricing")({
 });
 
 function PricingPage() {
-  const [interval, setInterval] = useState<BillingInterval>("monthly");
+  // Renamed from `setInterval` to avoid shadowing the global `window.setInterval`
+  // inside this component's scope. A future timer added here would otherwise
+  // silently assign the timer callback into React state.
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("monthly");
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -105,7 +108,7 @@ function PricingPage() {
 
         {/* Interval toggle */}
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 40 }}>
-          <IntervalToggle value={interval} onChange={setInterval} />
+          <IntervalToggle value={billingInterval} onChange={setBillingInterval} />
         </div>
 
         {/* Plan cards laid out left-to-right — 4 across on wide viewports,
@@ -123,7 +126,7 @@ function PricingPage() {
             <PlanCard
               key={plan.id}
               plan={plan}
-              interval={interval}
+              interval={billingInterval}
               isActive={plan.id === activeTier}
             />
           ))}

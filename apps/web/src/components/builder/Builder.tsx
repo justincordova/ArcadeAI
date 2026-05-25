@@ -55,10 +55,19 @@ function GenerationBuilder({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const queryClient = useQueryClient();
 
-  function handleIframeReady(el: HTMLIFrameElement | null) {
-    iframeRef.current = el;
-    attachIframe(el);
-  }
+  // Memoize with empty deps — the function only assigns refs and calls
+  // attachIframe (which is itself a stable useCallback). Without memoization
+  // this changed identity every render, and GameIframe's ref-attach effect
+  // ran cleanup+setup at ~10 Hz during streaming. That cleanup fires
+  // onIframeReady(null), which can race with the thumbnail-polling logic
+  // in useStreamedGeneration.onDone.
+  const handleIframeReady = useCallback(
+    (el: HTMLIFrameElement | null) => {
+      iframeRef.current = el;
+      attachIframe(el);
+    },
+    [attachIframe]
+  );
 
   useEffect(() => {
     if (!isStreaming) textareaRef.current?.focus();
@@ -138,10 +147,15 @@ function RefinementBuilder({
   const isStreaming = status === "streaming" || externalStreaming;
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  function handleIframeReady(el: HTMLIFrameElement | null) {
-    iframeRef.current = el;
-    attachIframe(el);
-  }
+  // See GenerationBuilder.handleIframeReady — memoized to prevent the
+  // child effect from churning at ~10 Hz during streaming.
+  const handleIframeReady = useCallback(
+    (el: HTMLIFrameElement | null) => {
+      iframeRef.current = el;
+      attachIframe(el);
+    },
+    [attachIframe]
+  );
 
   const prevStatus = useRef(status);
   useEffect(() => {
