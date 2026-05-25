@@ -1,3 +1,4 @@
+import { fetchMeOrNull } from "@/lib/api/auth.js";
 import { patchMe } from "@/lib/api/me.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +22,14 @@ const inputStyle: React.CSSProperties = {
 
 export function DisplayName() {
   const queryClient = useQueryClient();
-  const { data: me } = useQuery<MeResponse | null>({ queryKey: ["me"] });
+  // Pass queryFn so this query is self-sufficient if the cache is ever
+  // cleared (e.g. after sign-out + back-button) — without it the query
+  // would sit in `pending` forever because the global queryClient has
+  // no default queryFn.
+  const { data: me } = useQuery<MeResponse | null>({
+    queryKey: ["me"],
+    queryFn: fetchMeOrNull,
+  });
   const [value, setValue] = useState(me?.displayName ?? "");
   const [status, setStatus] = useState<SaveStatus>("idle");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

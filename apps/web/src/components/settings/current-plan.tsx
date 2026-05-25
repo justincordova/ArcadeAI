@@ -1,3 +1,4 @@
+import { fetchMeOrNull } from "@/lib/api/auth.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -12,7 +13,10 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 export function CurrentPlan() {
-  const { data: me } = useQuery<MeResponse | null>({ queryKey: ["me"] });
+  const { data: me } = useQuery<MeResponse | null>({
+    queryKey: ["me"],
+    queryFn: fetchMeOrNull,
+  });
   const tier = me?.tier ?? "free";
 
   return (

@@ -1,8 +1,12 @@
+import { fetchMeOrNull } from "@/lib/api/auth.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
 
 export function Email() {
-  const { data: me } = useQuery<MeResponse | null>({ queryKey: ["me"] });
+  const { data: me } = useQuery<MeResponse | null>({
+    queryKey: ["me"],
+    queryFn: fetchMeOrNull,
+  });
 
   return (
     <div>
