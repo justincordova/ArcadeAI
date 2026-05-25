@@ -36,19 +36,25 @@ export function sanitizeHtmlOutput(raw: string): string | null {
   if (candidates.length === 0) return null;
 
   const start = Math.min(...candidates);
-  let trimmed = raw.slice(start);
+  let trimmed = raw.slice(start).trimEnd();
 
-  // If a closing markdown fence appears anywhere after the opener, the
-  // model wrapped the file in ```html ... ``` and possibly tacked on
-  // a postamble after the closing fence. Truncate at the fence so the
-  // postamble doesn't end up in the document.
-  const fenceIdx = trimmed.indexOf("```");
-  if (fenceIdx >= 0) {
-    trimmed = trimmed.slice(0, fenceIdx);
+  // Strip a TRAILING markdown fence only. Older logic truncated at the
+  // first `` ``` `` substring anywhere after the opener — but games can
+  // legitimately contain three-backtick sequences in string literals,
+  // rendered text, or comments (e.g. a programming-themed game showing
+  // `"```js"`). The earlier behavior sliced those mid-document, producing
+  // broken HTML. The safe path is: only trim a fence that sits at the
+  // very end of the output (after the closing </html>), since that's the
+  // only failure mode we're actually observing.
+  //
+  // Match any trailing fence with optional language tag and surrounding
+  // whitespace: "\n```", "\n```\n", "```html\n...\n```" etc. We don't try
+  // to handle every weird wrapper — just the common "model wrapped output
+  // in a single fence block" case.
+  const trailingFenceMatch = trimmed.match(/\n```[a-zA-Z]*\s*$/);
+  if (trailingFenceMatch) {
+    trimmed = trimmed.slice(0, trailingFenceMatch.index).trimEnd();
   }
-
-  // Trim trailing whitespace left behind by the slice or by the model.
-  trimmed = trimmed.trimEnd();
 
   return trimmed.length > 0 ? trimmed : null;
 }

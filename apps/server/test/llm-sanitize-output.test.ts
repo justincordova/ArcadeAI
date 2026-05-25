@@ -24,16 +24,20 @@ describe("sanitizeHtmlOutput", () => {
     expect(sanitizeHtmlOutput(raw)).toBe("<!DOCTYPE html>\n<html><body>game</body></html>");
   });
 
-  test("strips both a prose preamble and a trailing fence", () => {
-    const raw = "Here is the fix:\n```html\n<!DOCTYPE html>\n<html></html>\n```\nHope this helps!";
-    // Prose before the fence is dropped via the doctype anchor. The
-    // closing fence is stripped. Anything after the fence is also
-    // dropped by the trailing-fence regex.
+  test("strips a prose preamble and a trailing fence", () => {
+    const raw = "Here is the fix:\n```html\n<!DOCTYPE html>\n<html></html>\n```";
     const out = sanitizeHtmlOutput(raw);
-    expect(out).toContain("<!DOCTYPE html>");
-    expect(out).not.toContain("```");
-    expect(out).not.toContain("Here is the fix");
-    expect(out).not.toContain("Hope this helps");
+    expect(out).toBe("<!DOCTYPE html>\n<html></html>");
+  });
+
+  test("preserves three-backtick sequences inside the document body", () => {
+    // Regression: previously the sanitizer truncated at the FIRST `` ``` ``
+    // it saw after the opener, mangling any game that legitimately contained
+    // a fenced code sample (programming themes, tutorial UIs, etc.).
+    const raw =
+      "<!DOCTYPE html>\n<html><body><pre>```js\nconsole.log('hi')\n```</pre></body></html>";
+    const out = sanitizeHtmlOutput(raw);
+    expect(out).toBe(raw);
   });
 
   test("is case-insensitive on the doctype tag", () => {
