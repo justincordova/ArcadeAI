@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Heart, Play, Sparkles } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { LogoFull } from "../components/Logo.js";
 import { GameIframe } from "../components/builder/GameIframe.js";
 import { useSession } from "../hooks/useSession.js";
@@ -117,29 +117,28 @@ function PlayPage() {
   }
 
   // Post-sign-in redirect: when arriving with ?intent=remix or ?intent=like
-  // and an authenticated session, fire the corresponding action immediately.
-  // Each mutation only runs once per visit — onSuccess/onError on the
-  // mutation handle re-entrancy.
+  // and an authenticated session, fire the corresponding action immediately —
+  // exactly once. The previous guard relied on TanStack Query's mutation
+  // status flags, but those change identity in ways that re-ran the effect
+  // and could double-fire the mutation (especially if the user hit Back to
+  // /play/:slug?intent=remix later, which would create a second remix). Use
+  // a ref-based latch and clear the search param the first time we act so
+  // any subsequent re-renders / navigations see no intent at all.
+  const intentFiredRef = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate — mutations are stable enough; ref latch is the source of truth
   useEffect(() => {
-    if (!me) return;
-    if (
-      intent === "remix" &&
-      !remixMutation.isPending &&
-      !remixMutation.isSuccess &&
-      !remixMutation.isError
-    ) {
+    if (intentFiredRef.current) return;
+    if (!intent || !me) return;
+    if (intent === "remix") {
+      intentFiredRef.current = true;
+      navigate({ to: "/play/$slug", params: { slug }, search: {}, replace: true });
       remixMutation.mutate();
-    } else if (
-      intent === "like" &&
-      game &&
-      !game.liked &&
-      !likeMutation.isPending &&
-      !likeMutation.isSuccess &&
-      !likeMutation.isError
-    ) {
+    } else if (intent === "like" && game && !game.liked) {
+      intentFiredRef.current = true;
+      navigate({ to: "/play/$slug", params: { slug }, search: {}, replace: true });
       likeMutation.mutate();
     }
-  }, [intent, me, game, remixMutation, likeMutation]);
+  }, [intent, me, game?.id, game?.liked, navigate, slug]);
 
   function handleRemixClick() {
     if (!me) {
