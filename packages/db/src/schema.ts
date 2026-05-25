@@ -46,36 +46,50 @@ export const users = sqliteTable("user", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
-export const sessions = sqliteTable("session", {
-  id: text("id").primaryKey(),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
-  token: text("token").notNull().unique(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-  ipAddress: text("ip_address"),
-  userAgent: text("user_agent"),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-});
+export const sessions = sqliteTable(
+  "session",
+  {
+    id: text("id").primaryKey(),
+    expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+    token: text("token").notNull().unique(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+    ipAddress: text("ip_address"),
+    userAgent: text("user_agent"),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+  },
+  // SQLite does not auto-index FK columns. Without this, every Better
+  // Auth session lookup (one per authed request) plus the ON DELETE
+  // CASCADE from user deletion both fall back to a full scan.
+  (table) => [index("idx_session_user_id").on(table.userId)]
+);
 
-export const accounts = sqliteTable("account", {
-  id: text("id").primaryKey(),
-  accountId: text("account_id").notNull(),
-  providerId: text("provider_id").notNull(),
-  userId: text("user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "cascade" }),
-  accessToken: text("access_token"),
-  refreshToken: text("refresh_token"),
-  idToken: text("id_token"),
-  accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp" }),
-  refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp" }),
-  scope: text("scope"),
-  password: text("password"),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-});
+export const accounts = sqliteTable(
+  "account",
+  {
+    id: text("id").primaryKey(),
+    accountId: text("account_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    accessToken: text("access_token"),
+    refreshToken: text("refresh_token"),
+    idToken: text("id_token"),
+    accessTokenExpiresAt: integer("access_token_expires_at", { mode: "timestamp" }),
+    refreshTokenExpiresAt: integer("refresh_token_expires_at", { mode: "timestamp" }),
+    scope: text("scope"),
+    password: text("password"),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  // Read on every /api/me and /api/billing/change-plan, plus the
+  // /api/me delete cascade. Unindexed would be a full table scan per
+  // authed request.
+  (table) => [index("idx_account_user_id").on(table.userId)]
+);
 
 export const verifications = sqliteTable("verification", {
   id: text("id").primaryKey(),
@@ -183,7 +197,13 @@ export const usageLog = sqliteTable(
     refundedAt: integer("refunded_at"),
     createdAt: integer("created_at").notNull(),
   },
-  (table) => [index("idx_usage_log_user_id_created_at").on(table.userId, table.createdAt)]
+  (table) => [
+    index("idx_usage_log_user_id_created_at").on(table.userId, table.createdAt),
+    // GET /api/games/:id polls usage_log by game_id to surface in-flight
+    // generation rows. Without this index the polling fires a full scan
+    // every time the user refreshes a streaming game page.
+    index("idx_usage_log_game_id").on(table.gameId),
+  ]
 );
 
 export const ragExamples = sqliteTable("rag_examples", {
