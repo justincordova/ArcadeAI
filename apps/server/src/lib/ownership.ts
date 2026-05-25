@@ -3,12 +3,16 @@ import { and, eq } from "drizzle-orm";
 import { db } from "./db.js";
 
 export async function loadOwnedGame(gameId: string, userId: string) {
-  const rows = await db.select().from(games).where(eq(games.id, gameId));
-  const game = rows[0];
-  if (!game || game.userId !== userId) {
-    return null;
-  }
-  return game;
+  // Push the ownership filter into SQL so an unauthorized lookup never
+  // reads the row. Defense in depth: keeps "exists but not yours" and
+  // "doesn't exist" indistinguishable at the DB layer, and avoids loading
+  // another user's game body into memory before discarding it.
+  const rows = await db
+    .select()
+    .from(games)
+    .where(and(eq(games.id, gameId), eq(games.userId, userId)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 /**

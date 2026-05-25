@@ -57,7 +57,13 @@ export async function playRoutes(app: FastifyInstance) {
           .limit(1);
         liked = Boolean(rows[0]);
       }
-    } catch {
+    } catch (err) {
+      // Anonymous fallback is the right UX, but a thrown session lookup
+      // is a real failure (auth-service degradation, DB outage). Without
+      // a log line, ops can't distinguish "no session" from "session
+      // lookup broken" — every authed visitor would silently appear as
+      // anonymous on public games.
+      request.log.warn({ err }, "getSession threw while hydrating liked state");
       liked = false;
     }
 
@@ -79,7 +85,8 @@ export async function playRoutes(app: FastifyInstance) {
       const session = await getSession(request);
       if (!session) return sendError(reply, 401, unauthorizedError());
       userId = session.user.id;
-    } catch {
+    } catch (err) {
+      request.log.warn({ err }, "getSession threw on remix; returning 401");
       return sendError(reply, 401, unauthorizedError());
     }
 
@@ -209,7 +216,8 @@ export async function playRoutes(app: FastifyInstance) {
       const session = await getSession(request);
       if (!session) return sendError(reply, 401, unauthorizedError());
       userId = session.user.id;
-    } catch {
+    } catch (err) {
+      request.log.warn({ err }, "getSession threw on like; returning 401");
       return sendError(reply, 401, unauthorizedError());
     }
 
@@ -239,7 +247,8 @@ export async function playRoutes(app: FastifyInstance) {
       const session = await getSession(request);
       if (!session) return sendError(reply, 401, unauthorizedError());
       userId = session.user.id;
-    } catch {
+    } catch (err) {
+      request.log.warn({ err }, "getSession threw on unlike; returning 401");
       return sendError(reply, 401, unauthorizedError());
     }
 

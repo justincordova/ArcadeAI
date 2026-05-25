@@ -47,7 +47,12 @@ export async function discoverRoutes(app: FastifyInstance) {
     try {
       const session = await getSession(request);
       if (session) viewerUserId = session.user.id;
-    } catch {
+    } catch (err) {
+      // Anonymous fallback is the right UX, but a thrown lookup means
+      // something is broken (DB / auth-service). Without a log line every
+      // authed viewer silently appears anonymous on /discover — and ops
+      // would see no signal.
+      request.log.warn({ err }, "getSession threw on discover; serving anonymous view");
       viewerUserId = null;
     }
 
