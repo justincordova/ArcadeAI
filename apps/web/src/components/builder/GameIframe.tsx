@@ -1,5 +1,5 @@
 import { injectWrapper } from "@/lib/iframe-wrapper.js";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 interface GameIframeProps {
   code: string | null;
@@ -40,12 +40,21 @@ export function GameIframe({
   autoFocus = false,
   isStreaming = false,
 }: GameIframeProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  useEffect(() => {
-    onIframeReady?.(iframeRef.current);
-    return () => onIframeReady?.(null);
-  }, [onIframeReady]);
+  // Callback ref so the parent is notified the instant the real <iframe>
+  // mounts or unmounts. An effect keyed on [onIframeReady] would NOT re-run
+  // when the component swaps the placeholder div for the iframe (the iframe
+  // is conditionally rendered below), leaving the parent's ref stuck at the
+  // null it received on first mount — breaking thumbnail capture, fullscreen,
+  // and the repair source filter that all read the parent ref.
+  const setIframeRef = useCallback(
+    (el: HTMLIFrameElement | null) => {
+      iframeRef.current = el;
+      onIframeReady?.(el);
+    },
+    [onIframeReady]
+  );
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -180,7 +189,7 @@ export function GameIframe({
   return (
     <iframe
       key={reloadKey}
-      ref={iframeRef}
+      ref={setIframeRef}
       srcDoc={injectWrapper(code)}
       sandbox="allow-scripts"
       allow="fullscreen"
