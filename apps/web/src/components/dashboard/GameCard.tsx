@@ -89,6 +89,11 @@ export function GameCard({ game, view }: GameCardProps) {
   });
 
   function commitRename() {
+    // Pressing Enter calls this and sets renaming=false, which unmounts the
+    // input and fires onBlur — calling commitRename a second time. Without
+    // this guard the rename PATCH fires twice. The re-rendered onBlur closure
+    // sees renaming=false, so the guard short-circuits the duplicate call.
+    if (!renaming) return;
     const trimmed = renameValue.trim();
     setRenaming(false);
     if (trimmed && trimmed !== game.title) {
