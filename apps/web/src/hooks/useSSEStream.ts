@@ -231,8 +231,11 @@ export function useSSEStream(opts: UseSSEStreamOptions): UseSSEStream {
           }
 
           // Stream ended without an explicit done/error event — treat as error
-          // so the UI doesn't get stuck in the "streaming" state.
-          if (!terminated) {
+          // so the UI doesn't get stuck in the "streaming" state. Skip this
+          // when the stream was aborted (user called stop()), otherwise a
+          // normally-completing body that races with stop() would clobber the
+          // "idle" status with a spurious "Stream ended unexpectedly" error.
+          if (!terminated && !ac.signal.aborted) {
             setStatus("error");
             setError("Stream ended unexpectedly");
             handlersRef.current.onError?.("Stream ended unexpectedly");
