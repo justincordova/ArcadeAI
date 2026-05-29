@@ -39,6 +39,15 @@ export function DisplayName() {
     if (me?.displayName && !value) setValue(me.displayName);
   }, [me?.displayName]);
 
+  // Cancel the "Saved" -> "idle" timer if the component unmounts first
+  // (user saves then navigates away within 1.5s), otherwise it fires
+  // setStatus on an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
   const mutation = useMutation({
     mutationFn: (name: string) => patchMe({ display_name: name }),
     onMutate: () => {
@@ -56,7 +65,10 @@ export function DisplayName() {
     },
   });
 
-  function handleBlur() {
+  function handleBlur(e: React.FocusEvent<HTMLInputElement>) {
+    // Reset the focus highlight — onFocus sets it imperatively and nothing
+    // else restores it, so the border would otherwise stay pink after blur.
+    e.currentTarget.style.borderColor = "var(--color-border)";
     const trimmed = value.trim();
     if (trimmed === me?.displayName) return;
     if (trimmed.length === 0) {
