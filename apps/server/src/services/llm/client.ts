@@ -76,13 +76,22 @@ export async function streamGame({
 }) {
   const start = Date.now();
   const { signal: composed, cleanup } = withTimeout(signal, LLM_TIMEOUT_MS.generation);
-  const result = streamText({
-    model: anthropic(SONNET),
-    system,
-    messages: [{ role: "user", content: prompt }],
-    abortSignal: composed,
-    maxOutputTokens: MAX_OUTPUT_TOKENS.generation,
-  });
+  let result: ReturnType<typeof streamText>;
+  try {
+    result = streamText({
+      model: anthropic(SONNET),
+      system,
+      messages: [{ role: "user", content: prompt }],
+      abortSignal: composed,
+      maxOutputTokens: MAX_OUTPUT_TOKENS.generation,
+    });
+  } catch (err) {
+    // streamText threw synchronously (e.g. provider misconfig) before the
+    // usage-settle cleanup could be wired up — clear the timer so it doesn't
+    // leak and fire 180s later against a dead controller.
+    cleanup();
+    throw err;
+  }
   // Cleanup the timer once usage settles (success or error).
   void Promise.resolve(result.usage)
     .then(() => cleanup())
@@ -104,13 +113,19 @@ export async function streamRefinement({
 }) {
   const start = Date.now();
   const { signal: composed, cleanup } = withTimeout(signal, LLM_TIMEOUT_MS.refinement);
-  const result = streamText({
-    model: anthropic(SONNET),
-    system,
-    messages: [{ role: "user", content: prompt }],
-    abortSignal: composed,
-    maxOutputTokens: MAX_OUTPUT_TOKENS.refinement,
-  });
+  let result: ReturnType<typeof streamText>;
+  try {
+    result = streamText({
+      model: anthropic(SONNET),
+      system,
+      messages: [{ role: "user", content: prompt }],
+      abortSignal: composed,
+      maxOutputTokens: MAX_OUTPUT_TOKENS.refinement,
+    });
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
   void Promise.resolve(result.usage)
     .then(() => cleanup())
     .catch(() => cleanup());
@@ -131,13 +146,19 @@ export async function streamRepair({
 }) {
   const start = Date.now();
   const { signal: composed, cleanup } = withTimeout(signal, LLM_TIMEOUT_MS.repair);
-  const result = streamText({
-    model: anthropic(SONNET),
-    system,
-    messages: [{ role: "user", content: userMessage }],
-    abortSignal: composed,
-    maxOutputTokens: MAX_OUTPUT_TOKENS.repair,
-  });
+  let result: ReturnType<typeof streamText>;
+  try {
+    result = streamText({
+      model: anthropic(SONNET),
+      system,
+      messages: [{ role: "user", content: userMessage }],
+      abortSignal: composed,
+      maxOutputTokens: MAX_OUTPUT_TOKENS.repair,
+    });
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
   void Promise.resolve(result.usage)
     .then(() => cleanup())
     .catch(() => cleanup());
