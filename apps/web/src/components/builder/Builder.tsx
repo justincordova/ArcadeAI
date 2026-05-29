@@ -203,6 +203,11 @@ function RefinementBuilder({
     // server-loaded snapshot).
     setPreviousCodeSnapshot(finalCode ?? initialCode);
 
+    // Drop any prior repaired code. It sits ahead of finalCode in the
+    // displayCode precedence, so leaving it set would mask the result of
+    // this (and every subsequent) refinement with the stale repaired game.
+    setRepairedCode(null);
+
     setRefineTrigger((n) => n + 1);
     refine(trimmed);
     setPrompt("");
