@@ -4,19 +4,23 @@
 // URL to the clipboard; on unpublish, the slug is retained server-side so
 // republishing produces the same URL.
 
-import { publishGame, unpublishGame } from "@/lib/api/games.js";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type GameDetail, fetchGame, publishGame, unpublishGame } from "@/lib/api/games.js";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Share2 } from "lucide-react";
 import { toast } from "../ui/sonner.js";
 
 export function ShareButton({ gameId }: { gameId: string }) {
   const queryClient = useQueryClient();
-  const cached = queryClient.getQueryData<{
-    isPublic?: boolean;
-    publicSlug?: string | null;
-  }>(["game", gameId]);
-  const isPublic = Boolean(cached?.isPublic);
-  const slug = cached?.publicSlug ?? null;
+  // Subscribe to the game query so the button re-renders when publish state
+  // changes. A one-shot getQueryData read would not react to the refetch
+  // that invalidateQueries triggers after publish/unpublish, leaving the
+  // button showing stale state until some unrelated re-render.
+  const { data: game } = useQuery<GameDetail>({
+    queryKey: ["game", gameId],
+    queryFn: () => fetchGame(gameId),
+  });
+  const isPublic = Boolean(game?.isPublic);
+  const slug = game?.publicSlug ?? null;
 
   const publishMutation = useMutation({
     mutationFn: () => publishGame(gameId),

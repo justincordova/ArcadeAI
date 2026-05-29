@@ -44,6 +44,8 @@ export interface GameDetail {
   id: string;
   title: string;
   currentCode: string;
+  isPublic: boolean;
+  publicSlug: string | null;
   messages: Array<{ id: string; kind: string; content: string; createdAt: number }>;
   /**
    * True while a generation is still streaming server-side (user
