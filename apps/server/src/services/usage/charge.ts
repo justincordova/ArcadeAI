@@ -139,56 +139,87 @@ export async function deduct(
   const lifetimeKey =
     tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE ? lifetimeCounterFor(action) : null;
 
+  const logId = randomUUID();
+
   // Build the atomic conditional UPDATE. Folding the lifetime guard into the
   // same WHERE clause means a TOCTOU race between two concurrent requests
   // can't bypass the cap — at most one UPDATE will satisfy the condition.
-  let changedRows: number;
-  if (lifetimeKey === "generations") {
-    const limit = FREE_TIER_LIFETIME_LIMITS.generations;
-    const stmt = sqlite.prepare(
-      `UPDATE "user"
-          SET credits_remaining_daily   = credits_remaining_daily   - ?,
-              credits_remaining_monthly = credits_remaining_monthly - ?,
-              lifetime_generations_used = lifetime_generations_used + 1
-        WHERE id = ?
-          AND credits_remaining_daily   >= ?
-          AND credits_remaining_monthly >= ?
-          AND lifetime_generations_used < ?`
-    );
-    changedRows = stmt.run(cost, cost, userId, cost, cost, limit).changes;
-  } else if (lifetimeKey === "refinements") {
-    const limit = FREE_TIER_LIFETIME_LIMITS.refinements;
-    const stmt = sqlite.prepare(
-      `UPDATE "user"
-          SET credits_remaining_daily   = credits_remaining_daily   - ?,
-              credits_remaining_monthly = credits_remaining_monthly - ?,
-              lifetime_refinements_used = lifetime_refinements_used + 1
-        WHERE id = ?
-          AND credits_remaining_daily   >= ?
-          AND credits_remaining_monthly >= ?
-          AND lifetime_refinements_used < ?`
-    );
-    changedRows = stmt.run(cost, cost, userId, cost, cost, limit).changes;
-  } else if (limits.dailyEnforced) {
-    const stmt = sqlite.prepare(
-      `UPDATE "user"
-          SET credits_remaining_daily   = credits_remaining_daily   - ?,
-              credits_remaining_monthly = credits_remaining_monthly - ?
-        WHERE id = ?
-          AND credits_remaining_daily   >= ?
-          AND credits_remaining_monthly >= ?`
-    );
-    changedRows = stmt.run(cost, cost, userId, cost, cost).changes;
-  } else {
-    const stmt = sqlite.prepare(
-      `UPDATE "user"
-          SET credits_remaining_daily   = credits_remaining_daily   - ?,
-              credits_remaining_monthly = credits_remaining_monthly - ?
-        WHERE id = ?
-          AND credits_remaining_monthly >= ?`
-    );
-    changedRows = stmt.run(cost, cost, userId, cost).changes;
-  }
+  //
+  // The credit decrement and the usage_log insert run inside ONE bun:sqlite
+  // transaction so they commit or roll back together. Without this, an insert
+  // failure (disk full, locked DB) would leave the user debited with no
+  // refundable log row — credits lost with no audit trail and nothing for
+  // refund() to act on.
+  const runDeduct = sqlite.transaction((): number => {
+    let changed: number;
+    if (lifetimeKey === "generations") {
+      const limit = FREE_TIER_LIFETIME_LIMITS.generations;
+      changed = sqlite
+        .prepare(
+          `UPDATE "user"
+              SET credits_remaining_daily   = credits_remaining_daily   - ?,
+                  credits_remaining_monthly = credits_remaining_monthly - ?,
+                  lifetime_generations_used = lifetime_generations_used + 1
+            WHERE id = ?
+              AND credits_remaining_daily   >= ?
+              AND credits_remaining_monthly >= ?
+              AND lifetime_generations_used < ?`
+        )
+        .run(cost, cost, userId, cost, cost, limit).changes;
+    } else if (lifetimeKey === "refinements") {
+      const limit = FREE_TIER_LIFETIME_LIMITS.refinements;
+      changed = sqlite
+        .prepare(
+          `UPDATE "user"
+              SET credits_remaining_daily   = credits_remaining_daily   - ?,
+                  credits_remaining_monthly = credits_remaining_monthly - ?,
+                  lifetime_refinements_used = lifetime_refinements_used + 1
+            WHERE id = ?
+              AND credits_remaining_daily   >= ?
+              AND credits_remaining_monthly >= ?
+              AND lifetime_refinements_used < ?`
+        )
+        .run(cost, cost, userId, cost, cost, limit).changes;
+    } else if (limits.dailyEnforced) {
+      changed = sqlite
+        .prepare(
+          `UPDATE "user"
+              SET credits_remaining_daily   = credits_remaining_daily   - ?,
+                  credits_remaining_monthly = credits_remaining_monthly - ?
+            WHERE id = ?
+              AND credits_remaining_daily   >= ?
+              AND credits_remaining_monthly >= ?`
+        )
+        .run(cost, cost, userId, cost, cost).changes;
+    } else {
+      changed = sqlite
+        .prepare(
+          `UPDATE "user"
+              SET credits_remaining_daily   = credits_remaining_daily   - ?,
+                  credits_remaining_monthly = credits_remaining_monthly - ?
+            WHERE id = ?
+              AND credits_remaining_monthly >= ?`
+        )
+        .run(cost, cost, userId, cost).changes;
+    }
+
+    // Guard failed — abort the transaction without inserting a log row. The
+    // caller maps this to the appropriate InsufficientCreditsError below.
+    if (changed === 0) return 0;
+
+    sqlite
+      .prepare(
+        `INSERT INTO usage_log
+           (id, user_id, game_id, action, credits_charged,
+            lifetime_counter_incremented, succeeded, refunded_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 0, NULL, ?)`
+      )
+      .run(logId, userId, gameId, action, cost, lifetimeKey !== null ? 1 : 0, Date.now());
+
+    return changed;
+  });
+
+  const changedRows = runDeduct();
 
   if (changedRows === 0) {
     // The atomic UPDATE failed its guard. Determine which condition triggered
@@ -224,19 +255,6 @@ export async function deduct(
       "monthly"
     );
   }
-
-  const logId = randomUUID();
-  await db.insert(usageLog).values({
-    id: logId,
-    userId,
-    gameId,
-    action,
-    creditsCharged: cost,
-    lifetimeCounterIncremented: lifetimeKey !== null,
-    succeeded: 0,
-    refundedAt: null,
-    createdAt: Date.now(),
-  });
 
   return { logId };
 }
@@ -277,38 +295,46 @@ export async function recordRemix(userId: string, gameId: string): Promise<{ log
     return { logId };
   }
 
-  // Free + flag on: atomically increment the lifetime generations counter
-  // only when below the cap. Same TOCTOU guard as deduct.
-  if (tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE) {
-    const limit = FREE_TIER_LIFETIME_LIMITS.generations;
-    const stmt = sqlite.prepare(
-      `UPDATE "user"
-          SET lifetime_generations_used = lifetime_generations_used + 1
-        WHERE id = ?
-          AND lifetime_generations_used < ?`
-    );
-    const changedRows = stmt.run(userId, limit).changes;
-    if (changedRows === 0) {
-      throw new InsufficientCreditsError(
-        "Free tier lifetime generation limit reached. Upgrade for more.",
-        0,
-        "lifetime"
-      );
-    }
-  }
-
+  const lifetimeGuarded = tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE;
   const logId = randomUUID();
-  await db.insert(usageLog).values({
-    id: logId,
-    userId,
-    gameId,
-    action: "generation",
-    creditsCharged: 0,
-    lifetimeCounterIncremented: tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE,
-    succeeded: 0,
-    refundedAt: null,
-    createdAt: Date.now(),
+
+  // Free + flag on: atomically increment the lifetime generations counter
+  // only when below the cap, and insert the log row in the SAME transaction
+  // so a counter bump can never be left without a refundable log row (and
+  // vice versa). Same TOCTOU guard + atomicity rationale as deduct.
+  const runRemix = sqlite.transaction((): boolean => {
+    if (lifetimeGuarded) {
+      const limit = FREE_TIER_LIFETIME_LIMITS.generations;
+      const changedRows = sqlite
+        .prepare(
+          `UPDATE "user"
+              SET lifetime_generations_used = lifetime_generations_used + 1
+            WHERE id = ?
+              AND lifetime_generations_used < ?`
+        )
+        .run(userId, limit).changes;
+      if (changedRows === 0) return false;
+    }
+
+    sqlite
+      .prepare(
+        `INSERT INTO usage_log
+           (id, user_id, game_id, action, credits_charged,
+            lifetime_counter_incremented, succeeded, refunded_at, created_at)
+         VALUES (?, ?, ?, 'generation', 0, ?, 0, NULL, ?)`
+      )
+      .run(logId, userId, gameId, lifetimeGuarded ? 1 : 0, Date.now());
+
+    return true;
   });
+
+  if (!runRemix()) {
+    throw new InsufficientCreditsError(
+      "Free tier lifetime generation limit reached. Upgrade for more.",
+      0,
+      "lifetime"
+    );
+  }
 
   return { logId };
 }
