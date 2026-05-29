@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type QuotaError, type SSEStatus, useSSEStream } from "./useSSEStream.js";
 
 export type RefinementStatus = SSEStatus;
@@ -33,6 +33,16 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
   const accumulatedRef = useRef("");
   const queryClient = useQueryClient();
 
+  // Track the post-done capture timer so it can be cancelled on unmount —
+  // otherwise it fires after the component is gone and posts a message to a
+  // detached iframe.
+  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
+    };
+  }, []);
+
   const attachIframe = useCallback((el: HTMLIFrameElement | null) => {
     iframeRef.current = el;
   }, []);
@@ -64,7 +74,8 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
         setStreamingCode("");
 
         // Trigger thumbnail capture after ~500ms
-        setTimeout(() => {
+        captureTimerRef.current = setTimeout(() => {
+          captureTimerRef.current = null;
           const iframe = iframeRef.current;
           if (iframe?.contentWindow) {
             iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
