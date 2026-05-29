@@ -49,12 +49,18 @@ export async function likeGame(gameId: string, userId: string): Promise<LikeResu
       return { liked: true, changed: false, likeCount: row.likeCount };
     }
 
-    await tx
+    // Return the authoritative post-update count via RETURNING rather than
+    // arithmetic on the value read at the top of the transaction. Two
+    // concurrent likers would otherwise both echo back the same stale count
+    // (the DB lands correctly because the increment is relative, but the
+    // returned value drove the heart counter and could be wrong until refetch).
+    const [updated] = await tx
       .update(games)
       .set({ likeCount: sql`${games.likeCount} + 1` })
-      .where(eq(games.id, gameId));
+      .where(eq(games.id, gameId))
+      .returning({ likeCount: games.likeCount });
 
-    return { liked: true, changed: true, likeCount: row.likeCount + 1 };
+    return { liked: true, changed: true, likeCount: updated?.likeCount ?? row.likeCount + 1 };
   });
 }
 
@@ -79,12 +85,17 @@ export async function unlikeGame(gameId: string, userId: string): Promise<LikeRe
 
     // Clamp at 0 in case the counter ever drifts negative — should never
     // happen, but a malformed migration would otherwise wedge the column.
-    await tx
+    const [updated] = await tx
       .update(games)
       .set({ likeCount: sql`MAX(${games.likeCount} - 1, 0)` })
-      .where(eq(games.id, gameId));
+      .where(eq(games.id, gameId))
+      .returning({ likeCount: games.likeCount });
 
-    return { liked: false, changed: true, likeCount: Math.max(0, row.likeCount - 1) };
+    return {
+      liked: false,
+      changed: true,
+      likeCount: updated?.likeCount ?? Math.max(0, row.likeCount - 1),
+    };
   });
 }
 
