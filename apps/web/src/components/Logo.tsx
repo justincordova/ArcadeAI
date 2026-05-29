@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 interface LogoProps {
   size?: number;
   className?: string;
@@ -13,9 +15,10 @@ interface LogoProps {
  * fail to render in older Safari builds.
  */
 export function LogoMark({ size = 28, className = "" }: LogoProps) {
-  // Per-instance gradient id; module-scoped counter would also work but
-  // a random suffix is simpler and the value isn't security-sensitive.
-  const gradId = `logo-grad-${Math.random().toString(36).slice(2, 8)}`;
+  // Per-instance gradient id via useId — stable across re-renders (a
+  // Math.random() id re-randomized every render, churning the gradient def
+  // and url() references) and SSR-safe.
+  const gradId = `logo-grad-${useId()}`;
   return (
     <svg
       width={size}
