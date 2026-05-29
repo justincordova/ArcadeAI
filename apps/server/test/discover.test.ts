@@ -24,7 +24,7 @@ interface InsertGameArgs {
   id?: string;
   userId: string;
   isPublic?: boolean;
-  publicSlug?: string;
+  publicSlug?: string | null;
   publishedAt?: number;
   genre?: string;
   likeCount?: number;
@@ -75,6 +75,26 @@ describe("listDiscoverGames", () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]?.id).toBe(pubId);
+  });
+
+  test("excludes public games with a null slug so pagination counts stay correct", async () => {
+    const { id: u } = insertTestUser(testDb.sqlite);
+    const withSlug = insertGame({
+      userId: u,
+      isPublic: true,
+      publicSlug: "hasslug1",
+      publishedAt: Date.now(),
+    });
+    // Public but no slug (e.g. a remix copy) — must be filtered in SQL, not
+    // post-fetch, so a full DB page isn't shrunk below `limit` and the route
+    // doesn't stop paginating early.
+    insertGame({ userId: u, isPublic: true, publicSlug: null, publishedAt: Date.now() });
+
+    const { listDiscoverGames } = await import("../src/services/discover/list.js");
+    const items = await listDiscoverGames({ sort: "new", limit: 10, offset: 0 });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.id).toBe(withSlug);
   });
 
   test("'top' sorts by likeCount desc", async () => {

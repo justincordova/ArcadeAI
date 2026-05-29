@@ -10,7 +10,7 @@
 // keyset cursor on (score, id).
 
 import { games, users } from "@arcadeai/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db, sqlite } from "../../lib/db.js";
 
 export type DiscoverSort = "trending" | "top" | "new";
@@ -60,7 +60,13 @@ export async function listDiscoverGames({
         ? [desc(games.likeCount), desc(games.publishedAt)]
         : [desc(games.publishedAt)];
 
-  const filters = [eq(games.isPublic, true)];
+  // `publicSlug IS NOT NULL` belongs in the SQL WHERE — not a post-fetch
+  // filter — so the row count the DB returns matches the items we emit.
+  // Filtering null slugs after LIMIT would let a null-slug row shrink the
+  // page below `limit`, which the route reads as "end of results" and stops
+  // paginating, permanently hiding later games. Public-with-null-slug rows
+  // are reachable (e.g. remix copies set publicSlug: null).
+  const filters = [eq(games.isPublic, true), isNotNull(games.publicSlug)];
   if (genre) {
     // Cast to satisfy the typed-enum column; the API layer validates the
     // string against the allowed genre set before we get here.
