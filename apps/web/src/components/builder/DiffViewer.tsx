@@ -198,14 +198,33 @@ function DiffRow({ line }: { line: DiffLine }) {
  * Cheap line-count estimation — just for the collapsed pill. A real diff
  * happens only on expansion. Returns 0/0 for identical strings so the
  * pill stays hidden.
+ *
+ * Uses a multiset (line -> occurrence count), NOT a Set. A Set collapses
+ * duplicate lines, so a refinement that only adds/removes lines already
+ * present elsewhere (e.g. extra `}` or blank lines) would count as 0/0 —
+ * making the pill, and the whole DiffViewer, vanish despite a real change.
  */
 function quickCounts(oldText: string, newText: string): { added: number; removed: number } {
   if (oldText === newText) return { added: 0, removed: 0 };
-  const oldSet = new Set(oldText.split("\n"));
-  const newSet = new Set(newText.split("\n"));
+
+  const counts = new Map<string, number>();
+  for (const line of oldText.split("\n")) {
+    counts.set(line, (counts.get(line) ?? 0) + 1);
+  }
+
   let added = 0;
+  for (const line of newText.split("\n")) {
+    const remaining = counts.get(line) ?? 0;
+    if (remaining > 0) {
+      counts.set(line, remaining - 1); // matched an old occurrence
+    } else {
+      added++; // no old occurrence left — a genuine addition
+    }
+  }
+
+  // Whatever old occurrences went unmatched are removals.
   let removed = 0;
-  for (const line of newSet) if (!oldSet.has(line)) added++;
-  for (const line of oldSet) if (!newSet.has(line)) removed++;
+  for (const remaining of counts.values()) removed += remaining;
+
   return { added, removed };
 }
