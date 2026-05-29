@@ -9,7 +9,16 @@ interface SignInSearch {
 
 function validateNext(next: string | undefined): string {
   if (!next) return "/";
-  if (next.startsWith("/") && !next.startsWith("//")) return next;
+  // Resolve against our own origin and confirm it stays same-origin. A
+  // prefix check alone is insufficient: "/\\evil.com" starts with "/" and
+  // not "//", yet new URL() normalizes the backslash and resolves it to
+  // https://evil.com/ — an open redirect into the post-OAuth callback.
+  try {
+    const u = new URL(next, window.location.origin);
+    if (u.origin === window.location.origin) return u.pathname + u.search + u.hash;
+  } catch {
+    // Malformed next — fall through to the safe default.
+  }
   return "/";
 }
 
