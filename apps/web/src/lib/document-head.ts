@@ -67,7 +67,13 @@ export function setDocumentHead(meta: HeadMeta): () => void {
   return () => {
     document.title = previousTitle;
     for (const [combo, value] of Object.entries(previous)) {
-      const [attr, key] = combo.split(":") as ["name" | "property", string];
+      // Split on the FIRST colon only — keys like "og:image" / "twitter:card"
+      // themselves contain colons, so a plain split(":") truncates the key
+      // (e.g. "property:og:image" -> key "og") and the cleanup then targets a
+      // nonexistent tag, leaking the previous route's og/twitter tags.
+      const idx = combo.indexOf(":");
+      const attr = combo.slice(0, idx) as "name" | "property";
+      const key = combo.slice(idx + 1);
       if (value === null) {
         // The tag did not exist before; remove ours.
         setMetaTag(attr, key, undefined);
