@@ -146,6 +146,8 @@ export async function gamesRoutes(app: FastifyInstance) {
     // started) left a setInterval running forever, writing :keep-alive
     // frames to a destroyed socket on every tick.
     let stopHeartbeat: (() => void) | null = null;
+    // Hoisted so the post-hijack catch can refund against it.
+    let logId: string | null = null;
     try {
       const id = randomUUID();
       const now = Date.now();
@@ -179,7 +181,6 @@ export async function gamesRoutes(app: FastifyInstance) {
       // This catch handles TOCTOU (counters drained between check and deduct)
       // and any other unexpected pre-stream failure — clean up the empty
       // game row and return a real status code instead of 500.
-      let logId: string;
       try {
         ({ logId } = await deduct(userId, "generation", id));
       } catch (err) {
@@ -382,6 +383,31 @@ export async function gamesRoutes(app: FastifyInstance) {
         } else {
           writeSSE(reply, "done", {});
         }
+        endSSE(reply);
+      }
+    } catch (err) {
+      // A throw AFTER reply.hijack() (e.g. the bare genre/title db.update
+      // calls in the pre-stream section) bypasses Fastify's error handler,
+      // which no longer runs for a hijacked response. Without this catch the
+      // user is left charged with no code persisted and the client hangs with
+      // no terminator frame. Refund and emit an explicit error + endSSE.
+      request.log.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        "generation handler threw after hijack"
+      );
+      if (logId) {
+        await refund(logId, {
+          logger: request.log,
+          reason: "persistence_error",
+        }).catch((refundErr) => {
+          request.log.error(
+            { err: refundErr instanceof Error ? refundErr.message : String(refundErr), logId },
+            "credit refund failed after post-hijack throw; user may be overcharged"
+          );
+        });
+      }
+      if (!reply.raw.writableEnded) {
+        writeSSE(reply, "error", { message: "Generation failed unexpectedly" });
         endSSE(reply);
       }
     } finally {
@@ -1059,6 +1085,19 @@ export async function gamesRoutes(app: FastifyInstance) {
         } else {
           writeSSE(reply, "done", {});
         }
+        endSSE(reply);
+      }
+    } catch (err) {
+      // A throw AFTER reply.hijack() (e.g. buildRepairUserMessage on
+      // pathological input) bypasses Fastify's error handler. Repair is
+      // credit-free so there's nothing to refund, but the client must still
+      // get a terminator frame instead of a hung stream.
+      request.log.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        "repair handler threw after hijack"
+      );
+      if (!reply.raw.writableEnded) {
+        writeSSE(reply, "error", { message: "Repair failed unexpectedly" });
         endSSE(reply);
       }
     } finally {
