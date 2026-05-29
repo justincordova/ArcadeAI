@@ -35,6 +35,12 @@ const FALLBACK_PNG = Buffer.from(FALLBACK_PNG_BASE64, "base64");
 // tradeoff for unfurl performance.
 const CACHE_HEADER = "public, max-age=600, s-maxage=3600, stale-while-revalidate=86400";
 
+// Short cache for transient placeholder responses (game exists but its
+// thumbnail hasn't been captured yet). Caching the placeholder for an hour
+// would poison the social unfurl until expiry even after the real thumbnail
+// lands moments later.
+const PLACEHOLDER_CACHE_HEADER = "public, max-age=60";
+
 export async function ogRoutes(app: FastifyInstance) {
   app.get("/api/og/:slug.png", async (request, reply) => {
     const parsed = SlugParams.safeParse(request.params);
@@ -56,9 +62,11 @@ export async function ogRoutes(app: FastifyInstance) {
     }
 
     if (!game.thumbnail) {
+      // Transient: the game is published but its thumbnail capture hasn't
+      // completed yet. Short cache so the real thumbnail shows up promptly.
       reply
         .header("Content-Type", "image/png")
-        .header("Cache-Control", CACHE_HEADER)
+        .header("Cache-Control", PLACEHOLDER_CACHE_HEADER)
         .send(FALLBACK_PNG);
       return;
     }

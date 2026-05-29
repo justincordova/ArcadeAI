@@ -96,6 +96,9 @@ describe("GET /api/og/:slug.png", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("image/png");
     expect(res.rawPayload.length).toBeGreaterThan(0);
+    // No-thumbnail is a transient state; the placeholder must be short-cached
+    // so the real thumbnail isn't shadowed for an hour once it lands.
+    expect(res.headers["cache-control"]).toBe("public, max-age=60");
   });
 
   test("returns fallback PNG (not 404) for unknown slug", async () => {
