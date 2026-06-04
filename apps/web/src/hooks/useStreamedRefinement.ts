@@ -22,7 +22,10 @@ function quotaMessage(body: QuotaError): string {
   if (body.kind === "lifetime" || body.resetAt === 0) {
     return "You've used your free trial. Upgrade on /pricing for more refinements.";
   }
-  const resetDate = new Date(body.resetAt).toLocaleDateString();
+  // resetAt is a UTC boundary (midnight UTC). Render in UTC so the displayed
+  // calendar day matches the actual reset and the "midnight UTC" tooltip copy,
+  // rather than shifting a day earlier for users in timezones behind UTC.
+  const resetDate = new Date(body.resetAt).toLocaleDateString(undefined, { timeZone: "UTC" });
   return `Out of credits — resets ${resetDate}. Upgrade on /pricing.`;
 }
 
