@@ -133,10 +133,16 @@ function PlayPage() {
       intentFiredRef.current = true;
       navigate({ to: "/play/$slug", params: { slug }, search: {}, replace: true });
       remixMutation.mutate();
-    } else if (intent === "like" && game && !game.liked) {
+    } else if (intent === "like" && game) {
+      // Latch and clear the param once the game has loaded, regardless of
+      // whether it's already liked. A signed-out user who clicks Like on a
+      // game they previously liked (e.g. from another device) returns from
+      // OAuth with game.liked already true; without latching here the
+      // ?intent=like param would linger in the URL forever. Only fire the
+      // mutation when it's actually not liked yet (like is idempotent anyway).
       intentFiredRef.current = true;
       navigate({ to: "/play/$slug", params: { slug }, search: {}, replace: true });
-      likeMutation.mutate();
+      if (!game.liked) likeMutation.mutate();
     }
   }, [intent, me, game?.id, game?.liked, navigate, slug]);
 
