@@ -1,12 +1,12 @@
 import { accounts, users } from "@arcadeai/db";
 import { TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import type { LinkedProvider, Theme } from "@arcadeai/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../lib/db.js";
 import { notFoundError, sendError, validationError } from "../lib/errors.js";
-import { nextUtcMidnight, nextUtcMonthStart } from "../services/usage/reset.js";
+import { applyResets, nextUtcMidnight, nextUtcMonthStart } from "../services/usage/reset.js";
 
 const ChangePlanBody = z.object({
   tier: z.enum(["free", "creator", "pro"]),
@@ -29,28 +29,21 @@ export async function billingRoutes(app: FastifyInstance) {
     const { tier } = parseResult.data;
     const { user } = request.authSession;
 
-    // Read tier from the DB, not the session payload. The Better Auth
-    // session caches `user.tier` from the time the session was issued —
-    // if the row changed since (e.g. via a previous call to this very
-    // route, or a manual SQL adjustment), the cached value is stale and
-    // the admin-bypass guard below would let an admin's tier be changed.
-    const currentRows = await db
-      .select({
-        tier: users.tier,
-        creditsRemainingDaily: users.creditsRemainingDaily,
-        creditsRemainingMonthly: users.creditsRemainingMonthly,
-      })
-      .from(users)
-      .where(eq(users.id, user.id))
-      .limit(1);
-    const current = currentRows[0];
+    // Apply any pending lazy credit reset BEFORE reading the tier/credits.
+    // Reading the row directly (as this route used to) could see a stale,
+    // depleted balance with a past reset boundary — the plan change would
+    // then cap against last period's leftover and silently consume the
+    // refill the user was owed. applyResets returns the canonical tier and
+    // post-reset counters. (See AGENTS.md: never read credits without it.)
+    const current = await applyResets(user.id);
     if (!current) {
       // User row deleted between auth-guard and this read — possible if the
       // user deleted their account in another tab. Treat as 404.
       return sendError(reply, 404, notFoundError("User not found"));
     }
 
-    // Admin tier cannot be changed via billing
+    // Admin tier cannot be changed via billing. Use the DB tier (from
+    // applyResets), not the session payload, which may be stale.
     if (current.tier === "admin") {
       return sendError(reply, 400, validationError("Admin tier cannot be changed via billing"));
     }
@@ -71,19 +64,17 @@ export async function billingRoutes(app: FastifyInstance) {
     // balance, spendable the moment ENFORCE_LIFETIME_LIMITS_FOR_FREE
     // flips off.
     //
-    // We cap the balance on downgrade until real billing is in place
-    // and we can verify the source of the credit. Restore the original
-    // SPEC §10 preserve-on-downgrade behavior alongside the Stripe
-    // integration.
-    const nextMonthly = Math.min(current.creditsRemainingMonthly, limits.monthly);
-    const nextDaily = Math.min(current.creditsRemainingDaily, limits.daily);
-
+    // We cap the balance on downgrade until real billing is in place. The
+    // MIN is computed inside the UPDATE statement (not read-then-write in
+    // JS) so it's atomic against a concurrent deduct(): a generation that
+    // decrements credits between our read and write can no longer be
+    // clobbered by a blind absolute write that restores the spent balance.
     await db
       .update(users)
       .set({
         tier,
-        creditsRemainingMonthly: nextMonthly,
-        creditsRemainingDaily: nextDaily,
+        creditsRemainingMonthly: sql`MIN(${users.creditsRemainingMonthly}, ${limits.monthly})`,
+        creditsRemainingDaily: sql`MIN(${users.creditsRemainingDaily}, ${limits.daily})`,
         monthlyResetAt,
         dailyResetAt,
         updatedAt: new Date(now),
