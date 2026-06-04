@@ -27,6 +27,15 @@ interface RefinementContext {
 // pathologically large games (e.g. 60K+ tokens after many refinements).
 const SUMMARIZATION_THRESHOLD_TOKENS = 16000;
 
+// Cap how many prior feedback entries we replay into the prompt. Paid users
+// have no refinement-count cap, so without this the "Past changes requested"
+// block grows without bound — every turn re-sends all prior feedback verbatim,
+// inflating token cost monotonically over a long-lived game (and the
+// summarization guard above only measures the code, never this block). The
+// most recent turns carry the most relevant intent; older ones are already
+// reflected in currentCode. Keep the latest N.
+const MAX_FEEDBACK_TURNS = 12;
+
 export async function buildRefinementContext({
   game,
   feedback,
@@ -47,7 +56,8 @@ export async function buildRefinementContext({
   parts.push(`Original prompt: "${game.originalPrompt}"`);
 
   if (pastFeedback.length > 0) {
-    parts.push(`Past changes requested:\n${pastFeedback.map((f) => `- "${f}"`).join("\n")}`);
+    const recent = pastFeedback.slice(-MAX_FEEDBACK_TURNS);
+    parts.push(`Past changes requested:\n${recent.map((f) => `- "${f}"`).join("\n")}`);
   }
 
   parts.push(`Current code:\n${codeOrDigest}`);
