@@ -77,15 +77,23 @@ export function RepairController({
   // keeps running, the server's single-stream lock 409s the new refinement,
   // and when the abandoned repair completes it fires onRepaired — masking the
   // refinement with the stale repaired game.
+  //
+  // Latch on the previous resetTrigger value rather than depending on `repair`:
+  // useStreamedRepair returns a fresh object literal every render, so listing
+  // it in the deps would re-run this effect on EVERY commit and abort each
+  // repair the instant it starts. We only want to act on an actual
+  // resetTrigger change, so compare against the previous value via a ref.
+  const prevResetTrigger = useRef(resetTrigger);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repair is intentionally excluded — it changes identity every render; the ref latch keys off resetTrigger only
   useEffect(() => {
-    if (resetTrigger !== undefined) {
-      repairAbortedRef.current = true;
-      repair.stop();
-      repairAttemptRef.current = 0;
-      setRepairAttempt(0);
-      setRepairStatus("idle");
-    }
-  }, [resetTrigger, repair]);
+    if (resetTrigger === undefined || prevResetTrigger.current === resetTrigger) return;
+    prevResetTrigger.current = resetTrigger;
+    repairAbortedRef.current = true;
+    repair.stop();
+    repairAttemptRef.current = 0;
+    setRepairAttempt(0);
+    setRepairStatus("idle");
+  }, [resetTrigger]);
 
   // When repair stream finishes successfully, notify parent
   const prevRepairStatus = useRef(repair.status);
