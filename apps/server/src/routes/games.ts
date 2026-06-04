@@ -1073,8 +1073,13 @@ export async function gamesRoutes(app: FastifyInstance) {
       // helper: a repair returned an explanatory paragraph followed by
       // the HTML, and saving the prose preamble verbatim broke the
       // game until a manual SQL fix.
+      // Sanitize on !streamError alone (not `&& accumulated`) to converge with
+      // the generation/refine handlers: an empty repair stream yields
+      // sanitizeHtmlOutput("") === null, which sets streamError so we emit an
+      // error frame instead of marking a no-op repair as succeeded. Repair is
+      // credit-free so this is observability, not an overcharge.
       let sanitizedRepair: string | null = null;
-      if (!streamError && accumulated) {
+      if (!streamError) {
         sanitizedRepair = sanitizeHtmlOutput(accumulated);
         if (!sanitizedRepair) {
           streamError = new Error("Model output contained no recognizable HTML");
