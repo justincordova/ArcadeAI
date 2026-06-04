@@ -60,25 +60,42 @@ export function RepairController({
 
   const repair = useStreamedRepair(gameId);
 
+  // Set when a reset (new refinement/generation) aborts an in-flight repair.
+  // repair.stop() flips repair.status streaming -> idle synchronously, which
+  // would otherwise trip the "repair finished successfully" branch below and
+  // resurrect the aborted repair's code over the new refinement. This flag
+  // lets that effect distinguish an abort from a genuine completion.
+  const repairAbortedRef = useRef(false);
+
   // Notify parent of status changes so the overlay can reflect them.
   useEffect(() => {
     onStatusChange?.(repairStatus);
   }, [repairStatus, onStatusChange]);
 
-  // Reset attempt counter when a new generation/refinement is kicked off
+  // Reset attempt counter when a new generation/refinement is kicked off.
+  // Abort any in-flight repair too: otherwise the background repair stream
+  // keeps running, the server's single-stream lock 409s the new refinement,
+  // and when the abandoned repair completes it fires onRepaired — masking the
+  // refinement with the stale repaired game.
   useEffect(() => {
     if (resetTrigger !== undefined) {
+      repairAbortedRef.current = true;
+      repair.stop();
       repairAttemptRef.current = 0;
       setRepairAttempt(0);
       setRepairStatus("idle");
     }
-  }, [resetTrigger]);
+  }, [resetTrigger, repair]);
 
   // When repair stream finishes successfully, notify parent
   const prevRepairStatus = useRef(repair.status);
   useEffect(() => {
     if (prevRepairStatus.current === "streaming" && repair.status === "idle") {
-      if (repair.code) {
+      // Skip if this idle transition came from an abort (reset), not a real
+      // completion — applying the aborted code would clobber the refinement.
+      if (repairAbortedRef.current) {
+        repairAbortedRef.current = false;
+      } else if (repair.code) {
         onRepaired(repair.code);
       }
       setRepairStatus("idle");
