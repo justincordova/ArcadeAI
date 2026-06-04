@@ -23,6 +23,18 @@ const BaseSchema = z.object({
     .transform((s) => Number.parseInt(s, 10)),
   WEB_ORIGIN: z.string().url().default("http://localhost:5173"),
 
+  // Whether the server sits behind a trusted reverse proxy / load balancer.
+  // When true, Fastify derives `req.ip` from `X-Forwarded-For` — required for
+  // the IP-based rate limiter to see real client IPs in production instead of
+  // the proxy's address (which collapses every client into one IP bucket).
+  // Defaults to false so a directly-exposed server doesn't trust spoofable
+  // forwarding headers. Set TRUST_PROXY=true only when an upstream proxy
+  // sets X-Forwarded-For reliably.
+  TRUST_PROXY: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((s) => s === "true"),
+
   // Auth
   BETTER_AUTH_SECRET: z.string().min(1).optional(),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),

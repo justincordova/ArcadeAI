@@ -22,6 +22,7 @@ const MANAGED_KEYS = [
   "OPENAI_API_KEY",
   "ADMIN_EMAILS",
   "DATABASE_PATH",
+  "TRUST_PROXY",
 ];
 
 beforeEach(() => {
@@ -173,6 +174,23 @@ describe("loadEnv — defaults", () => {
   test("rejects an unknown LOG_LEVEL value", () => {
     process.env.NODE_ENV = "development";
     process.env.LOG_LEVEL = "verbose"; // not a valid pino level
+    expect(() => loadEnv()).toThrow();
+  });
+
+  test("TRUST_PROXY defaults to false (boolean)", () => {
+    process.env.NODE_ENV = "development";
+    expect(loadEnv().TRUST_PROXY).toBe(false);
+  });
+
+  test('TRUST_PROXY parses the string "true" into a boolean', () => {
+    process.env.NODE_ENV = "development";
+    process.env.TRUST_PROXY = "true";
+    expect(loadEnv().TRUST_PROXY).toBe(true);
+  });
+
+  test("rejects a non-boolean TRUST_PROXY value", () => {
+    process.env.NODE_ENV = "development";
+    process.env.TRUST_PROXY = "yes";
     expect(() => loadEnv()).toThrow();
   });
 });

@@ -41,6 +41,12 @@ const app = Fastify({
   },
   genReqId: () => randomUUID(),
   disableRequestLogging: true,
+  // Behind a reverse proxy/LB, derive req.ip from X-Forwarded-For so the
+  // IP-based rate limiter keys on real client IPs rather than the proxy's
+  // address (which would make the global cap a server-wide limit and 429
+  // every user). Gated by env so a directly-exposed server doesn't trust
+  // spoofable forwarding headers.
+  trustProxy: env.TRUST_PROXY,
 });
 
 // Plugins and hooks. Encapsulation note: hooks added inside
