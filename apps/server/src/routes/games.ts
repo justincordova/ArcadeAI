@@ -703,9 +703,10 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     // See generation route for the rationale on hoisting stopHeartbeat.
     let stopHeartbeat: (() => void) | null = null;
+    // Hoisted so the post-hijack catch can refund against it.
+    let logId: string | null = null;
     try {
       // Deduct credits. Same TOCTOU/refund considerations as POST /api/games.
-      let logId: string;
       try {
         ({ logId } = await deduct(userId, "refinement", id));
       } catch (err) {
@@ -915,6 +916,32 @@ export async function gamesRoutes(app: FastifyInstance) {
       }
 
       if (!clientClosed) {
+        endSSE(reply);
+      }
+    } catch (err) {
+      // A throw AFTER reply.hijack() (e.g. startHeartbeat / writeSSEHeaders, or
+      // any unforeseen synchronous throw in the stream-setup region) bypasses
+      // Fastify's error handler, which no longer runs for a hijacked response.
+      // Without this catch the user is left charged with no code persisted and
+      // the client hangs with no terminator frame. Mirror the generation route:
+      // refund and emit an explicit error + endSSE.
+      request.log.error(
+        { err: err instanceof Error ? err.message : String(err) },
+        "refinement handler threw after hijack"
+      );
+      if (logId) {
+        await refund(logId, {
+          logger: request.log,
+          reason: "persistence_error",
+        }).catch((refundErr) => {
+          request.log.error(
+            { err: refundErr instanceof Error ? refundErr.message : String(refundErr), logId },
+            "credit refund failed after post-hijack throw; user may be overcharged"
+          );
+        });
+      }
+      if (!reply.raw.writableEnded) {
+        writeSSE(reply, "error", { message: "Refinement failed unexpectedly" });
         endSSE(reply);
       }
     } finally {
