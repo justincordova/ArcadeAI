@@ -138,6 +138,13 @@ export const games = sqliteTable(
     // and keeps "trending"/"top" within bounds (both rank within the
     // is_public=true subset).
     index("idx_games_public_published").on(table.isPublic, table.publishedAt),
+    // Genre-filtered Discover ("?genre=shooter") adds an equality predicate on
+    // genre to the is_public filter and orders by published_at. The
+    // (is_public, published_at) index above can't serve the genre equality, so
+    // that query degrades to a scan-and-filter as the table grows. Lead with
+    // genre (the equality predicate), then is_public, then published_at for the
+    // ORDER BY.
+    index("idx_games_genre_public_published").on(table.genre, table.isPublic, table.publishedAt),
   ]
 );
 

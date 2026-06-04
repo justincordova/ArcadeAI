@@ -1,0 +1,1 @@
+CREATE INDEX `idx_games_genre_public_published` ON `games` (`genre`,`is_public`,`published_at`);
