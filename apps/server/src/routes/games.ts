@@ -815,8 +815,14 @@ export async function gamesRoutes(app: FastifyInstance) {
       // Sanitize before persistence — see generation route comment for
       // the rationale. A bad refinement would otherwise overwrite a
       // working game with a prose-prefixed broken document.
+      // Sanitize whenever the stream itself didn't error. An empty stream
+      // (zero text deltas, non-`length` finish) must NOT short-circuit to
+      // markSucceeded — sanitizeHtmlOutput("") returns null, which we treat
+      // as a stream error so credits refund. Previously the `&& accumulatedCode`
+      // guard skipped this block on an empty stream, then fell through to
+      // markSucceeded and charged the user 150 credits for no persisted code.
       let sanitizedCode: string | null = null;
-      if (!streamError && accumulatedCode) {
+      if (!streamError) {
         sanitizedCode = sanitizeHtmlOutput(accumulatedCode);
         if (!sanitizedCode) {
           streamError = new Error("Model output contained no recognizable HTML");
