@@ -7,7 +7,16 @@ import { z } from "zod";
 
 const Schema = z.object({
   genre: z.enum(GENRE_BUCKETS),
-  style_tags: z.array(z.string()).max(5),
+  // Collapse whitespace and clamp each tag. style_tags is model-derived from
+  // the user's prompt and gets joined verbatim into the *generation system
+  // prompt* ("Style guidance: ..."). Without a per-string bound a crafted
+  // prompt could make the classifier emit long, multi-line, instruction-shaped
+  // tags that inflate tokens and inject pseudo-instructions into the system
+  // block. Short aesthetic descriptors never need more than a few words, so we
+  // truncate (rather than reject, which would discard the whole classification).
+  style_tags: z
+    .array(z.string().transform((s) => s.replace(/\s+/g, " ").trim().slice(0, 40)))
+    .max(5),
 });
 
 const SYSTEM =
