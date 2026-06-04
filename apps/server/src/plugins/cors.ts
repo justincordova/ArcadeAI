@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import type { FastifyInstance } from "fastify";
+import { loadEnv } from "../lib/env.js";
 
 /**
  * Registers @fastify/cors directly on the passed app instance.
@@ -13,8 +14,11 @@ import type { FastifyInstance } from "fastify";
  * route, not a hook, for OPTIONS).
  */
 export async function registerCors(app: FastifyInstance) {
+  // Use the validated env value (single source of truth) rather than
+  // re-reading process.env with a duplicated fallback — keeps the CORS
+  // origin in lockstep with the SSE origin check and auth config.
   await app.register(cors, {
-    origin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
+    origin: loadEnv().WEB_ORIGIN,
     credentials: true,
   });
 }

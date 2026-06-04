@@ -1,7 +1,10 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { loadEnv } from "./env.js";
 
 export function writeSSEHeaders(reply: FastifyReply, request: FastifyRequest) {
-  const allowedOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
+  // Validated env value (memoized) — same source of truth as the CORS plugin
+  // so the origin-match check can't silently diverge from what CORS allows.
+  const allowedOrigin = loadEnv().WEB_ORIGIN;
   const requestOrigin = request.headers.origin ?? "";
   // Only reflect the origin if it matches the configured allowed origin.
   // Falling back to the allowed origin directly would open the SSE stream

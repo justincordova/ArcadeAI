@@ -4,6 +4,7 @@
 // request.headers.origin.
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { _resetEnvForTests } from "../src/lib/env.js";
 import { startHeartbeat, writeSSE, writeSSEHeaders } from "../src/lib/sse.js";
 
 interface FakeRaw {
@@ -40,7 +41,10 @@ function makeFakeRequest(origin: string | undefined) {
 
 const ORIGINAL_WEB_ORIGIN = process.env.WEB_ORIGIN;
 beforeEach(() => {
+  // writeSSEHeaders reads the validated env via loadEnv() (memoized), so
+  // reset the cache after mutating WEB_ORIGIN to force re-evaluation.
   process.env.WEB_ORIGIN = "http://localhost:5173";
+  _resetEnvForTests();
 });
 afterEach(() => {
   if (ORIGINAL_WEB_ORIGIN === undefined) {
@@ -48,6 +52,7 @@ afterEach(() => {
   } else {
     process.env.WEB_ORIGIN = ORIGINAL_WEB_ORIGIN;
   }
+  _resetEnvForTests();
 });
 
 describe("writeSSEHeaders — CORS origin validation", () => {
