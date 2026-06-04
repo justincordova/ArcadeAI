@@ -76,9 +76,12 @@ export async function ogRoutes(app: FastifyInstance) {
     // fall back to the placeholder rather than serving garbage bytes.
     const match = game.thumbnail.match(/^data:image\/(png|jpeg|webp);base64,(.+)$/);
     if (!match) {
+      // Serving the placeholder, not real bytes — short-cache so a
+      // transient/corrupt capture that gets re-captured on the next publish
+      // doesn't poison the social unfurl for an hour.
       reply
         .header("Content-Type", "image/png")
-        .header("Cache-Control", CACHE_HEADER)
+        .header("Cache-Control", PLACEHOLDER_CACHE_HEADER)
         .send(FALLBACK_PNG);
       return;
     }
@@ -92,9 +95,12 @@ export async function ogRoutes(app: FastifyInstance) {
     // the broken unfurl for an hour. Verify the magic bytes match the
     // declared MIME and fall back to the placeholder when they don't.
     if (!hasExpectedMagic(buf, match[1])) {
+      // Placeholder fallback for a malformed/truncated capture — short-cache
+      // so a re-captured thumbnail replaces it promptly instead of being
+      // shadowed by an hour-long CDN/crawler cache of the placeholder.
       reply
         .header("Content-Type", "image/png")
-        .header("Cache-Control", CACHE_HEADER)
+        .header("Cache-Control", PLACEHOLDER_CACHE_HEADER)
         .send(FALLBACK_PNG);
       return;
     }

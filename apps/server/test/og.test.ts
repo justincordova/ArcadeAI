@@ -118,6 +118,24 @@ describe("GET /api/og/:slug.png", () => {
     const res = await app.inject({ method: "GET", url: "/api/og/b0bacafe.png" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("image/png");
+    // A malformed/transient capture serves the placeholder — short-cache it so
+    // a re-captured thumbnail isn't shadowed for an hour.
+    expect(res.headers["cache-control"]).toBe("public, max-age=60");
+  });
+
+  test("falls back with a short cache when thumbnail bytes don't match the declared MIME", async () => {
+    const { id } = insertTestUser(testDb.sqlite);
+    // Valid data-URL prefix but the base64 payload is not a real PNG.
+    insertGame({
+      userId: id,
+      publicSlug: "c0ffee11",
+      thumbnail: "data:image/png;base64,aGVsbG8gd29ybGQgbm90IGEgcG5n",
+    });
+
+    const res = await app.inject({ method: "GET", url: "/api/og/c0ffee11.png" });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.headers["cache-control"]).toBe("public, max-age=60");
   });
 
   test("400s on a malformed slug rather than running a DB lookup", async () => {
