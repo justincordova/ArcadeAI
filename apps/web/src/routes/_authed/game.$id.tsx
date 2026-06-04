@@ -95,7 +95,14 @@ function GamePage() {
   }
 
   return (
+    // Key on the game id so navigating directly between games (prefetched
+    // dashboard cards, back/forward) remounts a fresh Builder. Without it,
+    // TanStack Router keeps GamePage mounted across :id changes and the
+    // Builder's per-game state (repairedCode / finalCode / streamingCode,
+    // RepairController refs) bleeds over — the preview would render the
+    // previous game's code under the new game's chat until its data lands.
     <Builder
+      key={data.id}
       initialCode={data.currentCode}
       initialMessages={data.messages}
       gameId={data.id}
