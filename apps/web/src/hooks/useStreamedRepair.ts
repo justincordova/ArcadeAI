@@ -1,3 +1,4 @@
+import { sanitizeHtmlOutput } from "@arcadeai/shared/sanitize-html.js";
 import { useCallback, useRef, useState } from "react";
 import { type SSEStatus, useSSEStream } from "./useSSEStream.js";
 
@@ -24,6 +25,17 @@ export function useStreamedRepair(gameId: string): StreamedRepairState {
           accumulatedRef.current += d.delta;
           setCode(accumulatedRef.current);
         }
+      },
+      onDone() {
+        // Sanitize the final repaired output the same way the server does
+        // before persisting (strip a prose preamble / trailing markdown
+        // fence). RepairController applies this `code` to the iframe at the
+        // top of the displayCode precedence, so without this the live preview
+        // would render the raw prose the server stripped — diverging from the
+        // saved game. Fall back to the raw accumulation if no HTML opener is
+        // found (the stream errored anyway; nothing better to show).
+        const sanitized = sanitizeHtmlOutput(accumulatedRef.current);
+        if (sanitized) setCode(sanitized);
       },
     },
   });

@@ -7,6 +7,7 @@
     "./genres.js": "./src/genres.ts",
     "./models.js": "./src/models.ts",
     "./plans.js": "./src/plans.ts",
+    "./sanitize-html.js": "./src/sanitize-html.ts",
     "./types.js": "./src/types.ts"
   }
 }
