@@ -26,7 +26,14 @@ export interface DiffHunk {
   removed: number;
 }
 
+// Per-side line cap, and a cap on the LCS table area (m * n). The DP table is
+// a Uint32Array of (m+1)*(n+1) cells and the fill loop runs m*n iterations on
+// the UI thread, so the *product* is what actually bounds the work — a per-side
+// limit of 4000 would still permit a 4000x4000 table (~64 MB, 16M iterations)
+// and freeze the tab. Cap the area at ~2M cells (e.g. 2000x1000), matching the
+// "we'd never run this on >2k-line files" assumption above.
 const MAX_LINES = 4000;
+const MAX_LCS_CELLS = 2_000_000;
 
 /** Flat-array LCS table indexed as `i * (n + 1) + j`. Avoids the cost of
  *  nested arrays and the `!` non-null assertions that come with optional
@@ -45,7 +52,11 @@ export function computeLineDiff(oldText: string, newText: string): DiffHunk {
   const oldLines = oldText.split("\n");
   const newLines = newText.split("\n");
 
-  if (oldLines.length > MAX_LINES || newLines.length > MAX_LINES) {
+  if (
+    oldLines.length > MAX_LINES ||
+    newLines.length > MAX_LINES ||
+    oldLines.length * newLines.length > MAX_LCS_CELLS
+  ) {
     return { lines: [], added: 0, removed: 0 };
   }
   if (oldText === newText) {
