@@ -142,9 +142,15 @@ export function RepairController({
       // Filter to only messages from our iframe if we have a ref
       if (iframeRef.current && e.source !== iframeRef.current.contentWindow) return;
 
+      // Truncate to the server's RepairBody limits (message<=2048, stack<=16384).
+      // A generated game can throw an error whose message stringifies a large
+      // object, or produce a deep stack — sending it verbatim 400s the repair
+      // request and silently drops the user into the fallback dialog without a
+      // real attempt. The top of a stack carries the useful frames, so tail-
+      // truncation is safe.
       handleGameError({
-        message: String(data.message ?? "unknown error"),
-        stack: typeof data.stack === "string" ? data.stack : undefined,
+        message: String(data.message ?? "unknown error").slice(0, 2048),
+        stack: typeof data.stack === "string" ? data.stack.slice(0, 16384) : undefined,
       });
     }
 
