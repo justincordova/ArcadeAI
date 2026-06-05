@@ -216,3 +216,85 @@ describe("GET /api/games (list)", () => {
     expect(body.every((g) => g.title.startsWith("mine"))).toBe(true);
   });
 });
+
+describe("POST /api/games/:id/publish", () => {
+  function readPublish(gameId: string) {
+    return testDb.sqlite
+      .query<
+        { is_public: number; public_slug: string | null; published_at: number | null },
+        [string]
+      >("SELECT is_public, public_slug, published_at FROM games WHERE id = ?")
+      .get(gameId);
+  }
+
+  test("first publish sets slug, is_public, and published_at together", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>game</html>" });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/publish`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { slug: string; isPublic: boolean };
+    expect(body.isPublic).toBe(true);
+    expect(body.slug).toMatch(/^[0-9a-f]{8}$/);
+
+    // The row must never be half-published: a slug without is_public is the
+    // inconsistent state the single-UPDATE fix prevents.
+    const row = readPublish(gameId);
+    expect(row?.is_public).toBe(1);
+    expect(row?.public_slug).toBe(body.slug);
+    expect(row?.published_at).toBeGreaterThan(0);
+  });
+
+  test("re-publish reuses the existing slug", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>game</html>" });
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/publish`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+    const firstSlug = (first.json() as { slug: string }).slug;
+
+    await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/unpublish`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/publish`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+    const secondSlug = (second.json() as { slug: string }).slug;
+
+    expect(secondSlug).toBe(firstSlug);
+    expect(readPublish(gameId)?.is_public).toBe(1);
+  });
+
+  test("rejects publishing a game with no code", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "" });
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/publish`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+});

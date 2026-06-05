@@ -560,19 +560,35 @@ export async function gamesRoutes(app: FastifyInstance) {
       return sendError(reply, 400, validationError("Game has no code to publish"));
     }
 
+    const now = Date.now();
     let slug = game.publicSlug;
-    if (!slug) {
-      // Generate a unique slug. 8 hex chars = 4 billion options; collisions
-      // are vanishingly rare but the unique-index will reject duplicates so
-      // we retry up to 3 times before giving up. ONLY swallow UNIQUE
-      // collisions — masking other DB errors (timeout, schema mismatch,
-      // disk full) as "retrying for collision" hides real failures and
-      // produces a misleading 500 after the loop completes.
+
+    if (slug) {
+      // Slug already exists from a prior publish cycle — a single UPDATE flips
+      // visibility atomically.
+      await db
+        .update(games)
+        .set({ isPublic: true, publishedAt: now, updatedAt: now })
+        .where(eq(games.id, id));
+    } else {
+      // First publish: assign the slug AND flip visibility in ONE UPDATE per
+      // attempt. Splitting these into two writes (slug, then is_public) is not
+      // atomic — a crash between them would persist a slug with is_public=false,
+      // stranding the row half-published. A single statement is atomic, so the
+      // row only ever transitions straight to fully-published.
+      //
+      // 8 hex chars = 4 billion options; collisions are vanishingly rare but
+      // the unique index rejects duplicates, so we retry up to 3 times. ONLY
+      // swallow UNIQUE collisions — masking other DB errors (timeout, schema
+      // mismatch, disk full) as "retrying for collision" hides real failures.
       let lastErr: unknown;
       for (let attempt = 0; attempt < 3; attempt++) {
         const candidate = randomUUID().replace(/-/g, "").slice(0, 8);
         try {
-          await db.update(games).set({ publicSlug: candidate }).where(eq(games.id, id));
+          await db
+            .update(games)
+            .set({ publicSlug: candidate, isPublic: true, publishedAt: now, updatedAt: now })
+            .where(eq(games.id, id));
           slug = candidate;
           break;
         } catch (err) {
@@ -597,12 +613,6 @@ export async function gamesRoutes(app: FastifyInstance) {
         });
       }
     }
-
-    const now = Date.now();
-    await db
-      .update(games)
-      .set({ isPublic: true, publishedAt: now, updatedAt: now })
-      .where(eq(games.id, id));
 
     return reply.send({ slug, isPublic: true, publishedAt: now });
   });
