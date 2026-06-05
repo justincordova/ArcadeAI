@@ -6,11 +6,16 @@ export type Tier = "free" | "creator" | "pro" | "admin";
 // observability but the daily check is skipped.
 //
 // Tier-change rules (enforced in apps/server/src/routes/billing.ts):
-//  - UPGRADE (new monthly cap > current balance): credits jump immediately
-//    to the new tier's allotment. Users who pay should see what they paid for.
-//  - DOWNGRADE (new monthly cap < current balance): the existing balance is
-//    preserved until the next monthly reset boundary. Capping would
-//    confiscate already-granted credit.
+//  - PROTOTYPE (current): every plan change caps the balance at
+//    MIN(current, new tier limit) — it is NOT topped up on upgrade. With no
+//    payment ledger and free upgrades, a free→creator→free round-trip would
+//    otherwise mint creator-tier credits a free user never paid for. Upgrades
+//    apply the new tier/limits but the user reaches the higher allotment at
+//    the next monthly reset.
+//  - TARGET (post-Stripe): UPGRADE tops up immediately to the new allotment
+//    (a real payment proves the credits were bought); DOWNGRADE preserves the
+//    existing balance until the next monthly reset boundary. Revisit the
+//    billing.ts MIN cap when real billing lands.
 export const TIER_CREDIT_LIMITS: Record<
   Tier,
   {

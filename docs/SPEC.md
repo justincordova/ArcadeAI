@@ -534,8 +534,8 @@ When a free user hits the lifetime cap, the API returns 402 with `code: "FREE_TI
 
 - **Daily counter:** resets at UTC midnight. Lazy reset on read.
 - **Monthly counter:** resets at first of month UTC. Lazy reset on read.
-- **Plan upgrade:** immediate top-up to the new tier's allotment.
-- **Plan downgrade:** preserves the existing balance until the next monthly reset boundary. Capping to the lower tier's monthly limit would confiscate already-granted credit; the reset on the 1st of the next month brings the balance back in line. Documented in `packages/shared/src/plans.ts`.
+- **Plan change (prototype):** the balance is capped at `MIN(current, new tier limit)` on every change — it is never topped up on upgrade. Because the prototype has no payment ledger and upgrades are free, a free→creator→free round-trip would otherwise mint creator-tier credits a free user never paid for. So upgrades take effect for the tier/limits but do not grant the new allotment immediately; the user reaches the higher allotment at the next monthly reset. **Target behavior (post-Stripe):** upgrade immediately tops up to the new allotment, since a real payment proves the credits were bought. Implemented in `apps/server/src/routes/billing.ts`; revisit alongside the billing integration.
+- **Plan downgrade:** capped at the lower tier's limit via the same `MIN`. (In a real-billing world this would preserve already-paid balance until the next monthly boundary; the prototype cap is the anti-minting stand-in.)
 
 ---
 
