@@ -178,6 +178,53 @@ export function useSSEStream(opts: UseSSEStreamOptions): UseSSEStream {
           let buf = "";
           let terminated = false;
 
+          // Parse one complete frame's text. Returns true if it was a terminal
+          // (done/error) frame. Shared by the streaming loop and the final
+          // residual-buffer flush so a terminator that arrives without a
+          // trailing "\n\n" (TCP-split on close) is still honored.
+          const handleFrame = (frame: string): void => {
+            const trimmed = frame.trim();
+            if (!trimmed) return;
+            // SSE comment / keep-alive heartbeat (sent by lib/sse.ts every
+            // 15s in Milestone A). Skip without parsing.
+            if (trimmed.startsWith(":")) return;
+
+            const lines = frame.split("\n");
+            let event = "";
+            // SSE allows multiple data: lines; concatenate with "\n" per spec.
+            const dataLines: string[] = [];
+            for (const line of lines) {
+              if (line.startsWith("event: ")) event = line.slice(7);
+              else if (line.startsWith("data: ")) dataLines.push(line.slice(6));
+            }
+            if (!event || dataLines.length === 0) return;
+
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(dataLines.join("\n"));
+            } catch {
+              // ignore malformed frames
+              return;
+            }
+
+            handlersRef.current.onEvent(event, parsed);
+
+            if (event === "done") {
+              terminated = true;
+              setStatus("idle");
+              handlersRef.current.onDone?.();
+            } else if (event === "error") {
+              terminated = true;
+              const msg =
+                typeof parsed === "object" && parsed && "message" in parsed
+                  ? String((parsed as { message: unknown }).message)
+                  : "Stream error";
+              setStatus("error");
+              setError(msg);
+              handlersRef.current.onError?.(msg);
+            }
+          };
+
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -188,46 +235,20 @@ export function useSSEStream(opts: UseSSEStreamOptions): UseSSEStream {
             buf = frames.pop() ?? "";
 
             for (const frame of frames) {
-              const trimmed = frame.trim();
-              if (!trimmed) continue;
-              // SSE comment / keep-alive heartbeat (sent by lib/sse.ts every
-              // 15s in Milestone A). Skip without parsing.
-              if (trimmed.startsWith(":")) continue;
-
-              const lines = frame.split("\n");
-              let event = "";
-              let data = "";
-              for (const line of lines) {
-                if (line.startsWith("event: ")) event = line.slice(7);
-                else if (line.startsWith("data: ")) data = line.slice(6);
-              }
-              if (!event || !data) continue;
-
-              let parsed: unknown;
-              try {
-                parsed = JSON.parse(data);
-              } catch {
-                // ignore malformed frames
-                continue;
-              }
-
-              handlersRef.current.onEvent(event, parsed);
-
-              if (event === "done") {
-                terminated = true;
-                setStatus("idle");
-                handlersRef.current.onDone?.();
-              } else if (event === "error") {
-                terminated = true;
-                const msg =
-                  typeof parsed === "object" && parsed && "message" in parsed
-                    ? String((parsed as { message: unknown }).message)
-                    : "Stream error";
-                setStatus("error");
-                setError(msg);
-                handlersRef.current.onError?.(msg);
-              }
+              handleFrame(frame);
             }
+          }
+
+          // Flush any bytes the streaming decoder held back (an incomplete
+          // multibyte UTF-8 sequence split across the final read), then parse
+          // a residual frame that arrived without a trailing "\n\n" — e.g. the
+          // terminal done/error frame whose boundary was TCP-split on close.
+          // Without this, a successful stream could surface a spurious
+          // "Stream ended unexpectedly" and a unicode-tailed final frame
+          // (e.g. the refine summary) could lose its last character.
+          buf += decoder.decode();
+          if (buf.trim()) {
+            handleFrame(buf);
           }
 
           // Stream ended without an explicit done/error event — treat as error
