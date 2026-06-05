@@ -53,12 +53,17 @@ export async function listDiscoverGames({
     POW((CAST(strftime('%s','now') AS REAL) * 1000 - COALESCE(${games.publishedAt}, ${games.createdAt})) / 3600000.0 + 2, 1.3)
   `;
 
+  // Every sort ends with desc(games.id) as a deterministic tie-breaker so
+  // offset pagination is stable: without it, rows whose primary sort key ties
+  // (e.g. two games published in the same millisecond) get a DB-defined order
+  // that can shift between page fetches, skipping or duplicating a row across
+  // the page boundary. `new` previously had no secondary key at all.
   const orderBy =
     sort === "trending"
-      ? [desc(trendingScore), desc(games.publishedAt)]
+      ? [desc(trendingScore), desc(games.publishedAt), desc(games.id)]
       : sort === "top"
-        ? [desc(games.likeCount), desc(games.publishedAt)]
-        : [desc(games.publishedAt)];
+        ? [desc(games.likeCount), desc(games.publishedAt), desc(games.id)]
+        : [desc(games.publishedAt), desc(games.id)];
 
   // `publicSlug IS NOT NULL` belongs in the SQL WHERE — not a post-fetch
   // filter — so the row count the DB returns matches the items we emit.
