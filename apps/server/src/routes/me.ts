@@ -103,13 +103,17 @@ export async function meRoutes(app: FastifyInstance) {
       request.log.warn({ err }, "auth.api.signOut failed during account delete; continuing");
     }
 
-    await db.transaction(async (tx) => {
+    // Synchronous callback so Drizzle's bun-sqlite driver wraps all five
+    // deletes in one real transaction. An `async` callback would commit at the
+    // first `await`, so a failure on a later delete would leave the account
+    // half-deleted (e.g. games/logs gone but user/accounts/sessions remaining).
+    db.transaction((tx) => {
       // Cascade order: delete owned game data, then logs, then auth rows, then user
-      await tx.delete(games).where(eq(games.userId, userId));
-      await tx.delete(usageLog).where(eq(usageLog.userId, userId));
-      await tx.delete(sessions).where(eq(sessions.userId, userId));
-      await tx.delete(accounts).where(eq(accounts.userId, userId));
-      await tx.delete(users).where(eq(users.id, userId));
+      tx.delete(games).where(eq(games.userId, userId)).run();
+      tx.delete(usageLog).where(eq(usageLog.userId, userId)).run();
+      tx.delete(sessions).where(eq(sessions.userId, userId)).run();
+      tx.delete(accounts).where(eq(accounts.userId, userId)).run();
+      tx.delete(users).where(eq(users.id, userId)).run();
     });
 
     return reply.status(204).send();
