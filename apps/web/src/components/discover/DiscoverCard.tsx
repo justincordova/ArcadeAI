@@ -81,6 +81,13 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
       // to /play/:slug after liking from discover doesn't briefly show
       // stale like state.
       queryClient.invalidateQueries({ queryKey: ["public-game", game.slug] });
+      // Reconcile the discover grid with the server's authoritative count.
+      // The optimistic patch above is a +/-1 guess off the snapshot; the
+      // mutation's RETURNING value is the source of truth (e.g. when the same
+      // user already liked from another device, the idempotent path returns an
+      // unchanged count). Without this the grid count never self-corrects.
+      // Mirrors the play page's onSettled, which already invalidates discover.
+      queryClient.invalidateQueries({ queryKey: ["discover"] });
     },
   });
 
