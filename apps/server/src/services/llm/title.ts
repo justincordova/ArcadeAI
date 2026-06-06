@@ -28,5 +28,11 @@ export async function generateTitle(prompt: string, logger?: FastifyBaseLogger):
     },
     "llm call"
   );
-  return text.trim().slice(0, 80);
+  const title = text.trim().slice(0, 80);
+  // Treat an empty/whitespace-only result as a failure so Promise.allSettled
+  // keeps the meaningful placeholder (prompt.slice(0,40)) instead of
+  // overwriting the row with "". An empty title would blank the dashboard /
+  // discover cards and produce an empty <title> / og:title on the play page.
+  if (!title) throw new Error("model returned an empty title");
+  return title;
 }

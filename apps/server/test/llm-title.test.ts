@@ -47,6 +47,13 @@ describe("generateTitle", () => {
     expect(title).toBe("x".repeat(80));
   });
 
+  test("throws on an empty/whitespace-only title so the caller keeps the placeholder", async () => {
+    nextResult = { text: "   \n  ", usage: { inputTokens: 5, outputTokens: 0 } };
+    const { generateTitle } = await import("../src/services/llm/title.js");
+
+    await expect(generateTitle("anything")).rejects.toThrow(/empty title/);
+  });
+
   test("propagates errors (caller uses Promise.allSettled to keep placeholder)", async () => {
     mock.module("ai", () => ({
       ...realAi,
