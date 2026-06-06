@@ -28,12 +28,14 @@ export function useStreamedRepair(gameId: string): StreamedRepairState {
       },
       onDone() {
         // Sanitize the final repaired output the same way the server does
-        // before persisting (strip a prose preamble / trailing markdown
-        // fence). RepairController applies this `code` to the iframe at the
-        // top of the displayCode precedence, so without this the live preview
-        // would render the raw prose the server stripped — diverging from the
-        // saved game. Fall back to the raw accumulation if no HTML opener is
-        // found (the stream errored anyway; nothing better to show).
+        // before persisting (strip a prose preamble / trailing markdown fence).
+        // After the stream completes, RepairController applies this `code` via
+        // onRepaired -> setRepairedCode, which sits ahead of finalCode in
+        // Builder's displayCode precedence. Without sanitizing, the post-repair
+        // preview and the captured thumbnail would render the raw prose the
+        // server strips before persisting — diverging from the saved game.
+        // Fall back to the raw accumulation if no HTML opener is found (the
+        // stream errored anyway; nothing better to show).
         const sanitized = sanitizeHtmlOutput(accumulatedRef.current);
         if (sanitized) setCode(sanitized);
       },

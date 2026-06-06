@@ -1,3 +1,4 @@
+import { sanitizeHtmlOutput } from "@arcadeai/shared/sanitize-html.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type QuotaError, type SSEStatus, useSSEStream } from "./useSSEStream.js";
@@ -73,7 +74,16 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
         // Promote accumulated streaming text into finalCode so the
         // iframe keeps showing the refined game while the parent's
         // ['game', id] query refetches. Then clear streamingCode.
-        setFinalCode(accumulatedRef.current);
+        //
+        // Sanitize the same way the server does before persisting (strip a
+        // prose preamble / trailing markdown fence). finalCode outranks the
+        // server-sanitized initialCode in Builder's displayCode precedence and
+        // also feeds the DiffViewer's "after" side, so without this a
+        // contract-violating refinement would render raw prose over the canvas
+        // and in the diff — diverging from the saved game. Fall back to raw if
+        // no HTML opener is found.
+        const sanitized = sanitizeHtmlOutput(accumulatedRef.current);
+        setFinalCode(sanitized ?? accumulatedRef.current);
         setStreamingCode("");
 
         // Trigger thumbnail capture after ~500ms
