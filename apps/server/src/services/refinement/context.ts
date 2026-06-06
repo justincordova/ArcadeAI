@@ -46,10 +46,15 @@ export async function buildRefinementContext({
   // estimate runs ~30% off for HTML+JS-heavy code and was occasionally
   // sending oversized prompts that the model handled but charged extra for.
   const codeTokens = countTokens(game.currentCode);
-  const codeOrDigest =
-    codeTokens > SUMMARIZATION_THRESHOLD_TOKENS
-      ? await summarizeCode(game.currentCode, logger)
-      : game.currentCode;
+  let codeOrDigest = game.currentCode;
+  if (codeTokens > SUMMARIZATION_THRESHOLD_TOKENS) {
+    const digest = await summarizeCode(game.currentCode, logger);
+    // Fall back to the real code if the summarizer returns an empty digest —
+    // feeding Claude an empty "Current code" block would have it refine from
+    // nothing and overwrite a working game. A too-large prompt is the lesser
+    // evil than a blank one.
+    codeOrDigest = digest.trim() ? digest : game.currentCode;
+  }
 
   const parts: string[] = [];
 
