@@ -1,3 +1,4 @@
+import { sanitizeHtmlOutput } from "@arcadeai/shared/sanitize-html.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -84,6 +85,14 @@ export function useStreamedGeneration(): StreamedGenerationState {
       onDone() {
         // Refresh credit bars in the user dropdown (plan 7 §11)
         queryClient.invalidateQueries({ queryKey: ["me"] });
+
+        // Sanitize the accumulated output the same way the server does before
+        // persisting. The iframe (which mounts after this returns) renders this
+        // `code` and the thumbnail is captured against it — without sanitizing,
+        // a prose preamble / markdown fence would be baked into the persisted
+        // thumbnail shown on the dashboard, discover, and og:image, even though
+        // the saved game is clean. Fall back to raw if no HTML opener is found.
+        setCode((prev) => sanitizeHtmlOutput(prev) ?? prev);
 
         const id = gameIdRef.current;
 
