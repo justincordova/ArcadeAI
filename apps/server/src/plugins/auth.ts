@@ -165,42 +165,58 @@ export async function authPlugin(app: FastifyInstance) {
     // Bypass Fastify serialization. Write directly to the raw socket so the
     // already-encoded response body is sent unchanged.
     reply.hijack();
-    reply.raw.statusCode = response.status;
+    // Everything after hijack() bypasses Fastify's setErrorHandler, so a throw
+    // here (e.g. setHeader rejecting an illegal header value Better Auth
+    // produced, or end() on an already-destroyed socket) would escape with no
+    // handler and leak the socket FD. Guard it and destroy the socket on
+    // failure so the connection can't hang.
+    try {
+      reply.raw.statusCode = response.status;
 
-    for (const [key, value] of Object.entries(preexistingHeaders)) {
-      if (value === undefined) continue;
-      const lower = key.toLowerCase();
-      if (HOP_BY_HOP_RESPONSE_HEADERS.has(lower)) continue;
-      reply.raw.setHeader(
-        key,
-        Array.isArray(value) ? value.map(String) : (value as string | number)
-      );
+      for (const [key, value] of Object.entries(preexistingHeaders)) {
+        if (value === undefined) continue;
+        const lower = key.toLowerCase();
+        if (HOP_BY_HOP_RESPONSE_HEADERS.has(lower)) continue;
+        reply.raw.setHeader(
+          key,
+          Array.isArray(value) ? value.map(String) : (value as string | number)
+        );
+      }
+
+      // Copy headers, but handle Set-Cookie specially. Headers.entries() collapses
+      // multiple Set-Cookie values into a single comma-separated string, which
+      // breaks browser parsing. Use getSetCookie() (Node 18+ / WHATWG fetch) to
+      // recover them as separate values.
+      const setCookies =
+        typeof (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie ===
+        "function"
+          ? (response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
+          : [];
+
+      for (const [key, value] of response.headers.entries()) {
+        const lower = key.toLowerCase();
+        if (HOP_BY_HOP_RESPONSE_HEADERS.has(lower)) continue;
+        if (lower === "set-cookie") continue;
+        reply.raw.setHeader(key, value);
+      }
+
+      if (setCookies.length > 0) {
+        // Node's setHeader accepts string[] for Set-Cookie and emits one line
+        // per element.
+        reply.raw.setHeader("set-cookie", setCookies);
+      }
+
+      reply.raw.end(responseBuffer);
+    } catch (err) {
+      request.log.error({ err }, "auth handler threw after hijack");
+      if (!reply.raw.writableEnded) {
+        try {
+          reply.raw.destroy();
+        } catch {
+          // socket already torn down — nothing more to do
+        }
+      }
     }
-
-    // Copy headers, but handle Set-Cookie specially. Headers.entries() collapses
-    // multiple Set-Cookie values into a single comma-separated string, which
-    // breaks browser parsing. Use getSetCookie() (Node 18+ / WHATWG fetch) to
-    // recover them as separate values.
-    const setCookies =
-      typeof (response.headers as Headers & { getSetCookie?: () => string[] }).getSetCookie ===
-      "function"
-        ? (response.headers as Headers & { getSetCookie: () => string[] }).getSetCookie()
-        : [];
-
-    for (const [key, value] of response.headers.entries()) {
-      const lower = key.toLowerCase();
-      if (HOP_BY_HOP_RESPONSE_HEADERS.has(lower)) continue;
-      if (lower === "set-cookie") continue;
-      reply.raw.setHeader(key, value);
-    }
-
-    if (setCookies.length > 0) {
-      // Node's setHeader accepts string[] for Set-Cookie and emits one line
-      // per element.
-      reply.raw.setHeader("set-cookie", setCookies);
-    }
-
-    reply.raw.end(responseBuffer);
   };
 
   for (const method of ["GET", "POST", "PUT", "DELETE", "PATCH"] as const) {
