@@ -1,6 +1,6 @@
 import { accounts, games, sessions, usageLog, users } from "@arcadeai/db";
 import type { LinkedProvider, MeResponse, Theme } from "@arcadeai/shared";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 // SPEC §11, §12, §14: /api/me GET, PATCH, DELETE
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -108,6 +108,18 @@ export async function meRoutes(app: FastifyInstance) {
     // first `await`, so a failure on a later delete would leave the account
     // half-deleted (e.g. games/logs gone but user/accounts/sessions remaining).
     db.transaction((tx) => {
+      // Decrement like_count on OTHER users' games this user had liked, BEFORE
+      // deleting the user. Deleting the user cascades away their game_likes
+      // rows (gameLikes.userId ON DELETE cascade), but that cascade does NOT
+      // touch the denormalized games.like_count — so without this the counter
+      // permanently overstates reality and the Discover ranking drifts. Must
+      // run before delete(users) so the rows still exist. Games the user owned
+      // are deleted below anyway, so the decrement on those is harmless.
+      tx.run(
+        sql`UPDATE games SET like_count = MAX(like_count - 1, 0)
+            WHERE id IN (SELECT game_id FROM game_likes WHERE user_id = ${userId})`
+      );
+
       // Cascade order: delete owned game data, then logs, then auth rows, then user
       tx.delete(games).where(eq(games.userId, userId)).run();
       tx.delete(usageLog).where(eq(usageLog.userId, userId)).run();
