@@ -5,12 +5,19 @@ const API = API_BASE;
 export interface GameSummary {
   id: string;
   title: string;
-  thumbnail: string | null;
+  /** Whether a thumbnail exists. The bytes are loaded lazily by reference
+   *  from GET /api/games/:id/thumbnail.png — not shipped inline in the list. */
+  hasThumbnail: boolean;
   updatedAt: number;
   createdAt: number;
   isPublic: boolean;
   publicSlug: string | null;
   genre: string | null;
+}
+
+/** URL for a game's thumbnail image, served owner-scoped (cookie auth). */
+export function gameThumbnailUrl(id: string): string {
+  return `${API}/api/games/${id}/thumbnail.png`;
 }
 
 export interface PublicGame {
@@ -68,7 +75,10 @@ export async function fetchGame(id: string): Promise<GameDetail> {
   return res.json() as Promise<GameDetail>;
 }
 
-export async function patchGame(id: string, update: { title: string }): Promise<GameSummary> {
+export async function patchGame(
+  id: string,
+  update: { title: string }
+): Promise<{ id: string; title: string; updatedAt: number }> {
   const res = await fetch(`${API}/api/games/${id}`, {
     method: "PATCH",
     credentials: "include",
@@ -76,7 +86,7 @@ export async function patchGame(id: string, update: { title: string }): Promise<
     body: JSON.stringify(update),
   });
   if (!res.ok) throw new Error("Failed to rename game");
-  return res.json() as Promise<GameSummary>;
+  return res.json() as Promise<{ id: string; title: string; updatedAt: number }>;
 }
 
 export async function deleteGame(id: string): Promise<void> {

@@ -57,6 +57,7 @@ function insertGame(args: {
   userId: string;
   title?: string;
   currentCode?: string;
+  thumbnail?: string | null;
 }): string {
   const id = args.id ?? randomUUID();
   const now = Date.now();
@@ -66,11 +67,23 @@ function insertGame(args: {
         id, user_id, title, current_code, thumbnail, genre,
         original_prompt, is_public, public_slug, published_at,
         remixed_from_game_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, NULL, NULL, 'p', 0, NULL, NULL, NULL, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, NULL, 'p', 0, NULL, NULL, NULL, ?, ?)`
     )
-    .run(id, args.userId, args.title ?? "test", args.currentCode ?? "<html>", now, now);
+    .run(
+      id,
+      args.userId,
+      args.title ?? "test",
+      args.currentCode ?? "<html>",
+      args.thumbnail ?? null,
+      now,
+      now
+    );
   return id;
 }
+
+// 1x1 red PNG as a data URL — a valid thumbnail for serve tests.
+const TINY_PNG_DATA_URL =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg==";
 
 describe("GET /api/games/:id", () => {
   test("returns the game + messages for the owner", async () => {
@@ -214,6 +227,60 @@ describe("GET /api/games (list)", () => {
     const body = res.json() as Array<{ title: string }>;
     expect(body).toHaveLength(2);
     expect(body.every((g) => g.title.startsWith("mine"))).toBe(true);
+  });
+
+  test("returns hasThumbnail flag, not the inline thumbnail bytes", async () => {
+    const { id: meId } = insertTestUser(testDb.sqlite);
+    stubUserId = meId;
+    insertGame({ userId: meId, title: "with-thumb", thumbnail: TINY_PNG_DATA_URL });
+    insertGame({ userId: meId, title: "no-thumb", thumbnail: null });
+
+    const res = await app.inject({ method: "GET", url: "/api/games" });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Array<{ title: string; hasThumbnail?: boolean; thumbnail?: string }>;
+    // The heavy base64 thumbnail must NOT be in the list payload.
+    expect(body.every((g) => g.thumbnail === undefined)).toBe(true);
+    const withThumb = body.find((g) => g.title === "with-thumb");
+    const noThumb = body.find((g) => g.title === "no-thumb");
+    expect(withThumb?.hasThumbnail).toBe(true);
+    expect(noThumb?.hasThumbnail).toBe(false);
+  });
+});
+
+describe("GET /api/games/:id/thumbnail.png", () => {
+  test("serves the decoded PNG bytes for the owner", async () => {
+    const { id: meId } = insertTestUser(testDb.sqlite);
+    stubUserId = meId;
+    const gameId = insertGame({ userId: meId, thumbnail: TINY_PNG_DATA_URL });
+
+    const res = await app.inject({ method: "GET", url: `/api/games/${gameId}/thumbnail.png` });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    // PNG signature 89 50 4e 47
+    const buf = res.rawPayload;
+    expect(buf[0]).toBe(0x89);
+    expect(buf[1]).toBe(0x50);
+  });
+
+  test("serves a placeholder when the game has no thumbnail", async () => {
+    const { id: meId } = insertTestUser(testDb.sqlite);
+    stubUserId = meId;
+    const gameId = insertGame({ userId: meId, thumbnail: null });
+
+    const res = await app.inject({ method: "GET", url: `/api/games/${gameId}/thumbnail.png` });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.headers["cache-control"]).toBe("public, max-age=60");
+  });
+
+  test("404s for a game the caller does not own (no cross-user thumbnail access)", async () => {
+    const { id: ownerId } = insertTestUser(testDb.sqlite, { email: "owner@t" });
+    const { id: otherId } = insertTestUser(testDb.sqlite, { email: "other@t" });
+    stubUserId = otherId;
+    const gameId = insertGame({ userId: ownerId, thumbnail: TINY_PNG_DATA_URL });
+
+    const res = await app.inject({ method: "GET", url: `/api/games/${gameId}/thumbnail.png` });
+    expect(res.statusCode).toBe(404);
   });
 });
 

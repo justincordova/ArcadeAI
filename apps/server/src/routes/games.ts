@@ -13,6 +13,7 @@ import {
   validationError,
 } from "../lib/errors.js";
 import { loadOwnedGame } from "../lib/ownership.js";
+import { serveThumbnail } from "../lib/serve-thumbnail.js";
 import { endSSE, startHeartbeat, writeSSE, writeSSEHeaders } from "../lib/sse.js";
 import { categorizeError } from "../services/llm/categorize-error.js";
 import { classifyPrompt } from "../services/llm/classify.js";
@@ -494,6 +495,13 @@ export async function gamesRoutes(app: FastifyInstance) {
   app.get("/api/games", async (request, reply) => {
     const userId = request.authSession.user.id;
 
+    // NOTE: `thumbnail` (a base64 data URL up to ~350 KB each) is deliberately
+    // NOT selected here. Returning every game's thumbnail inline made this
+    // unpaginated response balloon to tens of MB for an active library, on
+    // every dashboard load. The client loads thumbnails lazily by reference
+    // from GET /api/games/:id/thumbnail.png instead. `hasThumbnail` tells the
+    // client whether to render the <img> or a placeholder without shipping the
+    // bytes.
     const rows = await db
       .select({
         id: games.id,
@@ -509,7 +517,36 @@ export async function gamesRoutes(app: FastifyInstance) {
       .where(eq(games.userId, userId))
       .orderBy(desc(games.updatedAt));
 
-    return reply.send(rows);
+    const summaries = rows.map(({ thumbnail, ...rest }) => ({
+      ...rest,
+      hasThumbnail: Boolean(thumbnail),
+    }));
+
+    return reply.send(summaries);
+  });
+
+  // GET /api/games/:id/thumbnail.png — owner-scoped thumbnail bytes.
+  // Loaded lazily by the dashboard <img> so the list payload stays small.
+  // Auth guard covers /api/games/*; the <img> sends the session cookie
+  // same-origin. Decodes the stored data URL and serves real image bytes
+  // (or a placeholder), cacheable so repeat dashboard visits don't refetch.
+  app.get("/api/games/:id/thumbnail.png", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return sendError(reply, 400, validationError("Invalid id"));
+    }
+    const { id } = paramsResult.data;
+    const userId = request.authSession.user.id;
+
+    const rows = await db
+      .select({ thumbnail: games.thumbnail })
+      .from(games)
+      .where(and(eq(games.id, id), eq(games.userId, userId)))
+      .limit(1);
+    const row = rows[0];
+    if (!row) return sendError(reply, 404, notFoundError());
+
+    serveThumbnail(reply, row.thumbnail);
   });
 
   // PATCH /api/games/:id — rename game

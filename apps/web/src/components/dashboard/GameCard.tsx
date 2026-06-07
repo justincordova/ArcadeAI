@@ -3,6 +3,7 @@ import {
   type GameSummary,
   deleteGame,
   fetchGame,
+  gameThumbnailUrl,
   patchGame,
 } from "@/lib/api/games.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -277,10 +278,11 @@ export function GameCard({ game, view }: GameCardProps) {
                 flexShrink: 0,
               }}
             >
-              {game.thumbnail ? (
+              {game.hasThumbnail ? (
                 <img
-                  src={game.thumbnail}
+                  src={gameThumbnailUrl(game.id)}
                   alt={game.title}
+                  loading="lazy"
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
                 />
               ) : (
@@ -435,10 +437,11 @@ export function GameCard({ game, view }: GameCardProps) {
               position: "relative",
             }}
           >
-            {game.thumbnail ? (
+            {game.hasThumbnail ? (
               <img
-                src={game.thumbnail}
+                src={gameThumbnailUrl(game.id)}
                 alt={game.title}
+                loading="lazy"
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
               />
             ) : (
