@@ -256,6 +256,9 @@ describe("GET /api/games/:id/thumbnail.png", () => {
     const res = await app.inject({ method: "GET", url: `/api/games/${gameId}/thumbnail.png` });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("image/png");
+    // Per-user resource — must be privately cached so a shared cache can't
+    // serve it cross-user.
+    expect(String(res.headers["cache-control"])).toContain("private");
     // PNG signature 89 50 4e 47
     const buf = res.rawPayload;
     expect(buf[0]).toBe(0x89);

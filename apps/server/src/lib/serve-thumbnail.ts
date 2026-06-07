@@ -13,35 +13,46 @@ const FALLBACK_PNG_BASE64 =
 
 export const FALLBACK_PNG = Buffer.from(FALLBACK_PNG_BASE64, "base64");
 
-// Long cache — thumbnails change rarely once captured.
-export const THUMBNAIL_CACHE_HEADER =
-  "public, max-age=600, s-maxage=3600, stale-while-revalidate=86400";
-
+// Cache directives. "public" thumbnails (OG, served by public slug) can be
+// cached by shared/intermediary caches. Owner-scoped thumbnails are per-user
+// private resources and MUST use "private" so a URL-keyed shared cache can't
+// serve one user's thumbnail to another.
+const PUBLIC_CACHE_HEADER = "public, max-age=600, s-maxage=3600, stale-while-revalidate=86400";
+const PRIVATE_CACHE_HEADER = "private, max-age=600";
 // Short cache for transient placeholder responses (thumbnail not captured yet,
 // or a malformed/truncated capture that may be re-captured). Caching the
 // placeholder long would shadow the real thumbnail once it lands.
 export const PLACEHOLDER_CACHE_HEADER = "public, max-age=60";
 
+type ThumbnailVisibility = "public" | "private";
+
 /**
  * Write a game thumbnail (data: URL) to the reply as image bytes, or a
  * short-cached placeholder PNG when it's absent/malformed. Used by both the
- * OG route and the owner dashboard thumbnail route.
+ * OG route (visibility "public", by slug) and the owner dashboard thumbnail
+ * route (visibility "private", cookie-authenticated). The placeholder is
+ * non-sensitive so it always uses the short public cache.
  */
-export function serveThumbnail(reply: FastifyReply, thumbnail: string | null): void {
-  if (!thumbnail) {
+export function serveThumbnail(
+  reply: FastifyReply,
+  thumbnail: string | null,
+  visibility: ThumbnailVisibility = "public"
+): void {
+  const sendPlaceholder = () => {
     reply
       .header("Content-Type", "image/png")
       .header("Cache-Control", PLACEHOLDER_CACHE_HEADER)
       .send(FALLBACK_PNG);
+  };
+
+  if (!thumbnail) {
+    sendPlaceholder();
     return;
   }
 
   const match = thumbnail.match(/^data:image\/(png|jpeg|webp);base64,(.+)$/);
   if (!match) {
-    reply
-      .header("Content-Type", "image/png")
-      .header("Cache-Control", PLACEHOLDER_CACHE_HEADER)
-      .send(FALLBACK_PNG);
+    sendPlaceholder();
     return;
   }
 
@@ -51,14 +62,12 @@ export function serveThumbnail(reply: FastifyReply, thumbnail: string | null): v
   // Buffer.from silently drops invalid base64 — verify the magic bytes match
   // the declared MIME so we never serve garbage bytes as a valid image.
   if (!hasExpectedMagic(buf, match[1])) {
-    reply
-      .header("Content-Type", "image/png")
-      .header("Cache-Control", PLACEHOLDER_CACHE_HEADER)
-      .send(FALLBACK_PNG);
+    sendPlaceholder();
     return;
   }
 
-  reply.header("Content-Type", mime).header("Cache-Control", THUMBNAIL_CACHE_HEADER).send(buf);
+  const cacheHeader = visibility === "private" ? PRIVATE_CACHE_HEADER : PUBLIC_CACHE_HEADER;
+  reply.header("Content-Type", mime).header("Cache-Control", cacheHeader).send(buf);
 }
 
 // Cheap magic-byte sniff for the three image types we accept. Returns false if

@@ -546,7 +546,9 @@ export async function gamesRoutes(app: FastifyInstance) {
     const row = rows[0];
     if (!row) return sendError(reply, 404, notFoundError());
 
-    serveThumbnail(reply, row.thumbnail);
+    // "private" — this is a per-user, cookie-authed resource. A shared cache
+    // keyed only on the URL must not serve one user's thumbnail to another.
+    serveThumbnail(reply, row.thumbnail, "private");
   });
 
   // PATCH /api/games/:id — rename game
