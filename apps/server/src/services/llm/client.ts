@@ -203,3 +203,28 @@ function logUsageOnDrain(
       // handler logs the failure separately via setErrorHandler / refund.
     });
 }
+
+/**
+ * Whether an LLM error looks like an auth/config failure (invalid or revoked
+ * API key, forbidden) rather than a transient/per-request issue (rate limit,
+ * timeout, 5xx). The soft-fail helpers (classify/title/summarize/etc.) degrade
+ * silently on ANY error — which is correct per SPEC §6, but means a dead API
+ * key degrades the whole product to defaults with no alerting. Callers use this
+ * to log auth failures at ERROR (a 100%-of-requests config fault ops must see)
+ * while keeping transient failures at WARN.
+ */
+export function isLlmAuthError(err: unknown): boolean {
+  // The AI SDK surfaces HTTP status on APICallError-shaped errors; fall back to
+  // a message sniff for wrappers that don't.
+  const status =
+    (err as { statusCode?: number; status?: number } | null)?.statusCode ??
+    (err as { status?: number } | null)?.status;
+  if (status === 401 || status === 403) return true;
+  const msg = (err instanceof Error ? err.message : String(err ?? "")).toLowerCase();
+  return (
+    msg.includes("invalid api key") ||
+    msg.includes("incorrect api key") ||
+    msg.includes("authentication") ||
+    msg.includes("unauthorized")
+  );
+}

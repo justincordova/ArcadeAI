@@ -4,6 +4,7 @@ import { GPT_MINI, computeCost } from "@arcadeai/shared/models.js";
 import { generateObject } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";
+import { isLlmAuthError } from "./client.js";
 
 const Schema = z.object({
   genre: z.enum(GENRE_BUCKETS),
@@ -53,7 +54,13 @@ export async function classifyPrompt(
       : "other";
     return { genre, styleTags: object.style_tags };
   } catch (err) {
-    logger?.warn({ err }, "genre classification failed; defaulting to other");
+    // Auth/config failures (dead/invalid key) hit 100% of requests and must be
+    // visible to ops; transient failures stay at warn. Either way we soft-fail.
+    if (isLlmAuthError(err)) {
+      logger?.error({ err }, "genre classification failed: LLM auth/config error");
+    } else {
+      logger?.warn({ err }, "genre classification failed; defaulting to other");
+    }
     return { genre: "other", styleTags: [] };
   }
 }

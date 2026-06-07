@@ -3,6 +3,7 @@ import { GPT_MINI, computeCost } from "@arcadeai/shared/models.js";
 import { generateObject } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";
+import { isLlmAuthError } from "./client.js";
 
 const Schema = z.object({
   category: z.enum(["syntax", "runtime", "logic"]),
@@ -41,7 +42,11 @@ export async function categorizeError(
     );
     return { category: object.category };
   } catch (err) {
-    logger?.warn({ err, raw: args.message }, "category classify failed; defaulting to runtime");
+    if (isLlmAuthError(err)) {
+      logger?.error({ err }, "category classify failed: LLM auth/config error");
+    } else {
+      logger?.warn({ err, raw: args.message }, "category classify failed; defaulting to runtime");
+    }
     return { category: "runtime" };
   }
 }

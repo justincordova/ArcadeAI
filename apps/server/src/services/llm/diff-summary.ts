@@ -11,6 +11,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { GPT_MINI, computeCost } from "@arcadeai/shared";
 import { generateText } from "ai";
 import type { FastifyBaseLogger } from "fastify";
+import { isLlmAuthError } from "./client.js";
 
 const DIFF_SUMMARY_SYSTEM_PROMPT = `You compare two versions of a single-file HTML5 game and describe what the user-visible change accomplished.
 
@@ -82,7 +83,11 @@ ${clipCode(newCode)}
     if (!trimmed || trimmed === "No visible changes.") return null;
     return trimmed;
   } catch (err) {
-    logger?.warn({ err }, "diff-summary failed");
+    if (isLlmAuthError(err)) {
+      logger?.error({ err }, "diff-summary failed: LLM auth/config error");
+    } else {
+      logger?.warn({ err }, "diff-summary failed");
+    }
     return null;
   }
 }
