@@ -18,7 +18,7 @@ import {
 } from "../lib/errors.js";
 import { loadPublicGame } from "../lib/ownership.js";
 import { getSession } from "../plugins/auth.js";
-import { likeGame, recordPlay, unlikeGame } from "../services/discover/likes.js";
+import { likeGame, recordPlayBySlug, unlikeGame } from "../services/discover/likes.js";
 import { InsufficientCreditsError, markSucceeded, recordRemix } from "../services/usage/charge.js";
 
 // Slugs are generated as the first 8 chars of a UUIDv4 with dashes stripped
@@ -196,17 +196,12 @@ export async function playRoutes(app: FastifyInstance) {
       return sendError(reply, 400, validationError("Invalid slug"));
     }
 
-    // Look up the gameId via slug. We could do this with a single UPDATE
-    // ... WHERE public_slug = ?, but going through the helper keeps the
-    // private/published filtering centralized.
-    const game = await loadPublicGame(parseResult.data.slug);
-    if (!game) return sendError(reply, 404, notFoundError());
-
-    // recordPlay is documented as fire-and-forget and swallows its own
-    // errors. Don't `await` it — letting the response return immediately
-    // shaves a DB write off every public play-page load, and the counter
-    // update still completes in the background.
-    void recordPlay(game.id);
+    // Bump the counter by slug in a single UPDATE rather than loading the full
+    // game body (large HTML) just to read its id — this is the hottest public
+    // write path, hit on every play-page mount. The `is_public` filter inside
+    // recordPlayBySlug makes an unknown/unpublished slug a harmless no-op.
+    // Fire-and-forget (swallows its own errors); the client ignores the body.
+    void recordPlayBySlug(parseResult.data.slug);
     return reply.send({ ok: true });
   });
 

@@ -126,3 +126,20 @@ export async function recordPlay(gameId: string): Promise<void> {
     // best-effort
   }
 }
+
+/**
+ * Increment play_count by 1, resolving the game by public slug in a single
+ * UPDATE. Best-effort, never throws. Avoids loading the full game body (large
+ * HTML) just to read its id on the hot public play-counter endpoint. The
+ * `is_public` filter makes an unknown/unpublished slug a harmless no-op.
+ */
+export async function recordPlayBySlug(slug: string): Promise<void> {
+  try {
+    await db
+      .update(games)
+      .set({ playCount: sql`${games.playCount} + 1` })
+      .where(and(eq(games.publicSlug, slug), eq(games.isPublic, true)));
+  } catch {
+    // best-effort
+  }
+}
