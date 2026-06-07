@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { games, messages, usageLog } from "@arcadeai/db";
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
@@ -795,15 +795,22 @@ export async function gamesRoutes(app: FastifyInstance) {
           createdAt: now,
         });
 
+        // Only the most recent feedback turns feed the refinement prompt
+        // (buildRefinementContext keeps the last MAX_FEEDBACK_TURNS). Filter to
+        // kind='feedback' and LIMIT in SQL instead of loading the whole message
+        // history — a heavily-iterated game can have hundreds of rows, and we
+        // need at most ~12. Fetch newest-first, then reverse to chronological.
+        const RECENT_FEEDBACK_LIMIT = 12;
         const pastRows = await db
-          .select({ content: messages.content, id: messages.id, kind: messages.kind })
+          .select({ content: messages.content })
           .from(messages)
-          .where(eq(messages.gameId, id))
-          .orderBy(asc(messages.createdAt));
+          .where(
+            and(eq(messages.gameId, id), eq(messages.kind, "feedback"), ne(messages.id, feedbackId))
+          )
+          .orderBy(desc(messages.createdAt))
+          .limit(RECENT_FEEDBACK_LIMIT);
 
-        const pastFeedback = pastRows
-          .filter((r) => r.kind === "feedback" && r.id !== feedbackId)
-          .map((r) => r.content);
+        const pastFeedback = pastRows.map((r) => r.content).reverse();
 
         ({ system, prompt: refinementPrompt } = await buildRefinementContext({
           game,
