@@ -42,12 +42,19 @@ export async function buildRefinementContext({
   pastFeedback,
   logger,
 }: RefinementContextInput): Promise<RefinementContext> {
-  // Use the real Claude tokenizer instead of a `length / 4` estimate. The
-  // estimate runs ~30% off for HTML+JS-heavy code and was occasionally
-  // sending oversized prompts that the model handled but charged extra for.
-  const codeTokens = countTokens(game.currentCode);
+  // Only run the (synchronous, CPU-bound, event-loop-blocking) Claude
+  // tokenizer when the code is long enough to *possibly* exceed the threshold.
+  // BPE never produces more tokens than characters, and for HTML+JS the ratio
+  // is well above ~3 chars/token, so anything under threshold*3 chars is
+  // provably under the token threshold — skip tokenization entirely for the
+  // common 8-20 KB game. We still use the real tokenizer (not a length/4
+  // estimate) for the borderline-large cases where precision matters.
+  const MIN_CHARS_TO_TOKENIZE = SUMMARIZATION_THRESHOLD_TOKENS * 3;
   let codeOrDigest = game.currentCode;
-  if (codeTokens > SUMMARIZATION_THRESHOLD_TOKENS) {
+  if (
+    game.currentCode.length > MIN_CHARS_TO_TOKENIZE &&
+    countTokens(game.currentCode) > SUMMARIZATION_THRESHOLD_TOKENS
+  ) {
     const digest = await summarizeCode(game.currentCode, logger);
     // Fall back to the real code if the summarizer returns an empty digest —
     // feeding Claude an empty "Current code" block would have it refine from
