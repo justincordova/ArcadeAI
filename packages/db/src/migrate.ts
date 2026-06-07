@@ -7,10 +7,14 @@ import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { runPostMigrate } from "./post-migrate.js";
 import { selectCustomSqliteIfNeeded } from "./sqlite-vec-loader.js";
 
-const dbPath = process.env.DATABASE_PATH;
-if (!dbPath) {
-  throw new Error("DATABASE_PATH environment variable is required");
-}
+// Default to the canonical server DB, anchored on this file's location (cwd is
+// packages/db/ when run via `bun run --filter @arcadeai/db migrate`). This
+// matches apps/server/src/lib/db.ts and drizzle.config.ts so a fresh local
+// `bun run db:migrate` migrates the same DB the server opens, without needing
+// DATABASE_PATH set. Production sets DATABASE_PATH explicitly.
+const dbPath =
+  process.env.DATABASE_PATH ??
+  fileURLToPath(new URL("../../../apps/server/data/arcadeai.db", import.meta.url));
 
 // Ensure the data directory exists
 mkdirSync(dirname(resolve(dbPath)), { recursive: true });
