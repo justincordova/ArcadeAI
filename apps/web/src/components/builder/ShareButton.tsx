@@ -15,7 +15,7 @@ export function ShareButton({ gameId }: { gameId: string }) {
   // changes. A one-shot getQueryData read would not react to the refetch
   // that invalidateQueries triggers after publish/unpublish, leaving the
   // button showing stale state until some unrelated re-render.
-  const { data: game } = useQuery<GameDetail>({
+  const { data: game, isError } = useQuery<GameDetail>({
     queryKey: ["game", gameId],
     queryFn: () => fetchGame(gameId),
   });
@@ -66,6 +66,11 @@ export function ShareButton({ gameId }: { gameId: string }) {
   }
 
   const busy = publishMutation.isPending || unpublishMutation.isPending;
+  // If the game query errored (cold cache + failed fetch), `game` is undefined
+  // and isPublic/slug would default to the private state — which could be
+  // wrong for an actually-published game. Don't let the user toggle against an
+  // unknown state; disable until the read recovers.
+  const disabled = busy || isError;
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -95,7 +100,8 @@ export function ShareButton({ gameId }: { gameId: string }) {
       <button
         type="button"
         onClick={handleClick}
-        disabled={busy}
+        disabled={disabled}
+        title={isError ? "Publish state unavailable — couldn't load the game" : undefined}
         style={{
           display: "inline-flex",
           alignItems: "center",
@@ -110,8 +116,8 @@ export function ShareButton({ gameId }: { gameId: string }) {
           border: isPublic ? "1px solid rgba(34,211,160,0.4)" : "1px solid var(--color-border)",
           background: isPublic ? "rgba(34,211,160,0.08)" : "transparent",
           color: isPublic ? "var(--color-success)" : "var(--color-text-secondary)",
-          cursor: busy ? "wait" : "pointer",
-          opacity: busy ? 0.6 : 1,
+          cursor: disabled ? (busy ? "wait" : "not-allowed") : "pointer",
+          opacity: disabled ? 0.6 : 1,
           transition: "all 0.15s",
         }}
       >
