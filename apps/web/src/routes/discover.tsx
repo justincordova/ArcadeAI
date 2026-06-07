@@ -204,6 +204,11 @@ function DiscoverPage() {
       >
         {query.isLoading ? (
           <DiscoverSkeleton />
+        ) : query.isError && items.length === 0 ? (
+          // Initial-load failure (no pages yet) — replace the grid with a retry.
+          // A failed *subsequent* page keeps the loaded grid and surfaces the
+          // error below the list instead (see the load-more block).
+          <DiscoverError onRetry={() => void query.refetch()} />
         ) : items.length === 0 ? (
           <DiscoverEmpty />
         ) : (
@@ -249,6 +254,36 @@ function DiscoverPage() {
                   {query.isFetchingNextPage ? "Loading…" : "Load more"}
                 </button>
               </div>
+            )}
+
+            {/* A failed fetchNextPage leaves the loaded pages intact; surface
+                the failure so the user knows more didn't load and can retry. */}
+            {query.isError && items.length > 0 && (
+              <p
+                style={{
+                  textAlign: "center",
+                  marginTop: 16,
+                  fontSize: 12,
+                  color: "var(--color-danger)",
+                }}
+              >
+                Couldn't load more games.{" "}
+                <button
+                  type="button"
+                  onClick={() => void query.fetchNextPage()}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    color: "var(--color-text-primary)",
+                    textDecoration: "underline",
+                    cursor: "pointer",
+                    font: "inherit",
+                  }}
+                >
+                  Retry
+                </button>
+              </p>
             )}
           </>
         )}
@@ -348,6 +383,54 @@ function DiscoverSkeleton() {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+function DiscoverError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        padding: "80px 24px",
+        textAlign: "center",
+        gap: 12,
+      }}
+    >
+      <p
+        className="font-display"
+        style={{
+          fontSize: 22,
+          fontWeight: 600,
+          color: "var(--color-text-primary)",
+          marginBottom: 4,
+        }}
+      >
+        Couldn't load the gallery.
+      </p>
+      <p style={{ fontSize: 13, color: "var(--color-text-secondary)", maxWidth: 380 }}>
+        Something went wrong fetching games. Check your connection and try again.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        style={{
+          marginTop: 4,
+          padding: "8px 18px",
+          borderRadius: 9,
+          fontSize: 13,
+          fontWeight: 600,
+          fontFamily: "inherit",
+          border: "1px solid var(--color-border)",
+          background: "var(--color-surface)",
+          color: "var(--color-text-primary)",
+          cursor: "pointer",
+        }}
+      >
+        Retry
+      </button>
     </div>
   );
 }
