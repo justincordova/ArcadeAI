@@ -57,6 +57,13 @@
       "when": 1780589988355,
       "tag": "0007_easy_karen_page",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1780836728127,
+      "tag": "0008_common_corsair",
+      "breakpoints": true
     }
   ]
 }

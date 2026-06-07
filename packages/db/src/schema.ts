@@ -145,6 +145,10 @@ export const games = sqliteTable(
     // genre (the equality predicate), then is_public, then published_at for the
     // ORDER BY.
     index("idx_games_genre_public_published").on(table.genre, table.isPublic, table.publishedAt),
+    // Discover "top" sort orders public games by like_count desc. Without this
+    // the ORDER BY can't use an index and SQLite full-sorts the public set on
+    // every page. Lead with is_public (the equality filter), then like_count.
+    index("idx_games_public_likecount").on(table.isPublic, table.likeCount),
   ]
 );
 

@@ -1,0 +1,1 @@
+CREATE INDEX `idx_games_public_likecount` ON `games` (`is_public`,`like_count`);
