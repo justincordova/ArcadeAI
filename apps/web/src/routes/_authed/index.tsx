@@ -9,7 +9,7 @@ import { GameGrid } from "@/components/dashboard/GameGrid.js";
 import { GAMES_QUERY_KEY, type GameSummary, listGames } from "@/lib/api/games.js";
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { AlertCircle, Plus } from "lucide-react";
 import type React from "react";
 import { useMemo, useState } from "react";
 
@@ -142,7 +142,7 @@ function Dashboard() {
   const [genre, setGenre] = useState<GenreFilter>(getStoredGenre);
   const [sort, setSort] = useState<SortKey>(getStoredSort);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: GAMES_QUERY_KEY,
     queryFn: listGames,
   });
@@ -356,8 +356,8 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Toolbar — only when the library has games */}
-        {!isLoading && hasGames && (
+        {/* Toolbar — only when the library loaded and has games */}
+        {!isLoading && !isError && hasGames && (
           <DashboardToolbar
             query={query}
             onQueryChange={setQuery}
@@ -372,6 +372,8 @@ function Dashboard() {
         {/* Content */}
         {isLoading ? (
           <GameCardSkeletons view={view} />
+        ) : isError ? (
+          <LoadError onRetry={() => void refetch()} />
         ) : !hasGames ? (
           <EmptyState />
         ) : !hasResults ? (
@@ -385,6 +387,44 @@ function Dashboard() {
           <GameGrid games={filteredGames} view={view} />
         )}
       </div>
+    </div>
+  );
+}
+
+function LoadError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingTop: 80,
+        paddingBottom: 80,
+        textAlign: "center",
+        gap: 12,
+      }}
+    >
+      <AlertCircle size={28} strokeWidth={1.8} style={{ color: "var(--color-danger)" }} />
+      <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>
+        Couldn't load your games. Check your connection and try again.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        style={{
+          padding: "7px 14px",
+          borderRadius: 8,
+          border: "1px solid var(--color-border)",
+          background: "var(--color-surface)",
+          color: "var(--color-text-secondary)",
+          fontSize: 12,
+          fontFamily: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        Retry
+      </button>
     </div>
   );
 }
