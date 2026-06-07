@@ -8,6 +8,7 @@ import { Heart, Play, Sparkles } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { LogoFull } from "../components/Logo.js";
 import { GameIframe } from "../components/builder/GameIframe.js";
+import { toast } from "../components/ui/sonner.js";
 import { useSession } from "../hooks/useSession.js";
 import { API_BASE } from "../lib/api/client.js";
 import {
@@ -98,6 +99,9 @@ function PlayPage() {
     },
     onError: (_err, _vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(["public-game", slug], ctx.prev);
+      // The optimistic heart already snapped back above; tell the user why so
+      // it doesn't look like a misclick.
+      toast.error("Couldn't update like");
     },
     onSettled: () => {
       // Refresh discover lists too so the count there stays in sync.

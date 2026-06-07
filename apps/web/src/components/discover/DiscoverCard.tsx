@@ -13,6 +13,7 @@
 // updates the in-memory cached infinite-query item. On error we roll
 // back. Anonymous likers are routed through /sign-in with a `next`.
 
+import { toast } from "@/components/ui/sonner.js";
 import { type DiscoverGame, likeGame, unlikeGame } from "@/lib/api/games.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
@@ -75,6 +76,9 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
           queryClient.setQueryData(key, value);
         }
       }
+      // The optimistic heart already reverted; surface why so it doesn't read
+      // as a misclick.
+      toast.error("Couldn't update like");
     },
     onSettled: () => {
       // Sync the public-play-page query for this slug so a navigation
