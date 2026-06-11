@@ -1,6 +1,4 @@
-import { API_BASE } from "./client.js";
-
-const API = API_BASE;
+import { API_BASE, ApiError, apiFetch } from "./client.js";
 
 export interface GameSummary {
   id: string;
@@ -17,7 +15,7 @@ export interface GameSummary {
 
 /** URL for a game's thumbnail image, served owner-scoped (cookie auth). */
 export function gameThumbnailUrl(id: string): string {
-  return `${API}/api/games/${id}/thumbnail.png`;
+  return `${API_BASE}/api/games/${id}/thumbnail.png`;
 }
 
 export interface PublicGame {
@@ -64,104 +62,62 @@ export interface GameDetail {
 }
 
 export async function listGames(): Promise<GameSummary[]> {
-  const res = await fetch(`${API}/api/games`, { credentials: "include" });
-  if (!res.ok) throw new Error("Failed to fetch games");
-  return res.json() as Promise<GameSummary[]>;
+  return apiFetch<GameSummary[]>("/api/games");
 }
 
 export async function fetchGame(id: string): Promise<GameDetail> {
-  const res = await fetch(`${API}/api/games/${id}`, { credentials: "include" });
-  if (!res.ok) throw new Error("Game not found");
-  return res.json() as Promise<GameDetail>;
+  return apiFetch<GameDetail>(`/api/games/${id}`);
 }
 
 export async function patchGame(
   id: string,
   update: { title: string }
 ): Promise<{ id: string; title: string; updatedAt: number }> {
-  const res = await fetch(`${API}/api/games/${id}`, {
+  return apiFetch<{ id: string; title: string; updatedAt: number }>(`/api/games/${id}`, {
     method: "PATCH",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(update),
+    json: update,
   });
-  if (!res.ok) throw new Error("Failed to rename game");
-  return res.json() as Promise<{ id: string; title: string; updatedAt: number }>;
 }
 
 export async function deleteGame(id: string): Promise<void> {
-  const res = await fetch(`${API}/api/games/${id}`, {
-    method: "DELETE",
-    credentials: "include",
-    // Content-Type is required by the CSRF guard for every state-changing
-    // /api/* request (see apps/server/src/plugins/csrf.ts). DELETE carries
-    // no payload so we send an empty JSON object.
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  if (!res.ok) throw new Error("Failed to delete game");
+  // No payload — apiFetch supplies the CSRF-required empty "{}" body.
+  await apiFetch<void>(`/api/games/${id}`, { method: "DELETE" });
 }
 
 export async function postThumbnail(id: string, dataUrl: string): Promise<void> {
-  const res = await fetch(`${API}/api/games/${id}/thumbnail`, {
+  await apiFetch<void>(`/api/games/${id}/thumbnail`, {
     method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ thumbnail: dataUrl }),
+    json: { thumbnail: dataUrl },
   });
-  if (!res.ok) throw new Error("Failed to save thumbnail");
 }
 
 // ── Public sharing ───────────────────────────────────────────────────────────
 
 export async function publishGame(id: string): Promise<PublishResponse> {
-  const res = await fetch(`${API}/api/games/${id}/publish`, {
-    method: "POST",
-    credentials: "include",
-    // Empty JSON body keeps the CSRF guard happy (state-changing /api/*
-    // requests must declare application/json; see plugins/csrf.ts).
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  if (!res.ok) throw new Error("Failed to publish game");
-  return res.json() as Promise<PublishResponse>;
+  return apiFetch<PublishResponse>(`/api/games/${id}/publish`, { method: "POST" });
 }
 
 export async function unpublishGame(id: string): Promise<void> {
-  const res = await fetch(`${API}/api/games/${id}/unpublish`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  if (!res.ok) throw new Error("Failed to unpublish game");
+  await apiFetch<void>(`/api/games/${id}/unpublish`, { method: "POST" });
 }
 
 /**
  * Fetch a public game by slug. Returns null on 404 so callers can render
- * a "not found" state cleanly instead of catching exceptions.
+ * a "not found" state cleanly instead of catching exceptions. Other non-2xx
+ * statuses throw an ApiError.
  */
 export async function fetchPublicGame(slug: string): Promise<PublicGame | null> {
-  const res = await fetch(`${API}/api/play/${slug}`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error("Failed to load public game");
-  return res.json() as Promise<PublicGame>;
+  try {
+    return await apiFetch<PublicGame>(`/api/play/${slug}`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
 }
-
-// Empty-body POSTs need a literal "{}" payload when Content-Type is set
-// to application/json — Fastify's default JSON parser rejects an empty
-// body as "Body cannot be empty when content-type is set to
-// 'application/json'". The CSRF guard requires the JSON content-type
-// (csrf.ts) for state-changing requests, so we can't drop the header.
 
 /** Fire-and-forget play counter. Failures are silently ignored. */
 export function recordPlay(slug: string): void {
-  fetch(`${API}/api/play/${slug}/play`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  }).catch(() => {
+  apiFetch<void>(`/api/play/${slug}/play`, { method: "POST" }).catch(() => {
     /* silent */
   });
 }
@@ -173,27 +129,21 @@ export interface LikeResponse {
 }
 
 export async function likeGame(slug: string): Promise<LikeResponse> {
-  const res = await fetch(`${API}/api/play/${slug}/like`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  if (res.status === 401) throw new Error("Sign in to like");
-  if (!res.ok) throw new Error("Failed to like game");
-  return res.json() as Promise<LikeResponse>;
+  try {
+    return await apiFetch<LikeResponse>(`/api/play/${slug}/like`, { method: "POST" });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) throw new Error("Sign in to like");
+    throw err;
+  }
 }
 
 export async function unlikeGame(slug: string): Promise<LikeResponse> {
-  const res = await fetch(`${API}/api/play/${slug}/like`, {
-    method: "DELETE",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  if (res.status === 401) throw new Error("Sign in to like");
-  if (!res.ok) throw new Error("Failed to unlike game");
-  return res.json() as Promise<LikeResponse>;
+  try {
+    return await apiFetch<LikeResponse>(`/api/play/${slug}/like`, { method: "DELETE" });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) throw new Error("Sign in to like");
+    throw err;
+  }
 }
 
 // Discover listing
@@ -230,37 +180,28 @@ export async function fetchDiscover(params: {
   if (params.limit) search.set("limit", String(params.limit));
   if (params.offset !== undefined) search.set("offset", String(params.offset));
 
-  const res = await fetch(`${API}/api/discover?${search.toString()}`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error("Failed to load discover");
-  return res.json() as Promise<DiscoverPage>;
+  return apiFetch<DiscoverPage>(`/api/discover?${search.toString()}`);
 }
 
 export async function remixPublicGame(slug: string): Promise<RemixResponse> {
-  const res = await fetch(`${API}/api/play/${slug}/remix`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: "{}",
-  });
-  if (res.status === 401) {
-    throw new Error("Sign in to remix");
-  }
-  if (res.status === 402) {
-    // Server returns the new ApiError shape: { code, message, details: { kind, resetAt } }.
-    // The old shape ({ kind, resetAt } at top level) is normalized by reading
-    // either path so a stale build can't break this gracefully-degraded UX.
-    const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    const details = (raw.details as Record<string, unknown> | undefined) ?? raw;
-    const kind = details.kind as string | undefined;
-    const resetAt = typeof details.resetAt === "number" ? details.resetAt : undefined;
-    const code = raw.code as string | undefined;
-    if (code === "FREE_TIER_EXHAUSTED" || kind === "lifetime" || resetAt === 0) {
-      throw new Error("You've used your free trial. Upgrade for more remixes.");
+  try {
+    return await apiFetch<RemixResponse>(`/api/play/${slug}/remix`, { method: "POST" });
+  } catch (err) {
+    if (!(err instanceof ApiError)) throw err;
+    if (err.status === 401) throw new Error("Sign in to remix");
+    if (err.status === 402) {
+      // 402 envelope: { code, message, details: { kind, resetAt } }. A
+      // lifetime/free-trial exhaustion (vs a periodic credit reset) gets a
+      // distinct message. `code` is the contract; kind/resetAt are the legacy
+      // fallback so a stale server can't break this gracefully-degraded UX.
+      const details = err.details ?? {};
+      const kind = details.kind as string | undefined;
+      const resetAt = typeof details.resetAt === "number" ? details.resetAt : undefined;
+      if (err.code === "FREE_TIER_EXHAUSTED" || kind === "lifetime" || resetAt === 0) {
+        throw new Error("You've used your free trial. Upgrade for more remixes.");
+      }
+      throw new Error("Out of credits — upgrade for more remixes.");
     }
-    throw new Error("Out of credits — upgrade for more remixes.");
+    throw err;
   }
-  if (!res.ok) throw new Error("Failed to remix game");
-  return res.json() as Promise<RemixResponse>;
 }

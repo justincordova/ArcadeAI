@@ -1,7 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { API_BASE } from "../lib/api/client.js";
-
-const API = API_BASE;
+import { apiFetch } from "../lib/api/client.js";
 
 interface AppConfig {
   hasAnthropicKey: boolean;
@@ -9,9 +7,7 @@ interface AppConfig {
 }
 
 async function fetchConfig(): Promise<AppConfig> {
-  const res = await fetch(`${API}/api/config`);
-  if (!res.ok) throw new Error("Failed to fetch config");
-  return res.json() as Promise<AppConfig>;
+  return apiFetch<AppConfig>("/api/config");
 }
 
 export function useConfig() {

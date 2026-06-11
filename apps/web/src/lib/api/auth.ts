@@ -1,10 +1,8 @@
 import { queryClient } from "@/lib/query-client.js";
 import type { MeResponse } from "@arcadeai/shared";
-import { API_BASE } from "./client.js";
+import { API_BASE, apiFetch, toApiError } from "./client.js";
 
 export type { MeResponse };
-
-const API = API_BASE;
 
 /**
  * Fetch the current user. Returns `null` on 401 so callers (route guards,
@@ -16,19 +14,22 @@ const API = API_BASE;
  *
  * Counterpart: routes that REQUIRE auth and want to surface failure should
  * call `patchMe` / `deleteMe` from `lib/api/me.ts`, which throw on error.
+ *
+ * This stays a hand-rolled fetch rather than `apiFetch` because the 401→null
+ * mapping is the opposite of apiFetch's throw-on-non-2xx contract.
  */
 export async function fetchMeOrNull(): Promise<MeResponse | null> {
-  const res = await fetch(`${API}/api/me`, { credentials: "include" });
+  const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
   if (res.status === 401) return null;
   if (!res.ok) {
-    // 4xx (except 401) and 5xx are real errors — surface them.
-    throw new Error(`Failed to load profile (${res.status})`);
+    // 4xx (except 401) and 5xx are real errors — surface them with code.
+    throw await toApiError(res);
   }
   return (await res.json()) as MeResponse;
 }
 
 export async function signOut(): Promise<void> {
-  await fetch(`${API}/api/auth/sign-out`, {
+  await fetch(`${API_BASE}/api/auth/sign-out`, {
     method: "POST",
     credentials: "include",
   });
@@ -54,16 +55,10 @@ export async function startSocialSignIn(provider: "google" | "github", next = "/
   // absolute URL anchored at the web origin so the user lands on the SPA.
   const callbackURL = new URL(next || "/", window.location.origin).toString();
 
-  const res = await fetch(`${API}/api/auth/sign-in/social`, {
+  const body = await apiFetch<{ url?: string; redirect?: boolean }>("/api/auth/sign-in/social", {
     method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ provider, callbackURL }),
+    json: { provider, callbackURL },
   });
-  if (!res.ok) {
-    throw new Error(`Sign-in failed: ${res.status}`);
-  }
-  const body = (await res.json()) as { url?: string; redirect?: boolean };
   if (body.url) {
     window.location.href = body.url;
   } else {
