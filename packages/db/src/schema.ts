@@ -109,6 +109,11 @@ export const games = sqliteTable(
       .references(() => users.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     currentCode: text("current_code").notNull().default(""),
+    // Single-level undo: the code that was current immediately before the most
+    // recent refinement/repair. NULL means there is nothing to undo (freshly
+    // generated, already undone, or never refined). Undo swaps this into
+    // current_code and clears it — there is no multi-step history by design.
+    previousCode: text("previous_code"),
     thumbnail: text("thumbnail"),
     genre: text("genre", { enum: GENRE_VALUES }),
     originalPrompt: text("original_prompt").notNull(),

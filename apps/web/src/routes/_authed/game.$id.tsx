@@ -107,6 +107,7 @@ function GamePage() {
       initialMessages={data.messages}
       gameId={data.id}
       externalStreaming={data.inProgress && !data.currentCode}
+      canUndo={data.canUndo}
     />
   );
 }

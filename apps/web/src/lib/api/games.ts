@@ -59,6 +59,8 @@ export interface GameDetail {
    * until current_code is populated.
    */
   inProgress: boolean;
+  /** True when the last refinement/repair can be undone (single-level). */
+  canUndo: boolean;
 }
 
 export async function listGames(): Promise<GameSummary[]> {
@@ -82,6 +84,20 @@ export async function patchGame(
 export async function deleteGame(id: string): Promise<void> {
   // No payload — apiFetch supplies the CSRF-required empty "{}" body.
   await apiFetch<void>(`/api/games/${id}`, { method: "DELETE" });
+}
+
+export interface UndoResponse {
+  currentCode: string;
+  canUndo: boolean;
+}
+
+/**
+ * Single-level undo of the last refinement/repair. Restores the pre-refinement
+ * code server-side and returns it. Throws an ApiError with status 409 when
+ * there is nothing to undo (never refined, or the slot was already consumed).
+ */
+export async function undoRefinement(id: string): Promise<UndoResponse> {
+  return apiFetch<UndoResponse>(`/api/games/${id}/undo`, { method: "POST" });
 }
 
 export async function postThumbnail(id: string, dataUrl: string): Promise<void> {

@@ -4,7 +4,7 @@ import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
-import { db } from "../lib/db.js";
+import { db, sqlite } from "../lib/db.js";
 import {
   conflictError,
   notFoundError,
@@ -468,7 +468,17 @@ export async function gamesRoutes(app: FastifyInstance) {
         .limit(1),
     ]);
 
-    return reply.send({ ...game, messages: msgs, inProgress: inflight.length > 0 });
+    // Strip previous_code from the response — it can be a full HTML document
+    // and the client only needs to know whether an undo is available, not the
+    // bytes themselves (undo restores them server-side). Expose that as the
+    // boolean `canUndo` instead.
+    const { previousCode, ...rest } = game;
+    return reply.send({
+      ...rest,
+      canUndo: Boolean(previousCode),
+      messages: msgs,
+      inProgress: inflight.length > 0,
+    });
   });
 
   // DELETE /api/games/:id
@@ -672,6 +682,73 @@ export async function gamesRoutes(app: FastifyInstance) {
     await db.update(games).set({ isPublic: false, updatedAt: Date.now() }).where(eq(games.id, id));
 
     return reply.send({ isPublic: false });
+  });
+
+  // POST /api/games/:id/undo — single-level undo of the last refinement/repair.
+  // Restores previous_code into current_code and clears previous_code, so undo
+  // is one step deep by design (no redo, no stack). Idempotent-safe: a second
+  // undo with nothing to restore returns 409 rather than corrupting state.
+  app.post("/api/games/:id/undo", async (request, reply) => {
+    const paramsResult = GameIdParams.safeParse(request.params);
+    if (!paramsResult.success) {
+      return sendError(reply, 400, validationError("Invalid id"));
+    }
+    const { id } = paramsResult.data;
+    const userId = request.authSession.user.id;
+
+    const game = await loadOwnedGame(id, userId);
+    if (!game) return sendError(reply, 404, notFoundError());
+
+    // Reject while any stream for this game is in flight. A refinement/repair
+    // loads current_code at request start and persists (previous_code,
+    // current_code) at completion — under background-stream semantics it keeps
+    // running even after the client disconnects, so an undo accepted mid-stream
+    // would be silently overwritten when the stream lands. Same in-flight
+    // predicate as GET /api/games/:id's `inProgress`.
+    const inflight = await db
+      .select({ id: usageLog.id })
+      .from(usageLog)
+      .where(and(eq(usageLog.gameId, id), eq(usageLog.succeeded, 0), isNull(usageLog.refundedAt)))
+      .limit(1);
+    if (inflight.length > 0) {
+      return sendError(reply, 409, {
+        code: "CONFLICT",
+        message: "A stream is in progress for this game",
+      });
+    }
+
+    // Atomic swap with a guard on previous_code. Folding the ownership and
+    // "has something to undo" checks into the WHERE clause makes concurrent
+    // double-undo safe: only the first request matches; the second sees no
+    // row. RETURNING hands back the restored code from the same statement, so
+    // there's no second read to race against a concurrent write. Mirrors the
+    // atomic-guarded-UPDATE pattern in services/usage/charge.ts.
+    const restored = sqlite
+      .query<{ current_code: string }, [number, string, string]>(
+        `UPDATE games
+         SET current_code = previous_code,
+             previous_code = NULL,
+             updated_at = ?
+         WHERE id = ? AND user_id = ? AND previous_code IS NOT NULL
+         RETURNING current_code`
+      )
+      .get(Date.now(), id, userId);
+
+    if (!restored) {
+      // Owned (we passed loadOwnedGame) but nothing to undo — the game has
+      // never been refined, or the single undo slot was already consumed.
+      return sendError(reply, 409, {
+        code: "CONFLICT",
+        message: "Nothing to undo",
+      });
+    }
+
+    // Restored code comes straight from the UPDATE's RETURNING clause so the
+    // client can update the preview without a second round-trip.
+    return reply.send({
+      currentCode: restored.current_code,
+      canUndo: false,
+    });
   });
 
   // POST /api/games/:id/thumbnail — save captured thumbnail
@@ -904,7 +981,14 @@ export async function gamesRoutes(app: FastifyInstance) {
         try {
           await db
             .update(games)
-            .set({ currentCode: sanitizedCode, updatedAt: Date.now() })
+            // Snapshot the pre-refinement code into previous_code so the user
+            // can undo a bad refinement (single-level). game.currentCode was
+            // loaded before the stream, so it's the code as it stood prior.
+            .set({
+              previousCode: game.currentCode,
+              currentCode: sanitizedCode,
+              updatedAt: Date.now(),
+            })
             .where(eq(games.id, id));
         } catch (err) {
           // Treat persistence failure as a stream error — same rationale as
@@ -1164,7 +1248,12 @@ export async function gamesRoutes(app: FastifyInstance) {
         try {
           await db
             .update(games)
-            .set({ currentCode: sanitizedRepair, updatedAt: Date.now() })
+            // Snapshot pre-repair code for single-level undo, mirroring refine.
+            .set({
+              previousCode: game.currentCode,
+              currentCode: sanitizedRepair,
+              updatedAt: Date.now(),
+            })
             .where(eq(games.id, id));
         } catch (err) {
           streamError = err instanceof Error ? err : new Error("Persistence failed");

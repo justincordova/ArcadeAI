@@ -7,16 +7,29 @@
 // Fullscreen calls requestFullscreen() on the iframe element. The iframe
 // is rendered with allow="fullscreen" so this works inside the sandbox.
 
-import { Maximize2, RotateCcw } from "lucide-react";
+import { Maximize2, RotateCcw, Undo2 } from "lucide-react";
 import type { RefObject } from "react";
 
 interface PreviewControlsProps {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   onRestart: () => void;
   disabled?: boolean;
+  /**
+   * Single-level undo of the last refinement. When omitted, no undo button is
+   * shown (e.g. on the public play page or before the first refinement).
+   */
+  onUndo?: () => void;
+  /** Disable the undo button (nothing to undo, or an undo is in flight). */
+  undoDisabled?: boolean;
 }
 
-export function PreviewControls({ iframeRef, onRestart, disabled = false }: PreviewControlsProps) {
+export function PreviewControls({
+  iframeRef,
+  onRestart,
+  disabled = false,
+  onUndo,
+  undoDisabled = false,
+}: PreviewControlsProps) {
   function handleFullscreen() {
     const el = iframeRef.current;
     if (!el) return;
@@ -29,6 +42,14 @@ export function PreviewControls({ iframeRef, onRestart, disabled = false }: Prev
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {onUndo && (
+        <IconButton
+          label="Undo last change"
+          onClick={onUndo}
+          disabled={disabled || undoDisabled}
+          icon={<Undo2 size={12} strokeWidth={2} />}
+        />
+      )}
       <IconButton
         label="Restart game"
         onClick={onRestart}

@@ -368,3 +368,163 @@ describe("POST /api/games/:id/publish", () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+describe("POST /api/games/:id/undo", () => {
+  function setPreviousCode(gameId: string, previous: string | null) {
+    testDb.sqlite.query("UPDATE games SET previous_code = ? WHERE id = ?").run(previous, gameId);
+  }
+
+  function readCodes(gameId: string) {
+    return testDb.sqlite
+      .query<{ current_code: string; previous_code: string | null }, [string]>(
+        "SELECT current_code, previous_code FROM games WHERE id = ?"
+      )
+      .get(gameId);
+  }
+
+  test("restores previous_code into current_code and clears the slot", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
+    setPreviousCode(gameId, "<html>original</html>");
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { currentCode: string; canUndo: boolean };
+    expect(body.currentCode).toBe("<html>original</html>");
+    expect(body.canUndo).toBe(false);
+
+    const row = readCodes(gameId);
+    expect(row?.current_code).toBe("<html>original</html>");
+    expect(row?.previous_code).toBeNull();
+  });
+
+  test("returns 409 when there is nothing to undo", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>only</html>" });
+    // previous_code defaults to NULL — never refined.
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect((res.json() as { code: string }).code).toBe("CONFLICT");
+    // current_code must be untouched.
+    expect(readCodes(gameId)?.current_code).toBe("<html>only</html>");
+  });
+
+  test("a second undo is a no-op (single-level, no redo)", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
+    setPreviousCode(gameId, "<html>original</html>");
+
+    const first = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+    expect(first.statusCode).toBe(200);
+
+    const second = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+    expect(second.statusCode).toBe(409);
+    // Still the restored original — a second undo cannot resurrect the refined code.
+    expect(readCodes(gameId)?.current_code).toBe("<html>original</html>");
+  });
+
+  test("returns 409 while a stream is in flight for the game", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
+    setPreviousCode(gameId, "<html>original</html>");
+
+    // Simulate an in-flight refinement: charged (succeeded=0) and not
+    // refunded. Under background-stream semantics this row exists for the
+    // whole life of the stream, even after the client disconnects.
+    testDb.sqlite
+      .query(
+        `INSERT INTO usage_log
+           (id, user_id, game_id, action, credits_charged, succeeded, created_at)
+         VALUES (?, ?, ?, 'refinement', 2, 0, ?)`
+      )
+      .run("inflight-log", userId, gameId, Date.now());
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect((res.json() as { code: string }).code).toBe("CONFLICT");
+    // Nothing swapped — the stream's eventual persistence won't clobber an
+    // undo because the undo never happened.
+    const row = readCodes(gameId);
+    expect(row?.current_code).toBe("<html>refined</html>");
+    expect(row?.previous_code).toBe("<html>original</html>");
+  });
+
+  test("undo succeeds once the in-flight stream has settled (refunded)", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
+    setPreviousCode(gameId, "<html>original</html>");
+
+    // A failed-and-refunded stream is no longer in flight.
+    testDb.sqlite
+      .query(
+        `INSERT INTO usage_log
+           (id, user_id, game_id, action, credits_charged, succeeded, refunded_at, created_at)
+         VALUES (?, ?, ?, 'refinement', 2, 0, ?, ?)`
+      )
+      .run("settled-log", userId, gameId, Date.now(), Date.now());
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(readCodes(gameId)?.current_code).toBe("<html>original</html>");
+  });
+
+  test("404 when the game is not owned by the caller", async () => {
+    const { id: ownerId } = insertTestUser(testDb.sqlite);
+    const gameId = insertGame({ userId: ownerId, currentCode: "<html>refined</html>" });
+    setPreviousCode(gameId, "<html>original</html>");
+
+    // Caller is a different user.
+    stubUserId = "someone-else";
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(404);
+    // The owner's game must be untouched.
+    expect(readCodes(gameId)?.current_code).toBe("<html>refined</html>");
+    expect(readCodes(gameId)?.previous_code).toBe("<html>original</html>");
+  });
+});

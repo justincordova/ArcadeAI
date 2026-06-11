@@ -1,0 +1,1 @@
+ALTER TABLE `games` ADD `previous_code` text;

@@ -64,6 +64,13 @@
       "when": 1780836728127,
       "tag": "0008_common_corsair",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1780902314003,
+      "tag": "0009_silky_post",
+      "breakpoints": true
     }
   ]
 }

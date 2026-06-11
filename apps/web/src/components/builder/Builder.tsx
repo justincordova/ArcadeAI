@@ -2,7 +2,7 @@ import { getMissingKeyError, useConfig } from "@/hooks/useConfig.js";
 import { useSession } from "@/hooks/useSession.js";
 import { useStreamedGeneration } from "@/hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "@/hooks/useStreamedRefinement.js";
-import { GAMES_QUERY_KEY, postThumbnail } from "@/lib/api/games.js";
+import { GAMES_QUERY_KEY, postThumbnail, undoRefinement } from "@/lib/api/games.js";
 import {
   CREDIT_COSTS,
   ENFORCE_LIFETIME_LIMITS_FOR_FREE,
@@ -40,6 +40,12 @@ interface BuilderProps {
    * non-empty currentCode.
    */
   externalStreaming?: boolean;
+  /**
+   * Whether the last refinement/repair can be undone (from
+   * GET /api/games/:id). Enables the single-level Undo control. Only
+   * meaningful in the refinement (existing-game) flow.
+   */
+  canUndo?: boolean;
 }
 
 // Builder for /game/new — first generation only
@@ -126,6 +132,7 @@ function RefinementBuilder({
   initialMessages = [],
   gameId,
   externalStreaming = false,
+  canUndo = false,
 }: BuilderProps & { gameId: string }) {
   const queryClient = useQueryClient();
   const { status, streamingCode, finalCode, error, refine, stop, attachIframe } =
@@ -199,11 +206,13 @@ function RefinementBuilder({
     };
     setLocalMessages((prev) => [...prev, optimisticMsg]);
 
-    // Capture the pre-refinement code for the DiffViewer. Prefer the
-    // last-known good `finalCode` (if a previous refinement ran in
-    // this same session); otherwise fall back to `initialCode` (the
-    // server-loaded snapshot).
-    setPreviousCodeSnapshot(finalCode ?? initialCode);
+    // Capture the pre-refinement code for the DiffViewer. `repairedCode` is
+    // by construction the most recent code when set (an auto-repair or an
+    // undo landed after the last refinement stream), then the last streamed
+    // `finalCode`, then `initialCode` (the server-loaded snapshot). Skipping
+    // repairedCode here would diff the next refinement against a stale
+    // baseline — e.g. the pre-undo code the user just discarded.
+    setPreviousCodeSnapshot(repairedCode ?? finalCode ?? initialCode);
 
     // Drop any prior repaired code. It sits ahead of finalCode in the
     // displayCode precedence, so leaving it set would mask the result of
@@ -233,6 +242,40 @@ function RefinementBuilder({
       }
     }, 500);
     queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+  }
+
+  // Single-level undo. `canUndo` is the server's authoritative flag (from
+  // GET /api/games/:id); it re-syncs whenever the ["game", id] query refetches
+  // — which the status-change effect above already triggers after a refinement
+  // completes, and which handleUndo triggers after consuming the undo point.
+  // We mirror it into local state only so the button can flip to disabled
+  // immediately on click (optimistic), before the refetch confirms.
+  const [canUndoLocal, setCanUndoLocal] = useState(canUndo);
+  useEffect(() => {
+    setCanUndoLocal(canUndo);
+  }, [canUndo]);
+
+  const [undoing, setUndoing] = useState(false);
+  function handleUndo() {
+    if (undoing || !canUndoLocal) return;
+    setUndoing(true);
+    setCanUndoLocal(false); // optimistic — refetch reconfirms
+    undoRefinement(gameId)
+      .then((res) => {
+        // Override the displayed code with the restored version (repairedCode
+        // sits atop the displayCode precedence) and remount the preview.
+        setRepairedCode(res.currentCode);
+        setReloadKey((n) => n + 1);
+        queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+        queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY });
+      })
+      .catch((err) => {
+        // 409 = nothing to undo (slot already consumed). The flag is already
+        // optimistically false; the refetch will reconfirm server truth.
+        console.warn("[undo]", err);
+        queryClient.invalidateQueries({ queryKey: ["game", gameId] });
+      })
+      .finally(() => setUndoing(false));
   }
 
   function focusPromptInput() {
@@ -285,6 +328,9 @@ function RefinementBuilder({
         onThumbnail={handleThumbnail}
         reloadKey={reloadKey}
         onRestart={() => setReloadKey((n) => n + 1)}
+        onUndo={handleUndo}
+        canUndo={canUndoLocal}
+        undoing={undoing}
         diffPair={
           // Only render the inline diff once streaming has settled into
           // a finalCode and we still hold the before-snapshot.
@@ -318,6 +364,12 @@ interface BuilderLayoutProps {
   onThumbnail: (gameId: string, dataUrl: string) => void;
   reloadKey: number;
   onRestart: () => void;
+  /** Single-level undo handler. Omitted in the generation flow. */
+  onUndo?: () => void;
+  /** Whether an undo point exists (drives Undo button visibility/enabled). */
+  canUndo?: boolean;
+  /** True while an undo request is in flight. */
+  undoing?: boolean;
   /**
    * Before/after code for the live (most-recent) refinement turn. When
    * present, the DiffViewer renders under the last `summary` message
@@ -364,6 +416,9 @@ function BuilderLayout({
   onThumbnail,
   reloadKey,
   onRestart,
+  onUndo,
+  canUndo = false,
+  undoing = false,
   diffPair,
   streamLabel,
   submitLabel,
@@ -771,7 +826,13 @@ function BuilderLayout({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             {displayCode && (
-              <PreviewControls iframeRef={iframeRef} onRestart={onRestart} disabled={isStreaming} />
+              <PreviewControls
+                iframeRef={iframeRef}
+                onRestart={onRestart}
+                disabled={isStreaming}
+                onUndo={onUndo}
+                undoDisabled={!canUndo || undoing}
+              />
             )}
             {gameId && <ShareButton gameId={gameId} />}
           </div>
@@ -800,6 +861,7 @@ export function Builder({
   gameId,
   initialPrompt,
   externalStreaming = false,
+  canUndo = false,
 }: BuilderProps) {
   if (gameId) {
     return (
@@ -808,6 +870,7 @@ export function Builder({
         initialMessages={initialMessages}
         gameId={gameId}
         externalStreaming={externalStreaming}
+        canUndo={canUndo}
       />
     );
   }
