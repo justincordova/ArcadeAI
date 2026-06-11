@@ -13,6 +13,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Square } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { ChatEmptyState } from "./ChatEmptyState.js";
 import { DiffViewer } from "./DiffViewer.js";
 import { ErrorBanner } from "./ErrorBanner.js";
 import { GameIframe } from "./GameIframe.js";
@@ -23,6 +24,7 @@ import { ShareButton } from "./ShareButton.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
 import { StreamingCodePreview } from "./StreamingCodePreview.js";
 import { StreamingIndicator } from "./StreamingIndicator.js";
+import { useResizableSidebar } from "./useResizableSidebar.js";
 
 interface BuilderProps {
   initialCode?: string;
@@ -344,20 +346,6 @@ function SendIcon() {
 
 const SUGGESTIONS = ["A simple snake game", "Asteroids with power-ups", "Pong with AI opponent"];
 
-const SIDEBAR_WIDTH_KEY = "builder-sidebar-width";
-const SIDEBAR_MIN = 280;
-const SIDEBAR_MAX = 640;
-const SIDEBAR_DEFAULT = 340;
-
-function getStoredSidebarWidth(): number {
-  try {
-    const raw = localStorage.getItem(SIDEBAR_WIDTH_KEY);
-    const n = raw ? Number.parseInt(raw, 10) : Number.NaN;
-    if (!Number.isNaN(n) && n >= SIDEBAR_MIN && n <= SIDEBAR_MAX) return n;
-  } catch {}
-  return SIDEBAR_DEFAULT;
-}
-
 function BuilderLayout({
   messages,
   isStreaming,
@@ -386,41 +374,7 @@ function BuilderLayout({
   const { data: config } = useConfig();
   const missingKeyError = getMissingKeyError(config);
   const { data: me } = useSession();
-  const [sidebarWidth, setSidebarWidth] = useState<number>(getStoredSidebarWidth);
-  const [resizing, setResizing] = useState(false);
-  // Keep the latest width in a ref so the mouseup persister reads the
-  // final value without re-binding the listener on every pixel of drag.
-  const sidebarWidthRef = useRef(sidebarWidth);
-  useEffect(() => {
-    sidebarWidthRef.current = sidebarWidth;
-  }, [sidebarWidth]);
-
-  // Drag-to-resize the chat sidebar. Mouse-move runs while a drag is active;
-  // we attach to window so the cursor can leave the handle without losing
-  // the drag. The width is clamped on every move and persisted on release.
-  useEffect(() => {
-    if (!resizing) return;
-    function onMove(e: MouseEvent) {
-      const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, e.clientX));
-      setSidebarWidth(next);
-    }
-    function onUp() {
-      setResizing(false);
-      try {
-        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidthRef.current));
-      } catch {}
-    }
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [resizing]);
+  const { width: sidebarWidth, resizing, startResize, resetWidth } = useResizableSidebar();
 
   // Cost preview text (#44). Free + lifetime cap on shows trial counters;
   // everyone else sees credit cost vs remaining monthly balance. Admin
@@ -560,91 +514,12 @@ function BuilderLayout({
         {/* Messages */}
         <div style={{ flex: 1, overflowY: "auto", padding: "20px 16px" }}>
           {messages.length === 0 && !isStreaming && (
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                height: "100%",
-                gap: 12,
-                textAlign: "center",
-                padding: "0 8px",
-              }}
-            >
-              <div
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 12,
-                  background:
-                    "linear-gradient(135deg, rgba(255,62,165,0.15) 0%, rgba(76,223,232,0.15) 100%)",
-                  border: "1px solid rgba(255,62,165,0.2)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                  <path
-                    d="M9 2.5v13M2.5 9h13"
-                    stroke="url(#builder-plus)"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <defs>
-                    <linearGradient id="builder-plus" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#a78bfa" />
-                      <stop offset="100%" stopColor="#4cdfe8" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-              </div>
-              <p style={{ fontSize: 13, color: "var(--color-text-secondary)", lineHeight: 1.6 }}>
-                Describe the game you want to build. Be as specific or vague as you like.
-              </p>
-              {!missingKeyError && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
-                  {SUGGESTIONS.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => handleSuggestionClick(suggestion)}
-                      disabled={isStreaming}
-                      style={{
-                        padding: "7px 12px",
-                        borderRadius: 8,
-                        border: "1px solid var(--color-border)",
-                        background: "transparent",
-                        fontSize: 12,
-                        color: "var(--color-text-secondary)",
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        textAlign: "left",
-                        transition: "all 0.12s",
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background =
-                          "var(--color-surface-raised)";
-                        (e.currentTarget as HTMLButtonElement).style.borderColor =
-                          "rgba(255,62,165,0.3)";
-                        (e.currentTarget as HTMLButtonElement).style.color =
-                          "var(--color-text-primary)";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-                        (e.currentTarget as HTMLButtonElement).style.borderColor =
-                          "var(--color-border)";
-                        (e.currentTarget as HTMLButtonElement).style.color =
-                          "var(--color-text-secondary)";
-                      }}
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <ChatEmptyState
+              missingKeyError={missingKeyError}
+              isStreaming={isStreaming}
+              suggestions={SUGGESTIONS}
+              onSuggestionClick={handleSuggestionClick}
+            />
           )}
 
           {messages.map((msg, i) => {
@@ -820,14 +695,9 @@ function BuilderLayout({
           aria-label="Resize chat panel"
           onMouseDown={(e) => {
             e.preventDefault();
-            setResizing(true);
+            startResize();
           }}
-          onDoubleClick={() => {
-            setSidebarWidth(SIDEBAR_DEFAULT);
-            try {
-              localStorage.setItem(SIDEBAR_WIDTH_KEY, String(SIDEBAR_DEFAULT));
-            } catch {}
-          }}
+          onDoubleClick={resetWidth}
           style={{
             position: "absolute",
             top: 0,
