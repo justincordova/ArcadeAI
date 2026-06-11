@@ -13,6 +13,10 @@ primary_region = 'sjc'
   DATABASE_PATH = '/data/arcadeai.db'
   NODE_ENV = 'production'
   PORT = '3000'
+  # Fly runs the app behind its load balancer, so X-Forwarded-For is set
+  # reliably. Required for the IP-based rate limiter to see real client IPs
+  # instead of the proxy address (which collapses all clients into one bucket).
+  TRUST_PROXY = 'true'
 
 [[mounts]]
   source = 'data'
