@@ -43,8 +43,8 @@ export interface SSEStreamHandlers {
   onError?: (message: string) => void;
 }
 
-/** Pull a normalized `{ message }` out of either error shape. */
-function normalizeError(body: unknown): { message: string } {
+/** Pull a normalized `{ message }` out of either error shape. Exported for unit tests. */
+export function normalizeError(body: unknown): { message: string } {
   if (body && typeof body === "object") {
     const o = body as Record<string, unknown>;
     if (typeof o.message === "string") return { message: o.message };
@@ -53,8 +53,8 @@ function normalizeError(body: unknown): { message: string } {
   return { message: "Request failed" };
 }
 
-/** Pull `{ message, resetAt, kind }` out of either 402 shape. */
-function normalizeQuotaError(body: unknown): QuotaError {
+/** Pull `{ message, resetAt, kind }` out of either 402 shape. Exported for unit tests. */
+export function normalizeQuotaError(body: unknown): QuotaError {
   if (body && typeof body === "object") {
     const o = body as Record<string, unknown>;
     const details = (o.details as Record<string, unknown> | undefined) ?? o;

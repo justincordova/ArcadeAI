@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build && tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@arcadeai/shared": "workspace:*",
@@ -37,6 +39,7 @@
     "tailwindcss": "^4.1.4",
     "typescript": "^5.7.2",
     "vite": "^6.3.2",
-    "vite-tsconfig-paths": "^5.1.4"
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^4.1.8"
   }
 }

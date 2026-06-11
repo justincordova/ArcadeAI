@@ -20,6 +20,7 @@ import {
   unlikeGame,
 } from "../lib/api/games.js";
 import { setDocumentHead } from "../lib/document-head.js";
+import { decideIntentAction } from "../lib/play-intent.js";
 
 interface PlaySearch {
   intent?: string;
@@ -132,22 +133,23 @@ function PlayPage() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate — mutations are stable enough; ref latch is the source of truth
   useEffect(() => {
     if (intentFiredRef.current) return;
-    if (!intent || !me) return;
-    if (intent === "remix") {
-      intentFiredRef.current = true;
-      navigate({ to: "/play/$slug", params: { slug }, search: {}, replace: true });
-      remixMutation.mutate();
-    } else if (intent === "like" && game) {
-      // Latch and clear the param once the game has loaded, regardless of
-      // whether it's already liked. A signed-out user who clicks Like on a
-      // game they previously liked (e.g. from another device) returns from
-      // OAuth with game.liked already true; without latching here the
-      // ?intent=like param would linger in the URL forever. Only fire the
-      // mutation when it's actually not liked yet (like is idempotent anyway).
-      intentFiredRef.current = true;
-      navigate({ to: "/play/$slug", params: { slug }, search: {}, replace: true });
-      if (!game.liked) likeMutation.mutate();
-    }
+    const action = decideIntentAction({
+      intent,
+      hasSession: Boolean(me),
+      gameLoaded: Boolean(game),
+      gameLiked: Boolean(game?.liked),
+    });
+    if (action === "wait") return;
+
+    // Latch and clear the param the first time we act so any subsequent
+    // re-renders / navigations (incl. a Back to ?intent=remix later) see no
+    // intent and can't double-fire. A like-intent on an already-liked game
+    // still latches+clears (action "latch-only") but fires nothing — like is
+    // idempotent and the lingering param would otherwise persist forever.
+    intentFiredRef.current = true;
+    navigate({ to: "/play/$slug", params: { slug }, search: {}, replace: true });
+    if (action === "remix") remixMutation.mutate();
+    else if (action === "like") likeMutation.mutate();
   }, [intent, me, game?.id, game?.liked, navigate, slug]);
 
   function handleRemixClick() {
