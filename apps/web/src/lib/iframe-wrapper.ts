@@ -25,6 +25,18 @@ window.addEventListener('message', function(e) {
     }
   }
 });
+// Signal the parent once the game has actually painted a frame, so the
+// thumbnail capture waits for real pixels instead of a fixed timeout (which
+// produced blank/black thumbnails on slow machines). A double rAF guarantees
+// the browser has committed at least one paint after the inline scripts ran
+// their init()/first render(). The parent treats this as best-effort: if it
+// never arrives (e.g. a game with no rAF-driven first frame), a timeout
+// fallback fires the capture anyway.
+requestAnimationFrame(function() {
+  requestAnimationFrame(function() {
+    parent.postMessage({type:'rendered'}, '*');
+  });
+});
 `;
 
 // Defense-in-depth CSP for generated games. The iframe is already sandboxed

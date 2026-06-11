@@ -43,12 +43,18 @@ export function useStreamedGeneration(): StreamedGenerationState {
   // detached iframe and calling navigate() after unmount. Track every timer
   // and a mounted flag so the unmount cleanup cancels them all.
   const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  // Teardown callbacks for anything that isn't a timer (e.g. the `rendered`
+  // window message listener), run on unmount so nothing leaks if the user
+  // navigates away mid-capture.
+  const cleanupsRef = useRef<Set<() => void>>(new Set());
   const mountedRef = useRef(true);
   useEffect(() => {
     return () => {
       mountedRef.current = false;
       for (const t of timersRef.current) clearTimeout(t);
       timersRef.current.clear();
+      for (const fn of cleanupsRef.current) fn();
+      cleanupsRef.current.clear();
     };
   }, []);
 
@@ -105,48 +111,77 @@ export function useStreamedGeneration(): StreamedGenerationState {
         //    poll for it to populate.
         // 2. Once the ref populates, wait for the iframe's `load` event
         //    so the wrapper script is registered and the canvas exists.
-        // 3. Wait a beat for the game's init() + first render() to draw
-        //    the title screen — else canvas.toDataURL captures blank
-        //    black.
-        // 4. postMessage('capture-thumbnail'), wait for the iframe to
-        //    respond and the parent's POST /thumbnail to start.
+        // 3. Wait for the wrapper's `{type:'rendered'}` signal — posted
+        //    after a double-rAF paint — so capture happens against real
+        //    pixels instead of a fixed timeout (which captured blank black
+        //    on slow machines). A timeout fallback fires capture anyway if
+        //    the signal never arrives.
+        // 4. postMessage('capture-thumbnail'), wait briefly for the iframe
+        //    to respond and the parent's POST /thumbnail to start.
         // 5. Navigate to /game/<id>. The POST completes against a row
         //    that exists on disk so it's safe even after this component
         //    unmounts.
 
-        const captureAndNavigate = (iframe: HTMLIFrameElement) => {
-          // Wait for the game's title screen to actually draw before
-          // we ask for a snapshot.
+        // Max time to wait for the `rendered` paint signal before capturing
+        // anyway. Generous enough for a slow first frame, short enough that a
+        // signal-less game still navigates promptly.
+        const RENDERED_FALLBACK_MS = 1200;
+        // Beat between capture-thumbnail and navigation, so the iframe's
+        // toDataURL round-trip and the parent's POST have a moment to start.
+        const CAPTURE_TO_NAV_MS = 500;
+
+        const captureAndNavigate = () => {
+          const live = iframeRef.current;
+          if (mountedRef.current && live?.contentWindow) {
+            live.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+          }
           schedule(() => {
-            const live = iframeRef.current;
-            if (mountedRef.current && live?.contentWindow) {
-              live.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
+            if (id && mountedRef.current) {
+              void navigate({ to: "/game/$id", params: { id }, replace: true });
             }
-            // Give the iframe time to respond and the parent's POST a
-            // moment to start before we navigate away.
-            schedule(() => {
-              if (id && mountedRef.current) {
-                void navigate({ to: "/game/$id", params: { id }, replace: true });
-              }
-            }, 600);
-          }, 600);
+          }, CAPTURE_TO_NAV_MS);
         };
 
         const armCaptureOnLoad = (iframe: HTMLIFrameElement) => {
-          // `load` fires after the iframe parses its srcDoc and runs
-          // inline scripts (which includes the wrapper). If it already
-          // fired before we attached, the fallback timeout kicks in.
+          // `load` fires after the iframe parses its srcDoc and runs inline
+          // scripts (which includes the wrapper). Once loaded, wait for the
+          // wrapper's paint signal (or the fallback) before capturing.
           let started = false;
-          const run = () => {
+          const begin = () => {
             if (started) return;
             started = true;
-            iframe.removeEventListener("load", run);
-            captureAndNavigate(iframe);
+            iframe.removeEventListener("load", onLoad);
+
+            // Listen for the wrapper's paint signal, scoped to THIS iframe's
+            // contentWindow so another frame can't spoof it (mirrors the
+            // origin guard in GameIframe.tsx).
+            const onRendered = (e: MessageEvent) => {
+              if (e.source !== iframeRef.current?.contentWindow) return;
+              if (e.data?.type === "rendered") fire();
+            };
+            window.addEventListener("message", onRendered);
+            const removeRendered = () => window.removeEventListener("message", onRendered);
+            cleanupsRef.current.add(removeRendered);
+
+            // Latch the capture so the `rendered` signal and the fallback
+            // timeout can't both fire it.
+            let captured = false;
+            const fire = () => {
+              if (captured || !mountedRef.current) return;
+              captured = true;
+              removeRendered();
+              cleanupsRef.current.delete(removeRendered);
+              captureAndNavigate();
+            };
+
+            // Fallback: capture even if the signal never arrives.
+            schedule(fire, RENDERED_FALLBACK_MS);
           };
-          iframe.addEventListener("load", run);
-          // Fallback: 1.5s in case load already fired between the React
-          // commit and our event listener registration.
-          schedule(run, 1500);
+          const onLoad = () => begin();
+          iframe.addEventListener("load", onLoad);
+          // Fallback: 1.5s in case load already fired between the React commit
+          // and our listener registration.
+          schedule(begin, 1500);
         };
 
         // Poll for the iframe to mount. Because the srcDoc-defer fix
