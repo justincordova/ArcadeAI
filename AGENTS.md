@@ -29,7 +29,7 @@ bun run build
 # Faster: typecheck only, no Vite step
 bun run typecheck
 
-# Tests (backend; bun:test)
+# Tests — backend (bun:test) + frontend (Vitest), run across all workspaces
 bun run test
 
 # Lint / format
@@ -43,6 +43,17 @@ bun run db:studio      # open Drizzle Studio against the local DB
 ```
 
 **Pre-commit gate:** `bun run build && bun run lint && bun run test` — all three must pass before committing.
+
+## Testing
+
+**Backend (`apps/server`, `bun:test`).** Route and service tests run the real handlers end-to-end via `app.inject()` against a fresh in-memory SQLite DB — no mocked DB logic. `apps/server/test/test-db.ts:createTestDb()` opens a `:memory:` database, enables foreign keys, and applies the **real Drizzle migrations** from `packages/db/src/migrations` (the same files production runs). So:
+
+- You do **not** run `bun run db:migrate` before tests — each test gets a freshly-migrated schema in memory.
+- A new migration is picked up automatically (the helper reads the whole migrations folder). After `bun run db:generate`, the next `bun run test` already reflects the schema change.
+- `sqlite-vec` is deliberately **not** loaded in tests (no vector-search coverage), which avoids the macOS Homebrew SQLite dependency in CI.
+- `insertTestUser(sqlite, {...})` seeds arbitrary user states (tier, credits, lifetime counters) without going through Better Auth. Auth is stubbed via a `preHandler` hook that sets `request.authSession`.
+
+**Frontend (`apps/web`, Vitest).** `bun run test` (root) runs both workspaces. Web tests live next to source as `*.test.ts` and run in a node environment (`apps/web/vitest.config.ts`) — they target pure modules (no DOM/router), so route components are split out of the route tree via `routeFileIgnorePattern`. Run just the web suite in watch mode with `bun run --filter @arcadeai/web test:watch`.
 
 ## Tech stack
 

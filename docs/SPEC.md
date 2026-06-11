@@ -23,6 +23,8 @@ This is a working prototype heading to its first deployment. No real billing, no
 - Refinement via follow-up instructions
 - Auto-repair on runtime errors (capped attempts)
 - Public sharing: publish a game to a stable `/play/<slug>` URL; remix any public game into your own library
+- Public Discover gallery (trending / top / new sorts, genre filter, likes, play counts) with OG/Twitter unfurl images for shared links
+- Single-level undo of the last refinement/repair
 - Credit-based usage model with daily and monthly caps
 - Lifetime trial cap for the free tier (deployment-phase throttle, single config flip to revert)
 - Tiered plans: Free, Creator, Pro, Enterprise (display only) + internal Admin tier
@@ -34,7 +36,7 @@ This is a working prototype heading to its first deployment. No real billing, no
 - Per-IP and per-user rate limiting
 - CSRF defense via Content-Type guard on state-changing routes
 - RAG library of curated reference games for few-shot prompting
-- Backend test suite (Bun test + Fastify `inject`)
+- Backend test suite (Bun test + Fastify `inject`) and frontend unit tests (Vitest) covering the highest-risk pure modules
 - CI on push and PR (lint + build + test)
 
 ### Out of scope (MVP)
@@ -42,13 +44,12 @@ This is a working prototype heading to its first deployment. No real billing, no
 - Real billing (Stripe integration is structured-for but not implemented)
 - Email verification, password reset emails, any outbound email
 - Email/password auth
-- Version history UI, in-browser code editor, syntax-highlighted code reveal
+- Full version history UI, in-browser code editor, syntax-highlighted code reveal (a single-level undo of the last refinement/repair IS implemented — see §5)
 - Multi-file game projects, frameworks, backends inside generated games
 - 3D, multiplayer, mobile-native, leaderboards, asset generation
 - Production-grade scaling (Redis-backed concurrency lock, multi-instance, log shipping)
 - Mobile responsiveness for the builder view (dashboard and pricing are responsive; builder is desktop-only)
-- Frontend / component tests
-- Keyboard shortcuts, public discover gallery, adaptive suggestions, genre-card empty state, admin dashboard, in-app feedback widget, PostHog analytics
+- Adaptive suggestions, genre-card empty state, admin dashboard, in-app feedback widget, PostHog analytics
 
 ---
 
@@ -226,6 +227,7 @@ games
   user_id         text not null references users(id) on delete cascade
   title           text not null
   current_code    text not null     // the latest single-file HTML
+  previous_code   text              // single-level undo snapshot; null when nothing to undo
   thumbnail       text              // base64 PNG data URL or null
   genre           text              // classified genre bucket (enum-typed; one of the 8 §6 buckets)
   original_prompt text not null
@@ -244,14 +246,16 @@ games
 messages
   id              text primary key (uuid)
   game_id         text not null references games(id) on delete cascade
-  kind            text not null     // 'prompt' | 'feedback' (enum-typed)
-  content         text not null     // the user's prompt or refinement feedback (verbatim)
+  kind            text not null     // 'prompt' | 'feedback' | 'summary' (enum-typed)
+  content         text not null     // user prompt/feedback (verbatim), or an AI-generated change summary
   created_at      integer not null
 
 // Note: assistant output (generated HTML) is NOT stored here. Only the *latest* HTML
-// lives in `games.current_code`. Auto-repair attempts are NOT stored as messages
-// (they're already tracked in `usage_log` with action='repair'). The chat panel
-// renders user messages with implicit "→ Generated game" markers between entries.
+// lives in `games.current_code` (with one prior step in `games.previous_code`).
+// `kind='summary'` rows hold a short AI-generated description of what a refinement
+// changed (rendered under the turn in the chat panel). Auto-repair attempts are NOT
+// stored as messages (they're tracked in `usage_log` with action='repair'). The chat
+// panel renders user messages with implicit "→ Generated game" markers between entries.
 
 usage_log
   id              text primary key (uuid)
@@ -290,7 +294,7 @@ The `users` table extends Better Auth's built-in `user` table with our custom co
 
 ### Key design points
 
-- **Latest-only code storage.** No version history in MVP. Each refinement overwrites `games.current_code`.
+- **Latest code + single-level undo.** No full version history in MVP. Each refinement/repair overwrites `games.current_code` but first snapshots the prior code into `games.previous_code`. `POST /api/games/:id/undo` atomically swaps `previous_code` back into `current_code` and clears the slot (one step deep, no redo). The guard `WHERE previous_code IS NOT NULL` makes a concurrent double-undo a no-op; `GET /api/games/:id` exposes a `canUndo` boolean (the raw `previous_code` bytes are never shipped to the client).
 - **Optimistic credit deduction with refund on failure.** Credits decremented at request start, refunded only if the action fails unrecoverably (not on auto-repaired errors — those are our problem, not the user's).
 - **Daily and monthly counters reset lazily on read** (compare current time to `*_reset_at` and reset if past).
 - **All timestamps are unix milliseconds (integer)** for SQLite compatibility and JS interop.
@@ -823,6 +827,7 @@ For refinement, the prompt instructs Sonnet to preserve user-visible behavior un
 - Global per-IP: 60 req/min on all `/api/*` routes.
 - Generation/refinement endpoints: additional cap of 10 req/min per user (defense-in-depth on top of credit checks).
 - Rate limit responses: 429 with `Retry-After` header.
+- The per-IP cap keys on `req.ip`. Behind a reverse proxy / load balancer (e.g. Fly), Fastify must be told to trust `X-Forwarded-For` or every client collapses into one bucket — set `TRUST_PROXY=true` (wired to Fastify `trustProxy` in `index.ts`; the Fly deploy sets it in `fly.toml`).
 
 ### Auth gating
 
@@ -852,15 +857,15 @@ For refinement, the prompt instructs Sonnet to preserve user-visible behavior un
 
 - **Maximum 1 active streaming generation per user.** Tracked in-memory in `lib/active-streams.ts` via a `Set<userId>`.
 - Second concurrent request → `409 { code: "CONFLICT", message: "A generation is already in progress" }`.
-- Set entry cleared on stream completion, error, or client disconnect. Set is also explicitly cleared on server boot (`clearActiveStreams()` in `index.ts`) so a stale flag from a crashed previous run can't lock a user out.
+- Set entry cleared in the handler's `finally` block — i.e. on stream **completion or error**, NOT on client disconnect (a disconnected stream keeps running to completion under background-stream semantics, holding the lock until it finishes). Set is also explicitly cleared on server boot (`clearActiveStreams()` in `index.ts`) so a stale flag from a crashed previous run can't lock a user out.
 - Applies to `/api/games`, `/api/games/:id/refine`, and `/api/games/:id/repair`.
 - The lock is in-memory and not shared across processes; a multi-instance deployment would need a Redis-backed equivalent.
 
-### Cancellation
+### Cancellation & background streams
 
-- Frontend uses `AbortController` on streaming requests.
-- Server detects client disconnect via `request.raw.on('close')` and aborts the LLM stream via the AI SDK's abort signal.
-- **Credits are NOT refunded on user-initiated cancel** — tokens have already been spent up to the abort point.
+- The frontend uses `AbortController` to stop *reading* a stream (the "Stop" button / unmount), but this only tears down the client's fetch — it does not cancel the server's work.
+- **Background-stream semantics:** when the SSE client disconnects (tab close, navigation away, network drop), the server detects it via `request.raw.on('close')`, stops writing SSE frames, but **does NOT abort the LLM call**. The model finishes, the result is persisted to `current_code`, and credits are charged as a success. The user returns to `/game/<id>` later and sees the completed game. Starting a generation is a commitment; navigating away doesn't waste the work. The route's `AbortController` exists only to satisfy the LLM-stream signal parameter and is never aborted from the route.
+- The **server-side timeout** (180s, above) is therefore the only signal that can cancel an in-flight LLM call.
 - Credits ARE refunded on server-side errors. The recorded reason distinguishes `abort` / `timeout` / `llm_error` / `persistence_error` (see §10).
 
 ### Server-side LLM timeout
@@ -869,8 +874,9 @@ Each streaming endpoint composes the user's `AbortSignal` with a server-side tim
 
 | Action | Timeout |
 |---|---|
-| Generation, refinement | 90s |
-| Repair | 60s (output is shorter; we don't want a stuck repair to block the next attempt) |
+| Generation, refinement, repair | 180s |
+
+All three share a single 180s ceiling: large games can stream for well over a minute, and a too-tight cap truncated long outputs mid-statement (leaving the iframe with unparseable JS). See `LLM_TIMEOUT_MS` in `services/llm/client.ts`.
 
 Composed signal aborts on whichever fires first. The `cleanup()` returned from `withTimeout` MUST be called after the stream resolves, success or failure, so the timer doesn't leak.
 
