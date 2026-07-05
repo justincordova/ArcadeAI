@@ -103,3 +103,48 @@ describe("markRepairSucceeded", () => {
     await markRepairSucceeded("does-not-exist");
   });
 });
+
+describe("markRepairFailed", () => {
+  test("terminalizes the row by setting refunded_at (keeps succeeded = 0)", async () => {
+    const { logRepair, markRepairFailed } = await import("../src/services/usage/repair-log.js");
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    const gameId = insertGame(userId);
+    const { logId } = await logRepair(userId, gameId);
+
+    await markRepairFailed(logId);
+
+    // The undo route's in-flight predicate is `succeeded = 0 AND
+    // refunded_at IS NULL`. A failed repair that never terminalized
+    // matched it forever, permanently 409-ing undo for the game.
+    const row = testDb.sqlite
+      .query<{ succeeded: number; refunded_at: number | null }, [string]>(
+        "SELECT succeeded, refunded_at FROM usage_log WHERE id = ?"
+      )
+      .get(logId);
+    expect(row?.succeeded).toBe(0);
+    expect(row?.refunded_at).not.toBeNull();
+  });
+
+  test("is idempotent — a second call does not overwrite refunded_at", async () => {
+    const { logRepair, markRepairFailed } = await import("../src/services/usage/repair-log.js");
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    const gameId = insertGame(userId);
+    const { logId } = await logRepair(userId, gameId);
+
+    await markRepairFailed(logId);
+    const first = testDb.sqlite
+      .query<{ refunded_at: number | null }, [string]>(
+        "SELECT refunded_at FROM usage_log WHERE id = ?"
+      )
+      .get(logId);
+
+    await markRepairFailed(logId);
+    const second = testDb.sqlite
+      .query<{ refunded_at: number | null }, [string]>(
+        "SELECT refunded_at FROM usage_log WHERE id = ?"
+      )
+      .get(logId);
+
+    expect(second?.refunded_at).toBe(first?.refunded_at ?? -1);
+  });
+});

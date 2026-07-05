@@ -34,7 +34,7 @@ import {
   markSucceeded,
   refund,
 } from "../services/usage/charge.js";
-import { logRepair, markRepairSucceeded } from "../services/usage/repair-log.js";
+import { logRepair, markRepairFailed, markRepairSucceeded } from "../services/usage/repair-log.js";
 import { applyResets } from "../services/usage/reset.js";
 
 /**
@@ -1147,6 +1147,8 @@ export async function gamesRoutes(app: FastifyInstance) {
 
     // See generation route for the rationale on hoisting stopHeartbeat.
     let stopHeartbeat: (() => void) | null = null;
+    // Hoisted so the post-hijack catch can terminalize the log row.
+    let logId: string | null = null;
     try {
       // Open SSE before log insert so the client gets meta promptly
       reply.hijack();
@@ -1158,7 +1160,6 @@ export async function gamesRoutes(app: FastifyInstance) {
       // Wrapped so a DB hiccup here doesn't leave the client with a meta
       // event and no follow-up — write an error frame, end the stream,
       // and bail. The repair is free so there are no credits to refund.
-      let logId: string;
       try {
         ({ logId } = await logRepair(userId, game.id));
       } catch (err) {
@@ -1272,6 +1273,17 @@ export async function gamesRoutes(app: FastifyInstance) {
             "markRepairSucceeded failed; repair_log row left in in-flight state"
           );
         });
+      } else {
+        // Terminalize the row on failure too. Leaving it succeeded=0 with
+        // refunded_at NULL made the undo route's in-flight guard treat the
+        // failed repair as an active stream forever — one failed repair
+        // permanently 409'd every subsequent undo for the game.
+        await markRepairFailed(logId).catch((err) => {
+          request.log.error(
+            { err: err instanceof Error ? err.message : String(err), logId },
+            "markRepairFailed failed; repair log row left in in-flight state"
+          );
+        });
       }
 
       if (!clientClosed) {
@@ -1291,6 +1303,15 @@ export async function gamesRoutes(app: FastifyInstance) {
         { err: err instanceof Error ? err.message : String(err) },
         "repair handler threw after hijack"
       );
+      if (logId) {
+        // Same terminalization as the in-band failure path — see comment there.
+        await markRepairFailed(logId).catch((markErr) => {
+          request.log.error(
+            { err: markErr instanceof Error ? markErr.message : String(markErr), logId },
+            "markRepairFailed failed after post-hijack throw"
+          );
+        });
+      }
       if (!reply.raw.writableEnded) {
         writeSSE(reply, "error", { message: "Repair failed unexpectedly" });
         endSSE(reply);
