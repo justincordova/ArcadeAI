@@ -106,6 +106,7 @@ function GenerationBuilder({
     <BuilderLayout
       messages={initialMessages}
       isStreaming={isStreaming}
+      stoppable={isStreaming}
       displayCode={displayCode}
       streamingCode={code}
       error={error}
@@ -323,6 +324,7 @@ function RefinementBuilder({
       <BuilderLayout
         messages={visibleMessages}
         isStreaming={isStreaming}
+        stoppable={status === "streaming"}
         overlayStatus={overlayStatus}
         displayCode={displayCode}
         streamingCode={streamingCode}
@@ -358,6 +360,14 @@ function RefinementBuilder({
 interface BuilderLayoutProps {
   messages: Message[];
   isStreaming: boolean;
+  /**
+   * Whether the Stop button / Esc shortcut can actually stop anything.
+   * False when `isStreaming` is driven only by `externalStreaming` (a
+   * server-side generation started elsewhere): the local hook's stop()
+   * only aborts a local fetch that doesn't exist in that state, so
+   * rendering the control would present a dead button.
+   */
+  stoppable: boolean;
   overlayStatus?: OverlayStatus;
   displayCode: string;
   /** In-flight streaming bytes only — drives the StreamingCodePreview. */
@@ -411,6 +421,7 @@ const SUGGESTIONS = ["A simple snake game", "Asteroids with power-ups", "Pong wi
 function BuilderLayout({
   messages,
   isStreaming,
+  stoppable,
   overlayStatus,
   displayCode,
   streamingCode,
@@ -468,7 +479,7 @@ function BuilderLayout({
 
   // Global Esc → stop streaming (works even when textarea isn't focused)
   useEffect(() => {
-    if (!isStreaming) return;
+    if (!isStreaming || !stoppable) return;
     function handler(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -477,7 +488,7 @@ function BuilderLayout({
     }
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isStreaming, onStop]);
+  }, [isStreaming, stoppable, onStop]);
 
   const canSubmit = !isStreaming && prompt.trim().length > 0 && !missingKeyError;
 
@@ -656,7 +667,7 @@ function BuilderLayout({
                   onSubmit(e as unknown as React.FormEvent);
                   return;
                 }
-                if (e.key === "Escape" && isStreaming) {
+                if (e.key === "Escape" && isStreaming && stoppable) {
                   e.preventDefault();
                   onStop();
                 }
@@ -699,9 +710,13 @@ function BuilderLayout({
                   letterSpacing: "0.02em",
                 }}
               >
-                {isStreaming ? `${streamLabel} · esc to stop` : (costLine ?? "⌘↵ to send")}
+                {isStreaming
+                  ? stoppable
+                    ? `${streamLabel} · esc to stop`
+                    : streamLabel
+                  : (costLine ?? "⌘↵ to send")}
               </span>
-              {isStreaming ? (
+              {isStreaming && stoppable ? (
                 <button
                   type="button"
                   onClick={onStop}
