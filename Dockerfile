@@ -22,4 +22,8 @@ ENV DATABASE_PATH=/data/arcadeai.db
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "bun run db:migrate && bun run apps/server/src/index.ts"]
+# `exec` replaces the shell with bun so bun (not sh) receives SIGTERM.
+# Without it, sh runs as PID 1, ignores the stop signal, and Fly hard-kills
+# the machine after the grace period — the graceful-shutdown handler in
+# src/index.ts (30s SSE drain + app.close()) never runs in production.
+CMD ["sh", "-c", "bun run db:migrate && exec bun apps/server/src/index.ts"]
