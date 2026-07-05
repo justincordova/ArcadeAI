@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { games, messages, usageLog } from "@arcadeai/db";
-import { and, asc, desc, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
@@ -516,7 +516,9 @@ export async function gamesRoutes(app: FastifyInstance) {
       .select({
         id: games.id,
         title: games.title,
-        thumbnail: games.thumbnail,
+        // Computed in SQL — selecting the thumbnail column pulls up to
+        // ~350 KB per row out of SQLite just to derive a boolean.
+        hasThumbnail: sql<number>`${games.thumbnail} IS NOT NULL`,
         updatedAt: games.updatedAt,
         createdAt: games.createdAt,
         isPublic: games.isPublic,
@@ -527,9 +529,9 @@ export async function gamesRoutes(app: FastifyInstance) {
       .where(eq(games.userId, userId))
       .orderBy(desc(games.updatedAt));
 
-    const summaries = rows.map(({ thumbnail, ...rest }) => ({
-      ...rest,
-      hasThumbnail: Boolean(thumbnail),
+    const summaries = rows.map((row) => ({
+      ...row,
+      hasThumbnail: Boolean(row.hasThumbnail),
     }));
 
     return reply.send(summaries);

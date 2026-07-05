@@ -19,7 +19,12 @@ export interface DiscoverGame {
   id: string;
   slug: string;
   title: string;
-  thumbnail: string | null;
+  /** Whether a thumbnail exists. The bytes are loaded lazily by reference
+   *  from the public GET /api/og/:slug.png — not shipped inline. Inline
+   *  base64 thumbnails (up to ~350 KB each) made the default 24-row page
+   *  approach ~8 MB on an unauthenticated endpoint; same rationale as the
+   *  dashboard list in routes/games.ts. */
+  hasThumbnail: boolean;
   originalPrompt: string;
   ownerDisplayName: string;
   genre: string | null;
@@ -83,7 +88,9 @@ export async function listDiscoverGames({
       id: games.id,
       slug: games.publicSlug,
       title: games.title,
-      thumbnail: games.thumbnail,
+      // Boolean computed in SQL so the (potentially ~350 KB) thumbnail
+      // bytes never leave the database for a list render.
+      hasThumbnail: sql<number>`${games.thumbnail} IS NOT NULL`,
       originalPrompt: games.originalPrompt,
       ownerDisplayName: users.displayName,
       genre: games.genre,
@@ -103,6 +110,7 @@ export async function listDiscoverGames({
       .filter((r): r is typeof r & { slug: string } => r.slug !== null)
       .map((r) => ({
         ...r,
+        hasThumbnail: Boolean(r.hasThumbnail),
         ownerDisplayName: r.ownerDisplayName || "Anonymous",
         liked: false,
       }));
@@ -125,6 +133,7 @@ export async function listDiscoverGames({
     .filter((r): r is typeof r & { slug: string } => r.slug !== null)
     .map((r) => ({
       ...r,
+      hasThumbnail: Boolean(r.hasThumbnail),
       ownerDisplayName: r.ownerDisplayName || "Anonymous",
       liked: likedSet.has(r.id),
     }));

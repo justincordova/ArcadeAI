@@ -18,6 +18,12 @@ export function gameThumbnailUrl(id: string): string {
   return `${API_BASE}/api/games/${id}/thumbnail.png`;
 }
 
+/** URL for a PUBLIC game's thumbnail, served by slug (no auth, cacheable).
+ *  Used by discover cards; the same image backs og:image unfurls. */
+export function publicThumbnailUrl(slug: string): string {
+  return `${API_BASE}/api/og/${slug}.png`;
+}
+
 export interface PublicGame {
   id: string;
   title: string;
@@ -167,7 +173,9 @@ export interface DiscoverGame {
   id: string;
   slug: string;
   title: string;
-  thumbnail: string | null;
+  /** Whether a thumbnail exists. Bytes load lazily via publicThumbnailUrl —
+   *  not shipped inline in the list (mirrors GameSummary.hasThumbnail). */
+  hasThumbnail: boolean;
   originalPrompt: string;
   ownerDisplayName: string;
   genre: string | null;

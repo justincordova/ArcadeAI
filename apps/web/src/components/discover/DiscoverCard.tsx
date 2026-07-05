@@ -14,7 +14,7 @@
 // back. Anonymous likers are routed through /sign-in with a `next`.
 
 import { toast } from "@/components/ui/sonner.js";
-import { type DiscoverGame, likeGame, unlikeGame } from "@/lib/api/games.js";
+import { type DiscoverGame, likeGame, publicThumbnailUrl, unlikeGame } from "@/lib/api/games.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Heart, Play } from "lucide-react";
@@ -139,10 +139,11 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
           overflow: "hidden",
         }}
       >
-        {game.thumbnail ? (
+        {game.hasThumbnail ? (
           <img
-            src={game.thumbnail}
+            src={publicThumbnailUrl(game.slug)}
             alt={game.title}
+            loading="lazy"
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
         ) : (
