@@ -9,7 +9,7 @@
 // can't bypass the cap.
 
 import { randomUUID } from "node:crypto";
-import { usageLog, users } from "@arcadeai/db";
+import { usageLog } from "@arcadeai/db";
 import {
   CREDIT_COSTS,
   ENFORCE_LIFETIME_LIMITS_FOR_FREE,
@@ -17,7 +17,7 @@ import {
   TIER_CREDIT_LIMITS,
   type Tier,
 } from "@arcadeai/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db, sqlite } from "../../lib/db.js";
 import { applyResets } from "./reset.js";
@@ -362,17 +362,6 @@ export async function refund(
   const row = rows[0];
   if (!row || row.refundedAt !== null) return; // already refunded or not found
 
-  // Atomically claim the refund. Only the call whose UPDATE actually
-  // changed a row (i.e. saw refunded_at IS NULL at write time) is allowed
-  // to credit the user and decrement the lifetime counter. This closes a
-  // TOCTOU between the SELECT above and the UPDATE that previously allowed
-  // two concurrent refunds to double-credit the user.
-  const claimStmt = sqlite.prepare(
-    "UPDATE usage_log SET refunded_at = ? WHERE id = ? AND refunded_at IS NULL"
-  );
-  const claimed = claimStmt.run(Date.now(), logId).changes;
-  if (claimed === 0) return; // lost the race; another refund() already credited.
-
   const cost = row.creditsCharged;
   const action = row.action as Action;
   // Whether to decrement the lifetime counter is recorded on the log row at
@@ -381,37 +370,56 @@ export async function refund(
   // changing between deduct and refund.
   const lifetimeKey = row.lifetimeCounterIncremented ? lifetimeCounterFor(action) : null;
 
-  if (cost > 0 || lifetimeKey !== null) {
+  // Atomically claim the refund AND credit the user in ONE bun:sqlite
+  // transaction, mirroring `deduct`. The conditional UPDATE on `refunded_at`
+  // closes the TOCTOU between the SELECT above and the claim (two concurrent
+  // refunds can't double-credit — only the claim winner proceeds). Running
+  // the credit-back inside the same transaction closes the mirror-image
+  // hazard of the deduct path: previously the claim and the credit were two
+  // auto-committed statements, so a crash (or a throw) between them left
+  // `refunded_at` set with no credits returned — and because `refunded_at`
+  // is the idempotency guard, every retry bailed out early, making the lost
+  // refund permanently unrecoverable while the ledger claimed it happened.
+  const runRefund = sqlite.transaction((): boolean => {
+    const claimed = sqlite
+      .prepare("UPDATE usage_log SET refunded_at = ? WHERE id = ? AND refunded_at IS NULL")
+      .run(Date.now(), logId).changes;
+    if (claimed === 0) return false; // lost the race; another refund() already credited.
+
     if (lifetimeKey === "generations") {
-      await db
-        .update(users)
-        .set({
-          creditsRemainingDaily: sql`${users.creditsRemainingDaily} + ${cost}`,
-          creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} + ${cost}`,
-          // CASE-guarded so we never go below 0 even if the row was reset
-          // between deduct and refund.
-          lifetimeGenerationsUsed: sql`CASE WHEN ${users.lifetimeGenerationsUsed} > 0 THEN ${users.lifetimeGenerationsUsed} - 1 ELSE 0 END`,
-        })
-        .where(eq(users.id, row.userId));
+      sqlite
+        .prepare(
+          `UPDATE "user"
+              SET credits_remaining_daily   = credits_remaining_daily   + ?,
+                  credits_remaining_monthly = credits_remaining_monthly + ?,
+                  lifetime_generations_used = CASE WHEN lifetime_generations_used > 0 THEN lifetime_generations_used - 1 ELSE 0 END
+            WHERE id = ?`
+        )
+        .run(cost, cost, row.userId);
     } else if (lifetimeKey === "refinements") {
-      await db
-        .update(users)
-        .set({
-          creditsRemainingDaily: sql`${users.creditsRemainingDaily} + ${cost}`,
-          creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} + ${cost}`,
-          lifetimeRefinementsUsed: sql`CASE WHEN ${users.lifetimeRefinementsUsed} > 0 THEN ${users.lifetimeRefinementsUsed} - 1 ELSE 0 END`,
-        })
-        .where(eq(users.id, row.userId));
+      sqlite
+        .prepare(
+          `UPDATE "user"
+              SET credits_remaining_daily   = credits_remaining_daily   + ?,
+                  credits_remaining_monthly = credits_remaining_monthly + ?,
+                  lifetime_refinements_used = CASE WHEN lifetime_refinements_used > 0 THEN lifetime_refinements_used - 1 ELSE 0 END
+            WHERE id = ?`
+        )
+        .run(cost, cost, row.userId);
     } else if (cost > 0) {
-      await db
-        .update(users)
-        .set({
-          creditsRemainingDaily: sql`${users.creditsRemainingDaily} + ${cost}`,
-          creditsRemainingMonthly: sql`${users.creditsRemainingMonthly} + ${cost}`,
-        })
-        .where(eq(users.id, row.userId));
+      sqlite
+        .prepare(
+          `UPDATE "user"
+              SET credits_remaining_daily   = credits_remaining_daily   + ?,
+                  credits_remaining_monthly = credits_remaining_monthly + ?
+            WHERE id = ?`
+        )
+        .run(cost, cost, row.userId);
     }
-  }
+    return true;
+  });
+
+  if (!runRefund()) return;
 
   // Observability log line per SPEC §10 / plan 13 §10.
   opts?.logger?.info(
