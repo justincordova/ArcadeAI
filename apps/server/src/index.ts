@@ -46,7 +46,17 @@ const app = Fastify({
   // address (which would make the global cap a server-wide limit and 429
   // every user). Gated by env so a directly-exposed server doesn't trust
   // spoofable forwarding headers.
-  trustProxy: env.TRUST_PROXY,
+  //
+  // Trust exactly ONE hop (the number form), not `true`. Boolean true
+  // trusts every entry in X-Forwarded-For and resolves req.ip to the
+  // LEFTMOST value — which the client controls, because proxies like
+  // Fly's APPEND the real client IP to whatever XFF the client sent
+  // rather than replacing it. With `true`, a client sending
+  // `X-Forwarded-For: 1.2.3.4` gets req.ip = 1.2.3.4, letting it rotate
+  // fake IPs to bypass the per-IP rate limit and poison logged IPs.
+  // With `1`, req.ip is the RIGHTMOST XFF entry — the one our own proxy
+  // appended — which the client cannot influence.
+  trustProxy: env.TRUST_PROXY ? 1 : false,
 });
 
 // Plugins and hooks. Encapsulation note: hooks added inside
