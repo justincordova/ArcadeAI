@@ -102,6 +102,10 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
       navigate({ to: "/sign-in", search: { next: "/discover" } });
       return;
     }
+    // Guard against double-fire: two clicks before the optimistic re-render
+    // both read the stale `game.liked` and would send two identical POSTs.
+    // Mirrors the play page's `disabled={likeMutation.isPending}`.
+    if (likeMutation.isPending) return;
     likeMutation.mutate();
   }
 
@@ -183,6 +187,7 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
           <button
             type="button"
             onClick={handleLikeClick}
+            disabled={likeMutation.isPending}
             aria-label={game.liked ? "Unlike" : "Like"}
             aria-pressed={game.liked}
             style={{
