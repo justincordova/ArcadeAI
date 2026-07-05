@@ -61,9 +61,10 @@ export type PublicTier = "free" | "creator" | "pro";
 export type DisplayTier = PublicTier | "enterprise";
 export type BillingInterval = "monthly" | "yearly";
 
-export const YEARLY_DISCOUNT = 0.15;
-
-// Prices in USD. Yearly value is per-month after the discount.
+// Prices in USD. Yearly value is per-month after the yearly discount
+// (~13-14% — the hardcoded values below are the source of truth; there is
+// deliberately no derived discount constant, since a "Save X%" badge
+// computed from one would contradict these prices).
 // Enterprise is null — renders "Custom".
 export const PLAN_PRICES: Record<DisplayTier, { monthly: number; yearly: number } | null> = {
   free: { monthly: 0, yearly: 0 },
