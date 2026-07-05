@@ -66,8 +66,13 @@ export function RouteError({ error, reset }: FallbackProps) {
             padding: "0.5rem 1rem",
             borderRadius: 6,
             border: "none",
-            background: "var(--color-accent)",
-            color: "var(--color-bg)",
+            // --color-accent-primary is the defined token (index.css);
+            // the previous var(--color-accent) doesn't exist, which made
+            // the button background transparent and the near-black text
+            // invisible on the dark page — a hidden recovery button on
+            // the crash screen.
+            background: "var(--color-accent-primary)",
+            color: "#fff",
             cursor: "pointer",
             fontWeight: 600,
           }}
