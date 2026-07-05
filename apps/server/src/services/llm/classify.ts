@@ -15,9 +15,13 @@ const Schema = z.object({
   // tags that inflate tokens and inject pseudo-instructions into the system
   // block. Short aesthetic descriptors never need more than a few words, so we
   // truncate (rather than reject, which would discard the whole classification).
+  // Clamp the list length with a transform rather than `.max(5)`: a schema
+  // rejection on a 6th tag would throw out the ENTIRE classification —
+  // including a perfectly good genre — which is exactly the reject-vs-
+  // truncate tradeoff the comment above argues against.
   style_tags: z
     .array(z.string().transform((s) => s.replace(/\s+/g, " ").trim().slice(0, 40)))
-    .max(5),
+    .transform((tags) => tags.slice(0, 5)),
 });
 
 const SYSTEM =
