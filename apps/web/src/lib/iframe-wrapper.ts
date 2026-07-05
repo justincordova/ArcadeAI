@@ -74,8 +74,25 @@ export function injectWrapper(html: string): string {
     const insertAt = headMatch.index + headMatch[0].length;
     withCsp = html.slice(0, insertAt) + CSP_META + html.slice(insertAt);
   } else {
-    // No <head> — prepend so it parses before the first script
-    withCsp = CSP_META + html;
+    // No <head>. Blindly prepending here would hit the exact quirks-mode
+    // failure described above whenever the document HAS a doctype (e.g.
+    // `<!doctype html><html><body>...` — valid, model-plausible output,
+    // since browsers auto-create <head>): the meta would land BEFORE the
+    // doctype and the CSP would be silently dead. Instead, insert after
+    // <html ...> when present (the parser's "before head" mode wraps the
+    // meta in an auto-created <head>), else after the doctype. Only
+    // prepend when there's no doctype at all — quirks mode either way.
+    const htmlTagMatch = html.match(/<html\b[^>]*>/i);
+    const doctypeMatch = html.match(/<!doctype\b[^>]*>/i);
+    if (htmlTagMatch && htmlTagMatch.index !== undefined) {
+      const insertAt = htmlTagMatch.index + htmlTagMatch[0].length;
+      withCsp = html.slice(0, insertAt) + CSP_META + html.slice(insertAt);
+    } else if (doctypeMatch && doctypeMatch.index !== undefined) {
+      const insertAt = doctypeMatch.index + doctypeMatch[0].length;
+      withCsp = html.slice(0, insertAt) + CSP_META + html.slice(insertAt);
+    } else {
+      withCsp = CSP_META + html;
+    }
   }
 
   const bodyMatch = withCsp.match(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i);

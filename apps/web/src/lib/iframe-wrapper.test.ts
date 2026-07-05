@@ -41,12 +41,36 @@ describe("injectWrapper — CSP placement", () => {
     expect(out.indexOf(CSP_MARKER)).toBeGreaterThan(headTagEnd);
   });
 
-  test("prepends CSP when there is no <head>", () => {
+  test("prepends CSP when there is no <head>, no <html>, and no doctype", () => {
     const html = "<body><canvas></canvas></body>";
     const out = injectWrapper(html);
-    // No <head> → the meta CSP is prepended at the very start of the output.
+    // No structure at all → the meta CSP is prepended at the very start.
     expect(out.startsWith("<meta")).toBe(true);
     expect(out.includes(CSP_MARKER)).toBe(true);
+  });
+
+  test("inserts CSP after <html> when a doctype exists but no <head>", () => {
+    // Browsers auto-create <head>, so models legitimately omit it. The old
+    // fallback prepended the meta BEFORE <!doctype html> → quirks mode →
+    // CSP silently ignored — the same failure documented for <HEAD>.
+    const html = "<!doctype html><html><body><canvas></canvas></body></html>";
+    const out = injectWrapper(html);
+    const doctypeIdx = out.toLowerCase().indexOf("<!doctype");
+    const htmlTagEnd = out.indexOf("<html>") + "<html>".length;
+    const cspIdx = out.indexOf(CSP_MARKER);
+    expect(doctypeIdx).toBe(0); // doctype still first → standards mode
+    expect(out.indexOf("<meta", htmlTagEnd - 1)).toBe(htmlTagEnd);
+    expect(cspIdx).toBeGreaterThan(htmlTagEnd);
+  });
+
+  test("inserts CSP after the doctype when there is no <html> tag either", () => {
+    const html = "<!DOCTYPE html><body><canvas></canvas></body>";
+    const out = injectWrapper(html);
+    const cspIdx = out.indexOf(CSP_MARKER);
+    // Doctype must remain the very first thing in the document.
+    expect(out.toLowerCase().startsWith("<!doctype html>")).toBe(true);
+    expect(cspIdx).toBeGreaterThan(out.toLowerCase().indexOf("<!doctype"));
+    expect(cspIdx).toBeLessThan(out.indexOf("<body>"));
   });
 });
 
