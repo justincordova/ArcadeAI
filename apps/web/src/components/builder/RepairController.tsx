@@ -139,8 +139,14 @@ export function RepairController({
     function onMessage(e: MessageEvent) {
       const data = e.data as { type?: string; message?: unknown; stack?: unknown };
       if (!data || data.type !== "game-error") return;
-      // Filter to only messages from our iframe if we have a ref
-      if (iframeRef.current && e.source !== iframeRef.current.contentWindow) return;
+      // Only accept messages that verifiably came from our iframe. The
+      // check must fail CLOSED when the ref is null (iframe unmounted,
+      // e.g. during streaming): a `iframeRef.current && ...` guard would
+      // skip the source check entirely in that state, letting any window
+      // holding a reference to this page forge a game-error and trigger a
+      // repair stream. A genuine game-error can't arrive without a live
+      // iframe anyway.
+      if (!iframeRef.current || e.source !== iframeRef.current.contentWindow) return;
 
       // Truncate to the server's RepairBody limits (message<=2048, stack<=16384).
       // A generated game can throw an error whose message stringifies a large
