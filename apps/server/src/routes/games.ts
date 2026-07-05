@@ -149,6 +149,12 @@ export async function gamesRoutes(app: FastifyInstance) {
     let stopHeartbeat: (() => void) | null = null;
     // Hoisted so the post-hijack catch can refund against it.
     let logId: string | null = null;
+    // Whether reply.hijack() has run. The outer catch must know: after the
+    // hijack, errors have to be written as SSE frames by hand; before it,
+    // they must be rethrown to Fastify's error handler — writing SSE frames
+    // to a non-hijacked reply emits an implicit 200 with no Content-Type and
+    // no CORS headers instead of a proper 500 JSON body.
+    let hijacked = false;
     try {
       const id = randomUUID();
       const now = Date.now();
@@ -211,6 +217,7 @@ export async function gamesRoutes(app: FastifyInstance) {
 
       // Hijack response for SSE
       reply.hijack();
+      hijacked = true;
       writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: title });
 
@@ -397,6 +404,27 @@ export async function gamesRoutes(app: FastifyInstance) {
         endSSE(reply);
       }
     } catch (err) {
+      // Refund any charge first — shared by both branches below. Idempotent,
+      // so a pre-hijack path that already refunded is a no-op.
+      if (logId) {
+        await refund(logId, {
+          logger: request.log,
+          reason: "persistence_error",
+        }).catch((refundErr) => {
+          request.log.error(
+            { err: refundErr instanceof Error ? refundErr.message : String(refundErr), logId },
+            "credit refund failed after handler throw; user may be overcharged"
+          );
+        });
+      }
+      // A throw BEFORE reply.hijack() (e.g. the game/message insert
+      // transaction, or a non-quota deduct failure) still has a normal
+      // Fastify reply: rethrow so the global error handler returns a proper
+      // JSON 500 with CORS headers instead of raw SSE frames on an implicit
+      // 200 status.
+      if (!hijacked) {
+        throw err;
+      }
       // A throw AFTER reply.hijack() (e.g. the bare genre/title db.update
       // calls in the pre-stream section) bypasses Fastify's error handler,
       // which no longer runs for a hijacked response. Without this catch the
@@ -406,17 +434,6 @@ export async function gamesRoutes(app: FastifyInstance) {
         { err: err instanceof Error ? err.message : String(err) },
         "generation handler threw after hijack"
       );
-      if (logId) {
-        await refund(logId, {
-          logger: request.log,
-          reason: "persistence_error",
-        }).catch((refundErr) => {
-          request.log.error(
-            { err: refundErr instanceof Error ? refundErr.message : String(refundErr), logId },
-            "credit refund failed after post-hijack throw; user may be overcharged"
-          );
-        });
-      }
       if (!reply.raw.writableEnded) {
         writeSSE(reply, "error", { message: "Generation failed unexpectedly" });
         endSSE(reply);
@@ -843,6 +860,9 @@ export async function gamesRoutes(app: FastifyInstance) {
     let stopHeartbeat: (() => void) | null = null;
     // Hoisted so the post-hijack catch can refund against it.
     let logId: string | null = null;
+    // See generation route — pre-hijack throws must be rethrown to Fastify,
+    // not answered with SSE frames on a non-hijacked reply.
+    let hijacked = false;
     try {
       // Deduct credits. Same TOCTOU/refund considerations as POST /api/games.
       try {
@@ -915,6 +935,7 @@ export async function gamesRoutes(app: FastifyInstance) {
       }
 
       reply.hijack();
+      hijacked = true;
       writeSSEHeaders(reply, request);
       writeSSE(reply, "meta", { gameId: id, placeholderTitle: game.title });
       stopHeartbeat = startHeartbeat(reply);
@@ -1071,6 +1092,24 @@ export async function gamesRoutes(app: FastifyInstance) {
         endSSE(reply);
       }
     } catch (err) {
+      // Refund any charge first — shared by both branches below. Idempotent,
+      // so the pre-stream-setup path (which already refunded) is a no-op.
+      if (logId) {
+        await refund(logId, {
+          logger: request.log,
+          reason: "persistence_error",
+        }).catch((refundErr) => {
+          request.log.error(
+            { err: refundErr instanceof Error ? refundErr.message : String(refundErr), logId },
+            "credit refund failed after handler throw; user may be overcharged"
+          );
+        });
+      }
+      // See generation route: a pre-hijack throw still has a normal Fastify
+      // reply — rethrow to the global error handler for a proper JSON 500.
+      if (!hijacked) {
+        throw err;
+      }
       // A throw AFTER reply.hijack() (e.g. startHeartbeat / writeSSEHeaders, or
       // any unforeseen synchronous throw in the stream-setup region) bypasses
       // Fastify's error handler, which no longer runs for a hijacked response.
@@ -1081,17 +1120,6 @@ export async function gamesRoutes(app: FastifyInstance) {
         { err: err instanceof Error ? err.message : String(err) },
         "refinement handler threw after hijack"
       );
-      if (logId) {
-        await refund(logId, {
-          logger: request.log,
-          reason: "persistence_error",
-        }).catch((refundErr) => {
-          request.log.error(
-            { err: refundErr instanceof Error ? refundErr.message : String(refundErr), logId },
-            "credit refund failed after post-hijack throw; user may be overcharged"
-          );
-        });
-      }
       if (!reply.raw.writableEnded) {
         writeSSE(reply, "error", { message: "Refinement failed unexpectedly" });
         endSSE(reply);
