@@ -16,7 +16,11 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          # Pin to the same minor as the production image (Dockerfile:
+          # oven/bun:1.2-debian). `latest` let CI green-light code against a
+          # Bun version production never runs — and a new Bun release could
+          # break CI with no code change.
+          bun-version: "1.2"
 
       - run: bun install --frozen-lockfile
 
