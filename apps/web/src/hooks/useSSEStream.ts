@@ -149,6 +149,12 @@ export function useSSEStream(opts: UseSSEStreamOptions): UseSSEStream {
 
           const res = await fetch(target, init);
 
+          // abort() is synchronous but a resolved fetch/read continuation
+          // still runs as a queued microtask — without this check, a stream
+          // aborted by stop() or a re-entrant start() could still process
+          // status branches and clobber the new stream's state.
+          if (ac.signal.aborted) return;
+
           if (res.status === 409) {
             const raw = await res.json().catch(() => ({}));
             const norm = normalizeError(raw);
@@ -183,6 +189,13 @@ export function useSSEStream(opts: UseSSEStreamOptions): UseSSEStream {
           // residual-buffer flush so a terminator that arrives without a
           // trailing "\n\n" (TCP-split on close) is still honored.
           const handleFrame = (frame: string): void => {
+            // Drop frames from an aborted stream. A read that resolved just
+            // before abort() can still deliver the terminal `done` frame,
+            // whose onDone side effects (status flip, thumbnail capture,
+            // navigation) must not fire after stop()/re-entrant start() —
+            // e.g. a stale onDone navigating to the OLD game and unmounting
+            // the component mid-way through the NEW stream.
+            if (ac.signal.aborted) return;
             const trimmed = frame.trim();
             if (!trimmed) return;
             // SSE comment / keep-alive heartbeat (sent by lib/sse.ts every
