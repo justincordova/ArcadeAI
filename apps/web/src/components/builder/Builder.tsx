@@ -193,15 +193,18 @@ function RefinementBuilder({
     if (!isStreaming) textareaRef.current?.focus();
   }, [isStreaming]);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const trimmed = prompt.trim();
-    if (!trimmed || isStreaming) return;
-
+  // Shared by the prompt form and the repair-fallback "Try again" action.
+  // Every refinement turn MUST go through this path: skipping the state
+  // resets (as the old onTryAgain did by calling refine() directly) left a
+  // stale `repairedCode` outranking the fresh finalCode in the displayCode
+  // precedence — the preview showed the old game while the server had saved
+  // the new one — and left `previousCodeSnapshot` pointing at the previous
+  // turn's baseline, rendering the DiffViewer against the wrong "before".
+  function submitRefinement(text: string) {
     const optimisticMsg: Message = {
       id: `optimistic-${Date.now()}`,
       kind: "feedback",
-      content: trimmed,
+      content: text,
       createdAt: Date.now(),
     };
     setLocalMessages((prev) => [...prev, optimisticMsg]);
@@ -220,7 +223,14 @@ function RefinementBuilder({
     setRepairedCode(null);
 
     setRefineTrigger((n) => n + 1);
-    refine(trimmed);
+    refine(text);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = prompt.trim();
+    if (!trimmed || isStreaming) return;
+    submitRefinement(trimmed);
     setPrompt("");
   }
 
@@ -304,7 +314,7 @@ function RefinementBuilder({
       onRepaired={handleRepaired}
       onTryAgain={() => {
         const original = initialMessages.find((m) => m.kind === "prompt")?.content ?? "";
-        if (original) refine(original);
+        if (original && !isStreaming) submitRefinement(original);
       }}
       onRefine={focusPromptInput}
       resetTrigger={refineTrigger}
