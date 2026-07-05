@@ -2,6 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { GPT_MINI, computeCost } from "@arcadeai/shared";
 import { generateText } from "ai";
 import type { FastifyBaseLogger } from "fastify";
+import { AUX_LLM_TIMEOUT_MS } from "./client.js";
 
 // Lazily construct the OpenAI client so a missing OPENAI_API_KEY surfaces a
 // clear error at the call site instead of silently constructing a client
@@ -26,6 +27,10 @@ export async function summarizeCode(html: string, logger?: FastifyBaseLogger): P
     model: getOpenAI()(GPT_MINI),
     system: SUMMARIZE_SYSTEM_PROMPT,
     prompt: html,
+    // Awaited inside refinement context building, AFTER credits are
+    // deducted and while the per-user stream lock is held — a hang here
+    // would wedge the user's refinement indefinitely.
+    abortSignal: AbortSignal.timeout(AUX_LLM_TIMEOUT_MS),
   });
   logger?.info(
     {

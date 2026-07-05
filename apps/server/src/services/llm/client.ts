@@ -19,6 +19,17 @@ export const LLM_TIMEOUT_MS = {
   repair: 180_000,
 } as const;
 
+// Timeout for the small auxiliary GPT-mini / embedding calls (classify,
+// embed, title, summarize, diff-summary, categorize-error). These sit in
+// the request path — classify/embed are awaited before generation starts,
+// and summarize runs inside refinement context building AFTER credits are
+// deducted and while the per-user stream lock is held. Their soft-fail
+// try/catch only protects against rejection: a socket that hangs never
+// settles, so without an abort signal a single wedged call stalls the
+// stream indefinitely (the 180s timeout above does not cover them). 30s
+// is generous for calls that normally finish in ~1s.
+export const AUX_LLM_TIMEOUT_MS = 30_000;
+
 // Per-call output ceilings. The 8192 default truncated mid-stream on
 // non-trivial games (e.g. ~19K-char dance/parkour titles ran out mid-
 // statement, leaving the iframe with unparseable JS and a blank canvas).

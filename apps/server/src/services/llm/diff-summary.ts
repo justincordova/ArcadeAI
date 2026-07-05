@@ -11,7 +11,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { GPT_MINI, computeCost } from "@arcadeai/shared";
 import { generateText } from "ai";
 import type { FastifyBaseLogger } from "fastify";
-import { isLlmAuthError } from "./client.js";
+import { AUX_LLM_TIMEOUT_MS, isLlmAuthError } from "./client.js";
 
 const DIFF_SUMMARY_SYSTEM_PROMPT = `You compare two versions of a single-file HTML5 game and describe what the user-visible change accomplished.
 
@@ -67,6 +67,9 @@ ${clipCode(newCode)}
       model: openai(GPT_MINI),
       system: DIFF_SUMMARY_SYSTEM_PROMPT,
       prompt: userMessage,
+      // Awaited on the refine SSE stream after `done` but before `endSSE`;
+      // a hang would hold the connection and the stream lock open.
+      abortSignal: AbortSignal.timeout(AUX_LLM_TIMEOUT_MS),
     });
     logger?.info(
       {

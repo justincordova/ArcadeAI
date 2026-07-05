@@ -4,7 +4,7 @@ import { GPT_MINI, computeCost } from "@arcadeai/shared/models.js";
 import { generateObject } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";
-import { isLlmAuthError } from "./client.js";
+import { AUX_LLM_TIMEOUT_MS, isLlmAuthError } from "./client.js";
 
 const Schema = z.object({
   genre: z.enum(GENRE_BUCKETS),
@@ -38,6 +38,10 @@ export async function classifyPrompt(
       schema: Schema,
       system: SYSTEM,
       prompt,
+      // This call is awaited before generation starts; a hung socket would
+      // otherwise stall the stream forever (the catch only fires on
+      // rejection, and a hang never settles).
+      abortSignal: AbortSignal.timeout(AUX_LLM_TIMEOUT_MS),
     });
     logger?.info(
       {

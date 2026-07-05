@@ -2,6 +2,7 @@ import { openai } from "@ai-sdk/openai";
 import { GPT_MINI, computeCost } from "@arcadeai/shared/models.js";
 import { generateText } from "ai";
 import type { FastifyBaseLogger } from "fastify";
+import { AUX_LLM_TIMEOUT_MS } from "./client.js";
 
 const SYSTEM =
   "Generate a concise, descriptive game title for the user's prompt. Return only the title — no quotes, no punctuation, no preamble. Maximum 80 characters.";
@@ -17,6 +18,9 @@ export async function generateTitle(prompt: string, logger?: FastifyBaseLogger):
     model: openai(GPT_MINI),
     system: SYSTEM,
     messages: [{ role: "user", content: prompt }],
+    // Awaited in the pre-generation fanout — a hang must settle so
+    // Promise.allSettled can fall back to the placeholder title.
+    abortSignal: AbortSignal.timeout(AUX_LLM_TIMEOUT_MS),
   });
   logger?.info(
     {

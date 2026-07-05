@@ -3,7 +3,7 @@ import { GPT_MINI, computeCost } from "@arcadeai/shared/models.js";
 import { generateObject } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";
-import { isLlmAuthError } from "./client.js";
+import { AUX_LLM_TIMEOUT_MS, isLlmAuthError } from "./client.js";
 
 const Schema = z.object({
   category: z.enum(["syntax", "runtime", "logic"]),
@@ -29,6 +29,9 @@ export async function categorizeError(
       schema: Schema,
       system: SYSTEM,
       prompt,
+      // Awaited inside the repair SSE stream while the per-user stream lock
+      // is held — a hang would wedge the user until they give up.
+      abortSignal: AbortSignal.timeout(AUX_LLM_TIMEOUT_MS),
     });
     logger?.info(
       {

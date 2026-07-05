@@ -2,6 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { EMBEDDING, computeCost } from "@arcadeai/shared";
 import { embed } from "ai";
 import type { FastifyBaseLogger } from "fastify";
+import { AUX_LLM_TIMEOUT_MS } from "./client.js";
 
 // Lazily construct the OpenAI client so a missing OPENAI_API_KEY only
 // breaks the RAG retrieval path instead of crashing server startup.
@@ -30,6 +31,9 @@ export async function embedPrompt(prompt: string, logger?: FastifyBaseLogger): P
   const { embedding, usage } = await embed({
     model: getOpenAI().embedding(EMBEDDING),
     value: prompt,
+    // Awaited before generation starts — a hung socket must eventually
+    // reject so the route's allSettled fanout can degrade to no-RAG.
+    abortSignal: AbortSignal.timeout(AUX_LLM_TIMEOUT_MS),
   });
   logger?.info(
     {
