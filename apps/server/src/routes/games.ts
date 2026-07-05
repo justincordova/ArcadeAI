@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { games, messages, usageLog } from "@arcadeai/db";
-import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, isNull, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { ConcurrencyError, acquire, release } from "../lib/active-streams.js";
@@ -86,6 +86,16 @@ const RepairBody = z.object({
     stack: z.string().max(16384).optional(),
   }),
 });
+
+// In-flight usage_log rows older than this are treated as dead, not active.
+// The predicates on GET /api/games/:id (`inProgress`) and POST /:id/undo
+// (stream guard) key on `succeeded=0 AND refunded_at IS NULL` — a state
+// that normally resolves when the stream finalizes. But a hard crash
+// (OOM, kill -9) skips finalization, and nothing sweeps the rows at
+// startup, so without a cutoff the game reports "generating" forever and
+// undo is permanently 409'd. 15 minutes comfortably exceeds the 180s LLM
+// timeout plus pre/post-stream work, so no live stream is ever excluded.
+const STALE_STREAM_CUTOFF_MS = 15 * 60_000;
 
 // Per-user rate limit for streaming endpoints: 10 req/min (SPEC §14).
 // Override the global `onRequest` hook with `preHandler` so the
@@ -479,7 +489,9 @@ export async function gamesRoutes(app: FastifyInstance) {
             eq(usageLog.gameId, id),
             eq(usageLog.action, "generation"),
             eq(usageLog.succeeded, 0),
-            isNull(usageLog.refundedAt)
+            isNull(usageLog.refundedAt),
+            // Ignore rows orphaned by a crash — see STALE_STREAM_CUTOFF_MS.
+            gt(usageLog.createdAt, Date.now() - STALE_STREAM_CUTOFF_MS)
           )
         )
         .limit(1),
@@ -727,7 +739,15 @@ export async function gamesRoutes(app: FastifyInstance) {
     const inflight = await db
       .select({ id: usageLog.id })
       .from(usageLog)
-      .where(and(eq(usageLog.gameId, id), eq(usageLog.succeeded, 0), isNull(usageLog.refundedAt)))
+      .where(
+        and(
+          eq(usageLog.gameId, id),
+          eq(usageLog.succeeded, 0),
+          isNull(usageLog.refundedAt),
+          // Ignore rows orphaned by a crash — see STALE_STREAM_CUTOFF_MS.
+          gt(usageLog.createdAt, Date.now() - STALE_STREAM_CUTOFF_MS)
+        )
+      )
       .limit(1);
     if (inflight.length > 0) {
       return sendError(reply, 409, {
