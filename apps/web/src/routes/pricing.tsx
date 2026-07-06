@@ -55,33 +55,35 @@ function PricingPage() {
       />
 
       <div style={{ maxWidth: 960, margin: "0 auto", position: "relative" }}>
-        {/* Back link (if not authed, show standalone header; if authed, top bar handles nav) */}
-        {!me && (
-          <div style={{ marginBottom: 32 }}>
-            <Link
-              to="/sign-in"
-              style={{
-                fontSize: 13,
-                color: "var(--color-text-muted)",
-                textDecoration: "none",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                <path
-                  d="M9 11L5 7l4-4"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Back to sign in
-            </Link>
-          </div>
-        )}
+        {/* Back link — shown for BOTH auth states. /pricing is a top-level
+            route (not under _authed), so no TopBar ever renders here; authed
+            users arriving from the PlanBadge dropdown previously had no way
+            back except the browser button (the CTA buttons are intentional
+            no-ops). */}
+        <div style={{ marginBottom: 32 }}>
+          <Link
+            to={me ? "/" : "/sign-in"}
+            style={{
+              fontSize: 13,
+              color: "var(--color-text-muted)",
+              textDecoration: "none",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path
+                d="M9 11L5 7l4-4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {me ? "Back to dashboard" : "Back to sign in"}
+          </Link>
+        </div>
 
         {/* Heading */}
         <div style={{ textAlign: "center", marginBottom: 48 }}>
