@@ -386,35 +386,50 @@ export async function refund(
       .run(Date.now(), logId).changes;
     if (claimed === 0) return false; // lost the race; another refund() already credited.
 
+    // Clamp the credit-back to the tier caps. A stream can span a reset
+    // boundary (LLM calls run up to 180s): deduct at 23:59 drops daily
+    // 500→300, a lazy reset at 00:00 refills to 500, and an unclamped
+    // refund at 00:01 would land the balance at 700 — above the cap. The
+    // lifetime counters already carry the equivalent CASE guard for this
+    // exact boundary; the credit columns get the mirror treatment. The
+    // MAX(limit - current, 0) form adds at most the remaining headroom and
+    // never *reduces* a balance. Tier is read inside the transaction so the
+    // clamp uses the caps in force at refund time (billing.ts already caps
+    // balances on tier change, so current <= limit holds going in).
+    const tierRow = sqlite.prepare(`SELECT tier FROM "user" WHERE id = ?`).get(row.userId) as {
+      tier?: string;
+    } | null;
+    const limits = TIER_CREDIT_LIMITS[(tierRow?.tier as Tier | undefined) ?? "free"];
+
     if (lifetimeKey === "generations") {
       sqlite
         .prepare(
           `UPDATE "user"
-              SET credits_remaining_daily   = credits_remaining_daily   + ?,
-                  credits_remaining_monthly = credits_remaining_monthly + ?,
+              SET credits_remaining_daily   = credits_remaining_daily   + MIN(?, MAX(? - credits_remaining_daily, 0)),
+                  credits_remaining_monthly = credits_remaining_monthly + MIN(?, MAX(? - credits_remaining_monthly, 0)),
                   lifetime_generations_used = CASE WHEN lifetime_generations_used > 0 THEN lifetime_generations_used - 1 ELSE 0 END
             WHERE id = ?`
         )
-        .run(cost, cost, row.userId);
+        .run(cost, limits.daily, cost, limits.monthly, row.userId);
     } else if (lifetimeKey === "refinements") {
       sqlite
         .prepare(
           `UPDATE "user"
-              SET credits_remaining_daily   = credits_remaining_daily   + ?,
-                  credits_remaining_monthly = credits_remaining_monthly + ?,
+              SET credits_remaining_daily   = credits_remaining_daily   + MIN(?, MAX(? - credits_remaining_daily, 0)),
+                  credits_remaining_monthly = credits_remaining_monthly + MIN(?, MAX(? - credits_remaining_monthly, 0)),
                   lifetime_refinements_used = CASE WHEN lifetime_refinements_used > 0 THEN lifetime_refinements_used - 1 ELSE 0 END
             WHERE id = ?`
         )
-        .run(cost, cost, row.userId);
+        .run(cost, limits.daily, cost, limits.monthly, row.userId);
     } else if (cost > 0) {
       sqlite
         .prepare(
           `UPDATE "user"
-              SET credits_remaining_daily   = credits_remaining_daily   + ?,
-                  credits_remaining_monthly = credits_remaining_monthly + ?
+              SET credits_remaining_daily   = credits_remaining_daily   + MIN(?, MAX(? - credits_remaining_daily, 0)),
+                  credits_remaining_monthly = credits_remaining_monthly + MIN(?, MAX(? - credits_remaining_monthly, 0))
             WHERE id = ?`
         )
-        .run(cost, cost, row.userId);
+        .run(cost, limits.daily, cost, limits.monthly, row.userId);
     }
     return true;
   });
