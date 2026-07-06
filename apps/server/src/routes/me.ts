@@ -7,6 +7,7 @@ import { z } from "zod";
 import { auth } from "../lib/auth.js";
 import { db } from "../lib/db.js";
 import { notFoundError, sendError, validationError } from "../lib/errors.js";
+import { toWebHeaders } from "../plugins/auth.js";
 import { applyResets } from "../services/usage/reset.js";
 
 const PatchMeBody = z
@@ -98,7 +99,11 @@ export async function meRoutes(app: FastifyInstance) {
     // transaction below also deletes the session row as defense-in-depth,
     // but going through Better Auth keeps any future audit/event hooks fed.
     try {
-      await auth.api.signOut({ headers: request.headers as unknown as Headers });
+      // Must be a real WHATWG Headers object — Better Auth reads the session
+      // cookie via headers.get(). The previous `request.headers as unknown as
+      // Headers` cast handed it a plain Node object with no .get(), so the
+      // cookie lookup failed and this call never actually signed out.
+      await auth.api.signOut({ headers: toWebHeaders(request) });
     } catch (err) {
       request.log.warn({ err }, "auth.api.signOut failed during account delete; continuing");
     }

@@ -57,6 +57,17 @@ export async function getSession(request: FastifyRequest): Promise<AuthSession> 
 }
 
 /**
+ * Convert a Fastify request's headers into the WHATWG `Headers` object the
+ * Better Auth API expects. Exported for call sites outside this plugin
+ * (e.g. DELETE /api/me's signOut). Passing `request.headers` directly —
+ * even cast — hands Better Auth a plain object with no `.get()`, so every
+ * cookie lookup silently fails.
+ */
+export function toWebHeaders(request: FastifyRequest): Headers {
+  return buildHeaders(request, HOP_BY_HOP_REQUEST_HEADERS);
+}
+
+/**
  * Top-level preHandler that gates `/api/*` (except `/api/auth/*` and
  * `/api/health`) on a valid Better Auth session. Populates
  * `request.authSession` for downstream handlers.
