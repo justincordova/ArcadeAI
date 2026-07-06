@@ -129,7 +129,13 @@ async function main() {
           throw new Error(`thumbnail too large: ${dataUrl.length} chars (cap 350000)`);
         }
 
-        updateThumbnail.run(dataUrl, Date.now(), gameId, SYSTEM_USER_ID);
+        // A 0-row UPDATE means the system game row is missing (e.g. a new
+        // rag-prompts entry that hasn't been seeded yet). Previously this
+        // was silently counted as a success and logged with a ✓.
+        const written = updateThumbnail.run(dataUrl, Date.now(), gameId, SYSTEM_USER_ID).changes;
+        if (written !== 1) {
+          throw new Error(`game row ${gameId} not found — run seed-system-games first`);
+        }
         success++;
         const kb = Math.round(dataUrl.length / 1024);
         console.log(`  ✓ ${entry.id.padEnd(40)} ${kb} KB`);

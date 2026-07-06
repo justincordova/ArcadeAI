@@ -73,7 +73,10 @@ if (!dbPath) {
  * encoding of a deterministic hash so the resulting slug looks like the
  * randomUUID-based slugs that real publishes generate, but never changes
  * across re-seeds. Collision with a real user slug is astronomically
- * unlikely (8 hex = 16M space) and would be caught by the unique index.
+ * unlikely (8 hex ≈ 4.3B combinations). Note the INSERT below uses
+ * OR IGNORE, which swallows a slug-unique conflict rather than raising it
+ * — the per-row `changes` check in the seed loop is what actually surfaces
+ * a collision.
  */
 function slugFor(ragId: string): string {
   // FNV-1a 32-bit, doubled for 8 hex characters. Plenty for 20 entries.
@@ -205,7 +208,27 @@ async function main() {
         now,
         now
       );
-      updateGame.run(r.title, r.html, r.entry.genre, r.entry.prompt, r.slug, now, now, r.gameId);
+      const updated = updateGame.run(
+        r.title,
+        r.html,
+        r.entry.genre,
+        r.entry.prompt,
+        r.slug,
+        now,
+        now,
+        r.gameId
+      ).changes;
+      // OR IGNORE above swallows ANY conflict, not just the id conflict it
+      // exists for. If the derived slug collides with a real user's
+      // public_slug, the insert is silently skipped and this UPDATE (keyed
+      // on the never-created id) matches 0 rows — previously the script
+      // then reported success while the game was never seeded. Fail loudly
+      // instead so the collision is visible and fixable.
+      if (updated !== 1) {
+        throw new Error(
+          `Seed row ${r.gameId} was not written (0 rows updated). Likely a public_slug collision on "${r.slug}" with an existing user game.`
+        );
+      }
     }
   });
   tx();
