@@ -52,10 +52,20 @@ function DiscoverPage() {
     getNextPageParam: (last) => last.nextOffset ?? undefined,
   });
 
-  const items: DiscoverGame[] = useMemo(
-    () => query.data?.pages.flatMap((p) => p.items) ?? [],
-    [query.data]
-  );
+  // Dedupe by id: offset pagination over a live-ranked list means a game
+  // can shift across the page boundary between fetches (trending reorders
+  // on likes; a new publish shifts "new") and appear at the tail of page N
+  // and the head of page N+1 — producing duplicate React keys and a
+  // visibly repeated card. First occurrence wins.
+  const items: DiscoverGame[] = useMemo(() => {
+    const flat = query.data?.pages.flatMap((p) => p.items) ?? [];
+    const seen = new Set<string>();
+    return flat.filter((g) => {
+      if (seen.has(g.id)) return false;
+      seen.add(g.id);
+      return true;
+    });
+  }, [query.data]);
 
   useEffect(() => {
     return setDocumentHead({
