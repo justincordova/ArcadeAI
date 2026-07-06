@@ -585,3 +585,63 @@ describe("POST /api/games/:id/undo", () => {
     expect(readCodes(gameId)?.previous_code).toBe("<html>original</html>");
   });
 });
+
+describe("POST /api/games/:id/repair — daily budget", () => {
+  test("returns 429 RATE_LIMITED once 50 repairs have run in the last 24h", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>broken</html>" });
+
+    // Seed 50 repair attempts inside the rolling window. Repairs are
+    // credit-free and exempt from lifetime caps, so this budget is the ONLY
+    // cost control on the endpoint — the check must fire before the SSE
+    // hijack so the client gets a proper JSON 429.
+    const insert = testDb.sqlite.prepare(
+      `INSERT INTO usage_log
+         (id, user_id, game_id, action, credits_charged, succeeded, created_at)
+       VALUES (?, ?, ?, 'repair', 0, 1, ?)`
+    );
+    for (let i = 0; i < 50; i++) {
+      insert.run(`repair-log-${i}`, userId, gameId, Date.now() - i * 1000);
+    }
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/repair`,
+      headers: { "content-type": "application/json" },
+      payload: { error: { message: "TypeError: x is undefined" } },
+    });
+
+    expect(res.statusCode).toBe(429);
+    expect((res.json() as { code: string }).code).toBe("RATE_LIMITED");
+  });
+
+  test("repairs older than 24h do not count against the budget", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>broken</html>" });
+
+    // 50 attempts, all aged past the rolling window — the budget check must
+    // ignore them. The request then proceeds past the 429 guard; without an
+    // LLM key the stream fails later, but the response is a hijacked SSE
+    // (statusCode !== 429), which is all this test asserts.
+    const insert = testDb.sqlite.prepare(
+      `INSERT INTO usage_log
+         (id, user_id, game_id, action, credits_charged, succeeded, created_at)
+       VALUES (?, ?, ?, 'repair', 0, 1, ?)`
+    );
+    const old = Date.now() - 25 * 3600_000;
+    for (let i = 0; i < 50; i++) {
+      insert.run(`old-repair-log-${i}`, userId, gameId, old - i * 1000);
+    }
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/repair`,
+      headers: { "content-type": "application/json" },
+      payload: { error: { message: "TypeError: x is undefined" } },
+    });
+
+    expect(res.statusCode).not.toBe(429);
+  });
+});
