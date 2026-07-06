@@ -104,6 +104,18 @@ function PlayPage() {
       // it doesn't look like a misclick.
       toast.error("Couldn't update like");
     },
+    onSuccess: (result) => {
+      // The server's RETURNING-backed response is authoritative — the
+      // optimistic +/-1 above is a guess that diverges when the same user
+      // already toggled from another device/tab (server replies
+      // `changed: false` with an unchanged count). Previously the response
+      // was discarded and the page's own query never invalidated, so an
+      // off-by-one count and possibly wrong heart state stuck around until
+      // an unrelated refetch.
+      queryClient.setQueryData<PublicGame>(["public-game", slug], (prev) =>
+        prev ? { ...prev, liked: result.liked, likeCount: result.likeCount } : prev
+      );
+    },
     onSettled: () => {
       // Refresh discover lists too so the count there stays in sync.
       queryClient.invalidateQueries({ queryKey: ["discover"] });
