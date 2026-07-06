@@ -29,10 +29,19 @@ export async function fetchMeOrNull(): Promise<MeResponse | null> {
 }
 
 export async function signOut(): Promise<void> {
-  await fetch(`${API_BASE}/api/auth/sign-out`, {
-    method: "POST",
-    credentials: "include",
-  });
+  try {
+    await fetch(`${API_BASE}/api/auth/sign-out`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    // Network failure — proceed anyway. Callers fire-and-forget this
+    // (TopBar's onClick), so an uncaught rejection here meant the click
+    // silently did NOTHING: no cache clear, no navigation, and the user
+    // believed they were signed out. Clearing local state and landing on
+    // /sign-in is the right UX even if the server never saw the request;
+    // if the session cookie survived, the sign-in flow makes that visible.
+  }
   // Drop every cached query before hard-navigating so a back-button to the
   // SPA doesn't briefly flash the previous user's data while the auth guard
   // re-evaluates and redirects.
