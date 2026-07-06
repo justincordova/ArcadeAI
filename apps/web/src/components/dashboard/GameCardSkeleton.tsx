@@ -13,8 +13,12 @@ export function GameCardSkeletons({ view, count = 6 }: SkeletonProps) {
         view === "grid"
           ? {
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-              gap: 16,
+              // Must match GameGrid's template exactly — the whole point of
+              // this component is zero reflow when data lands. auto-fill
+              // here vs repeat(3) there changed the column count at most
+              // viewport widths, so the load visibly reflowed anyway.
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 14,
             }
           : { display: "flex", flexDirection: "column", gap: 8 }
       }
