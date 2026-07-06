@@ -105,17 +105,25 @@ export async function applyResets(userId: string) {
         .from(users)
         .where(eq(users.id, userId));
       const f = fresh[0];
-      if (f) {
-        return {
-          tier: f.tier as Tier,
-          creditsRemainingDaily: f.creditsRemainingDaily,
-          creditsRemainingMonthly: f.creditsRemainingMonthly,
-          dailyResetAt: f.dailyResetAt,
-          monthlyResetAt: f.monthlyResetAt,
-          lifetimeGenerationsUsed: f.lifetimeGenerationsUsed,
-          lifetimeRefinementsUsed: f.lifetimeRefinementsUsed,
-        };
+      if (!f) {
+        // The conditional UPDATE missed AND the re-select found nothing:
+        // the user row was deleted between our initial read and now (e.g.
+        // DELETE /api/me racing in another tab). Falling through would
+        // fabricate counters for a nonexistent user — callers treat a
+        // non-null return as "user exists", so deduct() would then
+        // misreport the miss as InsufficientCreditsError instead of
+        // user-not-found.
+        return null;
       }
+      return {
+        tier: f.tier as Tier,
+        creditsRemainingDaily: f.creditsRemainingDaily,
+        creditsRemainingMonthly: f.creditsRemainingMonthly,
+        dailyResetAt: f.dailyResetAt,
+        monthlyResetAt: f.monthlyResetAt,
+        lifetimeGenerationsUsed: f.lifetimeGenerationsUsed,
+        lifetimeRefinementsUsed: f.lifetimeRefinementsUsed,
+      };
     }
   }
 
