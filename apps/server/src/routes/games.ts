@@ -97,6 +97,18 @@ const RepairBody = z.object({
 // timeout plus pre/post-stream work, so no live stream is ever excluded.
 const STALE_STREAM_CUTOFF_MS = 15 * 60_000;
 
+// Rolling 24h cap on repair attempts per user. Repairs are credit-free per
+// SPEC §10 and exempt from the lifetime caps, which makes them the ONLY
+// full-Claude-stream endpoint with no cost control: a user (including a
+// free-tier account that exhausted its lifetime caps) could fabricate
+// error payloads and drive 10 streams/min indefinitely at zero credit
+// cost. The client's auto-repair fires at most 2 attempts per error, so a
+// generous budget never touches legitimate use while bounding worst-case
+// spend. Checked as a plain count — a small racy overshoot is acceptable
+// for a budget (unlike the atomic credit guards).
+const REPAIR_DAILY_LIMIT = 50;
+const REPAIR_WINDOW_MS = 24 * 3600_000;
+
 // Per-user rate limit for streaming endpoints: 10 req/min (SPEC §14).
 // Override the global `onRequest` hook with `preHandler` so the
 // keyGenerator runs AFTER the auth preHandler has populated
@@ -1181,6 +1193,25 @@ export async function gamesRoutes(app: FastifyInstance) {
     // RAG context.
     if (!game.currentCode) {
       return sendError(reply, 400, validationError("Game has no code to repair"));
+    }
+
+    // Budget check — see REPAIR_DAILY_LIMIT. Runs before the SSE hijack so
+    // the client gets a proper JSON 429 instead of an SSE error frame.
+    const repairCountRows = await db
+      .select({ n: sql<number>`count(*)` })
+      .from(usageLog)
+      .where(
+        and(
+          eq(usageLog.userId, userId),
+          eq(usageLog.action, "repair"),
+          gt(usageLog.createdAt, Date.now() - REPAIR_WINDOW_MS)
+        )
+      );
+    if ((repairCountRows[0]?.n ?? 0) >= REPAIR_DAILY_LIMIT) {
+      return sendError(reply, 429, {
+        code: "RATE_LIMITED",
+        message: "Daily repair limit reached. Please try again later.",
+      });
     }
 
     // Concurrency cap: repair counts against the same 1-stream-per-user limit
