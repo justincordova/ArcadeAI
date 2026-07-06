@@ -18,9 +18,11 @@ let customSqliteSelected = false;
 
 export function selectCustomSqliteIfNeeded(): void {
   if (customSqliteSelected) return;
-  customSqliteSelected = true;
 
-  if (platform !== "darwin") return;
+  if (platform !== "darwin") {
+    customSqliteSelected = true;
+    return;
+  }
 
   const candidates = [
     "/opt/homebrew/opt/sqlite/lib/libsqlite3.dylib", // Apple silicon
@@ -28,11 +30,18 @@ export function selectCustomSqliteIfNeeded(): void {
   ];
   const found = candidates.find((p) => existsSync(p));
   if (!found) {
+    // Deliberately NOT latched: setting the flag before this throw would
+    // make any caller that catches the error (or a retry after installing
+    // Homebrew SQLite mid-process) silently no-op on the next call — the
+    // Database would then bind against Apple's extension-less SQLite and
+    // the failure would resurface later as a confusing loadExtension error
+    // instead of this actionable message.
     throw new Error(
       `sqlite-vec requires a SQLite build with extension loading enabled. On macOS, install via Homebrew: \`brew install sqlite\`. Searched: ${candidates.join(", ")}`
     );
   }
   Database.setCustomSQLite(found);
+  customSqliteSelected = true;
 }
 
 /**
