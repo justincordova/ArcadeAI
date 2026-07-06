@@ -30,6 +30,33 @@ const SlugParams = z.object({
   slug: z.string().regex(/^[0-9a-f]{8}$/i, "Invalid slug format"),
 });
 
+// Remix copies a full currentCode blob + message row per call. Every other
+// write-amplifying endpoint (generate/refine/repair) carries a 10/min
+// per-user limit; remix was gated only by the global 60/min IP cap. The
+// auth guard exempts /api/play/*, so authSession isn't populated here —
+// key on IP (the plugin's global keyGenerator), which still bounds the
+// growth an anonymous-cookie-rotating script can inflict.
+const perIp10PerMin = {
+  rateLimit: {
+    max: 10,
+    timeWindow: "1 minute",
+  },
+};
+
+// The play counter feeds the Discover trending/top sort and is fully
+// anonymous — without per-slug keying, one IP gets 60 increments/min on a
+// single game (the schema comment on games.play_count documents an
+// IP+slug limit as the intended control). Key on ip + path (the path
+// embeds the slug; strip any query string so `?x=1` can't rotate keys).
+// 10 plays/min per game per IP is far above organic behavior.
+const perIpSlug10PerMin = {
+  rateLimit: {
+    max: 10,
+    timeWindow: "1 minute",
+    keyGenerator: (req: import("fastify").FastifyRequest) => `${req.ip}:${req.url.split("?")[0]}`,
+  },
+};
+
 export async function playRoutes(app: FastifyInstance) {
   // GET /api/play/:slug — public view of a published game. Returns only
   // fields safe to expose to anonymous visitors. Hydrates `liked: boolean`
@@ -74,7 +101,7 @@ export async function playRoutes(app: FastifyInstance) {
   // account. Auth is enforced manually because /api/play/* is auth-exempt.
   // Charges 0 credits but counts 1 against the free-tier lifetime cap so a
   // remix loop can't bypass the deployment-phase throttle.
-  app.post("/api/play/:slug/remix", async (request, reply) => {
+  app.post("/api/play/:slug/remix", { config: perIp10PerMin }, async (request, reply) => {
     const parseResult = SlugParams.safeParse(request.params);
     if (!parseResult.success) {
       return sendError(reply, 400, validationError("Invalid slug"));
@@ -190,7 +217,7 @@ export async function playRoutes(app: FastifyInstance) {
   // POST /api/play/:slug/play — increment the public play counter.
   // Fire-and-forget from the client; failures here never break the play
   // experience. Counts toward the discover-page sort.
-  app.post("/api/play/:slug/play", async (request, reply) => {
+  app.post("/api/play/:slug/play", { config: perIpSlug10PerMin }, async (request, reply) => {
     const parseResult = SlugParams.safeParse(request.params);
     if (!parseResult.success) {
       return sendError(reply, 400, validationError("Invalid slug"));
