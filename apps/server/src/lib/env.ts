@@ -21,7 +21,15 @@ const BaseSchema = z.object({
     .regex(/^\d+$/, "PORT must be a positive integer")
     .default("3000")
     .transform((s) => Number.parseInt(s, 10)),
-  WEB_ORIGIN: z.string().url().default("http://localhost:5173"),
+  // Trailing slashes are stripped because WEB_ORIGIN is compared as an
+  // exact string against the browser's Origin header (which never carries
+  // one) in both @fastify/cors and the SSE header writer — a configured
+  // "https://app.example.com/" would silently fail every CORS check.
+  WEB_ORIGIN: z
+    .string()
+    .url()
+    .default("http://localhost:5173")
+    .transform((s) => s.replace(/\/+$/, "")),
 
   // Whether the server sits behind a trusted reverse proxy / load balancer.
   // When true, Fastify derives `req.ip` from `X-Forwarded-For` — required for

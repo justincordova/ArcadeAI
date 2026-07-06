@@ -19,7 +19,10 @@ if (!process.env.BETTER_AUTH_SECRET && process.env.NODE_ENV === "production") {
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-me",
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
-  trustedOrigins: [process.env.WEB_ORIGIN ?? "http://localhost:5173"],
+  // Same trailing-slash normalization as env.ts's WEB_ORIGIN — origins are
+  // compared exactly, and this module reads process.env directly because it
+  // constructs at import time (before loadEnv's transformed copy exists).
+  trustedOrigins: [(process.env.WEB_ORIGIN ?? "http://localhost:5173").replace(/\/+$/, "")],
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema: {
