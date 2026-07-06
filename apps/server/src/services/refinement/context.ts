@@ -55,11 +55,24 @@ export async function buildRefinementContext({
     game.currentCode.length > MIN_CHARS_TO_TOKENIZE &&
     countTokens(game.currentCode) > SUMMARIZATION_THRESHOLD_TOKENS
   ) {
-    const digest = await summarizeCode(game.currentCode, logger);
+    // Soft-fail the summarizer: it runs AFTER credits are deducted and while
+    // the per-user stream lock is held, so a thrown error (timeout, 5xx,
+    // missing OPENAI_API_KEY) would otherwise propagate to the refine route's
+    // pre-stream catch and fail the whole refinement. Summarization is an
+    // optimization, not a requirement — a too-large prompt is the lesser
+    // evil than a failed turn.
+    let digest = "";
+    try {
+      digest = await summarizeCode(game.currentCode, logger);
+    } catch (err) {
+      logger?.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        "summarizeCode failed; falling back to full code in refinement context"
+      );
+    }
     // Fall back to the real code if the summarizer returns an empty digest —
     // feeding Claude an empty "Current code" block would have it refine from
-    // nothing and overwrite a working game. A too-large prompt is the lesser
-    // evil than a blank one.
+    // nothing and overwrite a working game.
     codeOrDigest = digest.trim() ? digest : game.currentCode;
   }
 
