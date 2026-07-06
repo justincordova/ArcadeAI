@@ -3,6 +3,7 @@ import { useSession } from "@/hooks/useSession.js";
 import { useStreamedGeneration } from "@/hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "@/hooks/useStreamedRefinement.js";
 import { GAMES_QUERY_KEY, postThumbnail, undoRefinement } from "@/lib/api/games.js";
+import { captureThumbnailWhenReady } from "@/lib/capture-thumbnail.js";
 import {
   CREDIT_COSTS,
   ENFORCE_LIFETIME_LIMITS_FOR_FREE,
@@ -245,13 +246,22 @@ function RefinementBuilder({
     [queryClient]
   );
 
+  // Cancel handle for the post-repair thumbnail capture — cancelled on
+  // unmount so no timer/listener outlives the component. (The previous bare
+  // setTimeout(500) was never cleaned up AND raced the iframe reloading its
+  // srcDoc with the repaired code — capturing the old canvas or nothing.)
+  const cancelRepairCaptureRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => {
+      cancelRepairCaptureRef.current?.();
+      cancelRepairCaptureRef.current = null;
+    };
+  }, []);
+
   function handleRepaired(code: string) {
     setRepairedCode(code);
-    setTimeout(() => {
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
-      }
-    }, 500);
+    cancelRepairCaptureRef.current?.();
+    cancelRepairCaptureRef.current = captureThumbnailWhenReady(() => iframeRef.current);
     queryClient.invalidateQueries({ queryKey: ["game", gameId] });
   }
 

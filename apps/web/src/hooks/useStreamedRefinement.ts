@@ -1,3 +1,4 @@
+import { captureThumbnailWhenReady } from "@/lib/capture-thumbnail.js";
 import { sanitizeHtmlOutput } from "@arcadeai/shared/sanitize-html.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -37,13 +38,14 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
   const accumulatedRef = useRef("");
   const queryClient = useQueryClient();
 
-  // Track the post-done capture timer so it can be cancelled on unmount —
-  // otherwise it fires after the component is gone and posts a message to a
-  // detached iframe.
-  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Cancel handle for the post-done thumbnail capture sequence. Cancelled on
+  // unmount (so no timer/listener fires against a detached iframe) and when
+  // a new refinement starts (so a stale capture can't race the new stream).
+  const cancelCaptureRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     return () => {
-      if (captureTimerRef.current) clearTimeout(captureTimerRef.current);
+      cancelCaptureRef.current?.();
+      cancelCaptureRef.current = null;
     };
   }, []);
 
@@ -86,14 +88,13 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
         setFinalCode(sanitized ?? accumulatedRef.current);
         setStreamingCode("");
 
-        // Trigger thumbnail capture after ~500ms
-        captureTimerRef.current = setTimeout(() => {
-          captureTimerRef.current = null;
-          const iframe = iframeRef.current;
-          if (iframe?.contentWindow) {
-            iframe.contentWindow.postMessage({ type: "capture-thumbnail" }, "*");
-          }
-        }, 500);
+        // Trigger thumbnail capture once the freshly-mounted iframe has
+        // actually painted. The iframe is unmounted during streaming
+        // (placeholder), so a blind 500ms timer here raced iframe mount +
+        // srcDoc parse + first paint — the exact blank/stale-thumbnail
+        // failure the generation path was hardened against.
+        cancelCaptureRef.current?.();
+        cancelCaptureRef.current = captureThumbnailWhenReady(() => iframeRef.current);
 
         // Invalidate game query so messages refetch, and me query
         // so the user dropdown's credit bars update (plan 7 §11)
@@ -109,6 +110,10 @@ export function useStreamedRefinement(gameId: string): StreamedRefinementState {
 
   const refine = useCallback(
     (feedback: string) => {
+      // Kill any capture still pending from the previous turn — it would
+      // otherwise fire against the mid-stream placeholder or the new code.
+      cancelCaptureRef.current?.();
+      cancelCaptureRef.current = null;
       // Note: finalCode is intentionally NOT cleared here — keep the previous
       // refinement's code visible until the new stream produces enough chunks.
       accumulatedRef.current = "";
