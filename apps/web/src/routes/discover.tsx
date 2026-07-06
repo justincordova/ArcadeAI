@@ -171,11 +171,14 @@ function DiscoverPage() {
         </p>
       </section>
 
-      {/* Filters */}
+      {/* Filters. `top: 56` unconditionally — BOTH header variants above
+          (TopBar and PublicTopBar) are sticky 56px bars, so pinning at 0 for
+          signed-out visitors slid the filter row underneath the public top
+          bar (z 20 < z 50), hiding the sort/genre controls on scroll. */}
       <div
         style={{
           position: "sticky",
-          top: me ? 56 : 0,
+          top: 56,
           zIndex: 20,
           background: "color-mix(in srgb, var(--color-bg) 92%, transparent)",
           backdropFilter: "blur(8px)",
