@@ -118,6 +118,34 @@ describe("GET /api/games/:id", () => {
     const res = await app.inject({ method: "GET", url: "/api/games/nope" });
     expect(res.statusCode).toBe(404);
   });
+
+  test("inProgress is true for a live generation row, false once it goes stale", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId });
+
+    // Live in-flight generation: succeeded=0, not refunded, recent.
+    testDb.sqlite
+      .query(
+        `INSERT INTO usage_log
+           (id, user_id, game_id, action, credits_charged, succeeded, created_at)
+         VALUES (?, ?, ?, 'generation', 2, 0, ?)`
+      )
+      .run("live-gen-log", userId, gameId, Date.now());
+
+    const live = await app.inject({ method: "GET", url: `/api/games/${gameId}` });
+    expect((live.json() as { inProgress: boolean }).inProgress).toBe(true);
+
+    // Age the row past STALE_STREAM_CUTOFF_MS (15 min) — simulates a hard
+    // crash that skipped finalization. The game must stop reporting
+    // "generating" forever.
+    testDb.sqlite
+      .query("UPDATE usage_log SET created_at = ? WHERE id = ?")
+      .run(Date.now() - 16 * 60_000, "live-gen-log");
+
+    const stale = await app.inject({ method: "GET", url: `/api/games/${gameId}` });
+    expect((stale.json() as { inProgress: boolean }).inProgress).toBe(false);
+  });
 });
 
 describe("PATCH /api/games/:id", () => {
@@ -480,6 +508,35 @@ describe("POST /api/games/:id/undo", () => {
     const row = readCodes(gameId);
     expect(row?.current_code).toBe("<html>refined</html>");
     expect(row?.previous_code).toBe("<html>original</html>");
+  });
+
+  test("undo succeeds when the only in-flight row is stale (crash-orphaned)", async () => {
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
+    setPreviousCode(gameId, "<html>original</html>");
+
+    // A row left succeeded=0 / refunded_at NULL by a hard crash (no
+    // finalization ever ran). The STALE_STREAM_CUTOFF_MS predicate must
+    // treat it as dead — without the cutoff this row would 409 every undo
+    // for this game forever. 16 minutes > the 15-minute cutoff.
+    testDb.sqlite
+      .query(
+        `INSERT INTO usage_log
+           (id, user_id, game_id, action, credits_charged, succeeded, created_at)
+         VALUES (?, ?, ?, 'refinement', 2, 0, ?)`
+      )
+      .run("stale-log", userId, gameId, Date.now() - 16 * 60_000);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/games/${gameId}/undo`,
+      headers: { "content-type": "application/json" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(readCodes(gameId)?.current_code).toBe("<html>original</html>");
   });
 
   test("undo succeeds once the in-flight stream has settled (refunded)", async () => {

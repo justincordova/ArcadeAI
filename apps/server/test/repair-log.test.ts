@@ -132,11 +132,11 @@ describe("markRepairFailed", () => {
     const { logId } = await logRepair(userId, gameId);
 
     await markRepairFailed(logId);
-    const first = testDb.sqlite
-      .query<{ refunded_at: number | null }, [string]>(
-        "SELECT refunded_at FROM usage_log WHERE id = ?"
-      )
-      .get(logId);
+    // Plant a sentinel timestamp rather than comparing Date.now()-derived
+    // values: both calls can land in the same millisecond, which would let
+    // an unguarded overwrite produce an identical value and pass anyway.
+    const SENTINEL = 12345;
+    testDb.sqlite.query("UPDATE usage_log SET refunded_at = ? WHERE id = ?").run(SENTINEL, logId);
 
     await markRepairFailed(logId);
     const second = testDb.sqlite
@@ -145,6 +145,7 @@ describe("markRepairFailed", () => {
       )
       .get(logId);
 
-    expect(second?.refunded_at).toBe(first?.refunded_at ?? -1);
+    // The `refunded_at IS NULL` guard must leave the existing value alone.
+    expect(second?.refunded_at).toBe(SENTINEL);
   });
 });
