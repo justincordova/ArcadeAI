@@ -66,11 +66,12 @@ export function ShareButton({ gameId }: { gameId: string }) {
   }
 
   const busy = publishMutation.isPending || unpublishMutation.isPending;
-  // If the game query errored (cold cache + failed fetch), `game` is undefined
-  // and isPublic/slug would default to the private state — which could be
-  // wrong for an actually-published game. Don't let the user toggle against an
-  // unknown state; disable until the read recovers.
-  const disabled = busy || isError;
+  // While the game query has no data (cold-cache LOADING or errored fetch),
+  // `game` is undefined and isPublic/slug default to the private state —
+  // which could be wrong for an actually-published game: the button would
+  // briefly read "Share" and clicking it would fire publishGame against
+  // unknown state. Don't let the user toggle until the read resolves.
+  const disabled = busy || isError || game === undefined;
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
