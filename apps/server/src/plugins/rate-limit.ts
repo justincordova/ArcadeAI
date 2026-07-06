@@ -6,8 +6,13 @@ interface RateLimitContext {
 }
 
 /**
- * Global IP-based rate limit (60 req/min) plus per-route per-user limits on
- * streaming endpoints (10 req/min). Both limits are evaluated; stricter wins.
+ * Global IP-based rate limit (60 req/min) plus per-route limits on
+ * streaming/public-write endpoints (10 req/min). NOTE: @fastify/rate-limit
+ * merges per-route `config.rateLimit` OVER the global params — a route
+ * carrying its own config gets exactly ONE limiter with those settings;
+ * the global 60/min cap does NOT additionally apply there. Keep that in
+ * mind when adding route configs: a custom key (e.g. per-user, per-slug)
+ * replaces the aggregate per-IP bound for that route entirely.
  * SPEC §14 — defense in depth on top of credit enforcement.
  *
  * Called directly on the root app (not via `app.register`) so the

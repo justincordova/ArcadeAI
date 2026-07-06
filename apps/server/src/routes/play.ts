@@ -46,14 +46,22 @@ const perIp10PerMin = {
 // The play counter feeds the Discover trending/top sort and is fully
 // anonymous — without per-slug keying, one IP gets 60 increments/min on a
 // single game (the schema comment on games.play_count documents an
-// IP+slug limit as the intended control). Key on ip + path (the path
-// embeds the slug; strip any query string so `?x=1` can't rotate keys).
-// 10 plays/min per game per IP is far above organic behavior.
+// IP+slug limit as the intended control). Key on ip + the DECODED route
+// param, not req.url: the raw URL admits percent-encoded variants
+// (`/api/play/%61bcd1234/play`) that route and validate identically but
+// would mint a fresh rate-limit bucket per encoding, letting one IP drive
+// a single game's counter unbounded. Params are populated during routing,
+// which precedes the limiter's onRequest hook. Lowercased because the
+// slug regex is case-insensitive. 10 plays/min per game per IP is far
+// above organic behavior.
 const perIpSlug10PerMin = {
   rateLimit: {
     max: 10,
     timeWindow: "1 minute",
-    keyGenerator: (req: import("fastify").FastifyRequest) => `${req.ip}:${req.url.split("?")[0]}`,
+    keyGenerator: (req: import("fastify").FastifyRequest) => {
+      const slug = (req.params as { slug?: string } | undefined)?.slug;
+      return `${req.ip}:play:${(slug ?? "").toLowerCase()}`;
+    },
   },
 };
 
