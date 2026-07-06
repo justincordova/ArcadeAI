@@ -89,13 +89,14 @@ export function PlanBadgeDropdown({
         zIndex: 100,
       }}
     >
+      {/* No background tint here: an earlier revision set backgroundImage +
+          a `background: "transparent"` shorthand that immediately reset it —
+          the gradient never rendered. Keeping the (actual, shipped)
+          transparent look and dropping the dead declarations. */}
       <div
         style={{
           padding: "14px 16px 12px",
           borderBottom: "1px solid var(--color-border)",
-          backgroundImage: style.gradient,
-          backgroundClip: "border-box",
-          background: "transparent",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
