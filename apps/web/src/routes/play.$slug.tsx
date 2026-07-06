@@ -130,6 +130,16 @@ function PlayPage() {
   // a ref-based latch and clear the search param the first time we act so
   // any subsequent re-renders / navigations see no intent at all.
   const intentFiredRef = useRef(false);
+  // Re-arm the latch when the slug changes: TanStack Router keeps this
+  // component MOUNTED across /play/a → /play/b navigations (same route,
+  // different param), so without this reset a latch consumed on game A
+  // would swallow a legitimate intent arriving for game B on the same
+  // mounted instance.
+  const latchedSlugRef = useRef(slug);
+  if (latchedSlugRef.current !== slug) {
+    latchedSlugRef.current = slug;
+    intentFiredRef.current = false;
+  }
   // biome-ignore lint/correctness/useExhaustiveDependencies: deliberate — mutations are stable enough; ref latch is the source of truth
   useEffect(() => {
     if (intentFiredRef.current) return;
