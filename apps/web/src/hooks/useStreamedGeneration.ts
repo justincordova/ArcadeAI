@@ -148,9 +148,15 @@ export function useStreamedGeneration(): StreamedGenerationState {
           // wrapper's paint signal (or the fallback) before capturing.
           let started = false;
           const begin = () => {
-            if (started) return;
+            // Bail if the component unmounted before `load` fired. Without this
+            // guard, a `load` that arrives post-unmount would register the
+            // `message` listener below into an already-drained cleanupsRef,
+            // leaking it on window permanently. Mirrors the `cancelled` guard
+            // in capture-thumbnail.ts's reference implementation.
+            if (started || !mountedRef.current) return;
             started = true;
-            iframe.removeEventListener("load", onLoad);
+            detachLoad();
+            cleanupsRef.current.delete(detachLoad);
 
             // Listen for the wrapper's paint signal, scoped to THIS iframe's
             // contentWindow so another frame can't spoof it (mirrors the
@@ -179,6 +185,12 @@ export function useStreamedGeneration(): StreamedGenerationState {
           };
           const onLoad = () => begin();
           iframe.addEventListener("load", onLoad);
+          // Track the load-listener teardown in cleanupsRef so an unmount
+          // before `begin` runs still removes it (matches capture-thumbnail.ts,
+          // which tears down its detachLoad on cancel). begin() removes itself
+          // from the set when it fires first.
+          const detachLoad = () => iframe.removeEventListener("load", onLoad);
+          cleanupsRef.current.add(detachLoad);
           // Fallback: 1.5s in case load already fired between the React commit
           // and our listener registration.
           schedule(begin, 1500);
