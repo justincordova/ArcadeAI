@@ -14,10 +14,9 @@ export function GameCardSkeletons({ view, count = 6 }: SkeletonProps) {
           ? {
               display: "grid",
               // Must match GameGrid's template exactly — the whole point of
-              // this component is zero reflow when data lands. auto-fill
-              // here vs repeat(3) there changed the column count at most
-              // viewport widths, so the load visibly reflowed anyway.
-              gridTemplateColumns: "repeat(3, 1fr)",
+              // this component is zero reflow when data lands. Kept in lockstep
+              // with GameGrid's adaptive auto-fill template.
+              gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
               gap: 14,
             }
           : { display: "flex", flexDirection: "column", gap: 8 }
@@ -61,7 +60,7 @@ function SkeletonCard({ view }: { view: "grid" | "list" }) {
         overflow: "hidden",
       }}
     >
-      <Shimmer style={{ width: "100%", aspectRatio: "16 / 10", borderRadius: 0 }} />
+      <Shimmer style={{ width: "100%", aspectRatio: "16 / 9", borderRadius: 0 }} />
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
         <Shimmer style={{ width: "70%", height: 12, borderRadius: 4 }} />
         <Shimmer style={{ width: "40%", height: 10, borderRadius: 4 }} />

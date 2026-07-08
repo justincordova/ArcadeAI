@@ -21,7 +21,11 @@ export function GameGrid({ games, view }: GameGridProps) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(3, 1fr)",
+        // Adaptive columns so the grid collapses gracefully on tablet/mobile
+        // instead of forcing three cramped columns at every width. Matches
+        // the Discover gallery's template so the two galleries stay
+        // consistent. GameCardSkeleton must mirror this exactly (zero reflow).
+        gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
         gap: 14,
       }}
     >
