@@ -117,7 +117,13 @@ export function PlanBadgeDropdown({
       </div>
 
       <div style={{ padding: "14px 16px" }}>
-        {isAdmin ? (
+        {!isAdmin && me == null ? (
+          // Guard the loading window: without `me`, the usage bars below
+          // default to 0 remaining and paint danger-red — making a still-
+          // loading state look like "out of credits". Show a neutral
+          // placeholder until the profile resolves.
+          <p style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Loading usage…</p>
+        ) : isAdmin ? (
           <p style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
             Admin access — unlimited credits.
           </p>
