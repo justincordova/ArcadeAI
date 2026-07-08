@@ -280,3 +280,22 @@ samp,
   outline: 2px solid var(--color-accent-primary);
   outline-offset: 2px;
 }
+
+/* ── Reduced motion ──
+   Honour the OS "reduce motion" setting (WCAG 2.3.3). Collapse every
+   animation and transition to effectively instant so decorative motion —
+   the route fade-in, brand marquee shimmer, and status pulse-dot — no longer
+   animates. Loading states here always pair their spinner with a text label
+   ("Loading game…", "Generating…"), so freezing the spin still leaves the
+   progress state communicated in text. Transitions collapse too, so hover/
+   focus state changes apply immediately rather than easing. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
