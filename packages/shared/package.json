@@ -9,5 +9,9 @@
     "./plans.js": "./src/plans.ts",
     "./sanitize-html.js": "./src/sanitize-html.ts",
     "./types.js": "./src/types.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
   }
 }

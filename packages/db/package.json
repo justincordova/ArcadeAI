@@ -6,6 +6,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "migrate": "bun run src/migrate.ts",
     "generate": "drizzle-kit generate",
     "studio": "drizzle-kit studio"
