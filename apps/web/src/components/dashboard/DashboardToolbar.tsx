@@ -79,6 +79,7 @@ export function DashboardToolbar({
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search games…"
+          aria-label="Search games"
           style={{
             width: "100%",
             padding: "7px 30px 7px 30px",
@@ -151,6 +152,7 @@ export function DashboardToolbar({
         <select
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SortKey)}
+          aria-label="Sort games"
           style={{
             padding: "6px 26px 6px 10px",
             borderRadius: 8,
