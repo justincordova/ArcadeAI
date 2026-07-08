@@ -103,7 +103,16 @@ export async function apiFetch<T>(path: string, opts: ApiFetchOptions = {}): Pro
   if (text === "") {
     return undefined as T;
   }
-  return JSON.parse(text) as T;
+  // A 2xx response with a non-JSON body (e.g. a proxy/CDN interstitial served
+  // with a 200, or a truncated body) would otherwise throw a bare SyntaxError,
+  // bypassing this module's contract that every failure surfaces as an
+  // ApiError. Callers switch on `err instanceof ApiError` and rethrow anything
+  // else, so a raw SyntaxError leaks through as an opaque error. Normalize it.
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiError(res.status, "INTERNAL_ERROR", "Malformed server response");
+  }
 }
 
 /**
