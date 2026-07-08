@@ -12,6 +12,7 @@ export function RouteError({ error, reset }: FallbackProps) {
 
   return (
     <div
+      role="alert"
       style={{
         minHeight: "60vh",
         display: "flex",

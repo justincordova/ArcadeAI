@@ -242,7 +242,11 @@ function SignInPage() {
           </div>
 
           {error && (
-            <p className="mt-4 text-center text-xs" style={{ color: "var(--color-danger)" }}>
+            <p
+              role="alert"
+              className="mt-4 text-center text-xs"
+              style={{ color: "var(--color-danger)" }}
+            >
               {error}
             </p>
           )}

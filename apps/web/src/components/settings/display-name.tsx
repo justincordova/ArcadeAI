@@ -129,7 +129,10 @@ export function DisplayName() {
           style={inputStyle}
           placeholder="Your display name"
         />
-        {statusLabel && <span style={{ fontSize: 11, color: statusColor }}>{statusLabel}</span>}
+        {/* Always-present live region so save-status changes are announced.
+            <output> carries an implicit role="status" (polite live region);
+            it must stay mounted even when empty so the change is announced. */}
+        <output style={{ fontSize: 11, color: statusColor }}>{statusLabel}</output>
       </div>
     </div>
   );

@@ -393,7 +393,7 @@ function PlayPage() {
             </span>
           </div>
           {remixMutation.isError && (
-            <p style={{ fontSize: 12, color: "var(--color-danger)" }}>
+            <p role="alert" style={{ fontSize: 12, color: "var(--color-danger)" }}>
               {(remixMutation.error as Error).message}
             </p>
           )}

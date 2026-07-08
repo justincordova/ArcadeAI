@@ -12,6 +12,7 @@ export function ErrorBanner({ message }: { message: string }) {
 
   return (
     <div
+      role="alert"
       style={{
         display: "flex",
         flexDirection: "column",
