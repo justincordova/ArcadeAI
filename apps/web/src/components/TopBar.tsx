@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronDown, LogOut, Settings as SettingsIcon } from "lucide-react";
 import type React from "react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "../hooks/useSession.js";
 import { signOut } from "../lib/api/auth.js";
 import { LogoFull } from "./Logo.js";
@@ -10,6 +10,22 @@ import { PlanBadge } from "./topbar/PlanBadge.js";
 export function TopBar() {
   const { data: me } = useSession();
   const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close the user menu on an outside click — mirrors the pattern in
+  // topbar/PlanBadge.tsx. Without this, opening the menu and clicking
+  // elsewhere on the page left it open (it only closed on the two links
+  // it contains, both of which navigate away).
+  useEffect(() => {
+    if (!open) return;
+    function handler(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
 
   const initial = me?.displayName?.[0]?.toUpperCase() ?? "?";
 
@@ -45,7 +61,7 @@ export function TopBar() {
         <PlanBadge />
 
         {/* User avatar + dropdown */}
-        <div style={{ position: "relative" }}>
+        <div ref={menuRef} style={{ position: "relative" }}>
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
