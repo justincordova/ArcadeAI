@@ -752,6 +752,7 @@ function BuilderLayout({
                 <button
                   type="submit"
                   disabled={!canSubmit}
+                  aria-label="Send"
                   style={{
                     display: "flex",
                     alignItems: "center",

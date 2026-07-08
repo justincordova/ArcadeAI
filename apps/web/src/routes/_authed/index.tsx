@@ -300,6 +300,8 @@ function Dashboard() {
                     key={v}
                     type="button"
                     onClick={() => switchView(v)}
+                    aria-label={v === "grid" ? "Grid view" : "List view"}
+                    aria-pressed={view === v}
                     title={v === "grid" ? "Grid view" : "List view"}
                     style={{
                       display: "flex",

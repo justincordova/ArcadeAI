@@ -102,6 +102,8 @@ export function ShareButton({ gameId }: { gameId: string }) {
         type="button"
         onClick={handleClick}
         disabled={disabled}
+        aria-pressed={isPublic}
+        aria-label={isPublic ? "Published — click to make private" : "Publish game"}
         title={isError ? "Publish state unavailable — couldn't load the game" : undefined}
         style={{
           display: "inline-flex",

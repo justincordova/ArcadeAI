@@ -23,6 +23,7 @@ export function IntervalToggle({ value, onChange }: IntervalToggleProps) {
           key={interval}
           type="button"
           onClick={() => onChange(interval)}
+          aria-pressed={value === interval}
           style={{
             display: "flex",
             alignItems: "center",
