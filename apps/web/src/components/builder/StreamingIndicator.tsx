@@ -24,7 +24,7 @@ export function StreamingIndicator({ label }: { label: string }) {
               width: 5,
               height: 5,
               borderRadius: "50%",
-              background: "linear-gradient(135deg, #a78bfa, #4cdfe8)",
+              background: "var(--gradient-brand)",
               animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
             }}
           />

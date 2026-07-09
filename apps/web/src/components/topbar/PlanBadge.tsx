@@ -12,22 +12,22 @@ import { PlanBadgeDropdown } from "./PlanBadgeDropdown.js";
 const TIER_STYLES: Record<string, { label: string; gradient: string; border: string }> = {
   free: {
     label: "FREE",
-    gradient: "linear-gradient(135deg, #22d3a0 0%, #06b6d4 100%)",
+    gradient: "var(--gradient-brand)",
     border: "rgba(6,182,212,0.4)",
   },
   creator: {
     label: "CREATOR",
-    gradient: "linear-gradient(135deg, #f59e0b 0%, #f97316 100%)",
+    gradient: "var(--gradient-brand)",
     border: "rgba(245,158,11,0.4)",
   },
   pro: {
     label: "PRO",
-    gradient: "linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)",
+    gradient: "var(--gradient-brand)",
     border: "rgba(167,139,250,0.4)",
   },
   admin: {
     label: "ADMIN",
-    gradient: "linear-gradient(135deg, #a78bfa 0%, #06b6d4 100%)",
+    gradient: "var(--gradient-brand)",
     border: "rgba(167,139,250,0.5)",
   },
 };
@@ -110,8 +110,8 @@ export function PlanBadge() {
           />
           <defs>
             <linearGradient id="badge-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#a78bfa" />
-              <stop offset="100%" stopColor="#06b6d4" />
+              <stop offset="0%" stopColor="var(--color-accent-primary)" />
+              <stop offset="100%" stopColor="var(--color-accent-secondary)" />
             </linearGradient>
           </defs>
         </svg>

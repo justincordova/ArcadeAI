@@ -141,8 +141,8 @@ export function GameIframe({
             <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
               <defs>
                 <linearGradient id="iframe-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#a78bfa" stopOpacity="0.5" />
-                  <stop offset="100%" stopColor="#4cdfe8" stopOpacity="0.5" />
+                  <stop offset="0%" stopColor="var(--color-accent-primary)" stopOpacity="0.5" />
+                  <stop offset="100%" stopColor="var(--color-accent-secondary)" stopOpacity="0.5" />
                 </linearGradient>
               </defs>
               <path

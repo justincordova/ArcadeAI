@@ -52,8 +52,8 @@ export function NewGameTile() {
             />
             <defs>
               <linearGradient id="new-game-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#a78bfa" />
-                <stop offset="100%" stopColor="#4cdfe8" />
+                <stop offset="0%" stopColor="var(--color-accent-primary)" />
+                <stop offset="100%" stopColor="var(--color-accent-secondary)" />
               </linearGradient>
             </defs>
           </svg>

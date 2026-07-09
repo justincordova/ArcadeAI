@@ -88,8 +88,8 @@ function GridIcon({ active }: { active: boolean }) {
       />
       <defs>
         <linearGradient id="view-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#a78bfa" />
-          <stop offset="100%" stopColor="#4cdfe8" />
+          <stop offset="0%" stopColor="var(--color-accent-primary)" />
+          <stop offset="100%" stopColor="var(--color-accent-secondary)" />
         </linearGradient>
       </defs>
     </svg>
@@ -128,8 +128,8 @@ function ListIcon({ active }: { active: boolean }) {
       />
       <defs>
         <linearGradient id="view-grad2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#a78bfa" />
-          <stop offset="100%" stopColor="#4cdfe8" />
+          <stop offset="0%" stopColor="var(--color-accent-primary)" />
+          <stop offset="100%" stopColor="var(--color-accent-secondary)" />
         </linearGradient>
       </defs>
     </svg>
@@ -340,7 +340,7 @@ function Dashboard() {
                 fontWeight: 600,
                 fontFamily: "inherit",
                 textDecoration: "none",
-                background: "linear-gradient(135deg, #ff3ea5 0%, #4cdfe8 100%)",
+                background: "var(--gradient-brand)",
                 color: "#fff",
                 transition: "opacity 0.15s",
                 boxShadow: "0 2px 12px rgba(255,62,165,0.3)",

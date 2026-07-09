@@ -8,14 +8,15 @@ import { type VariantProps, cva } from "class-variance-authority";
 import * as React from "react";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-violet)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] disabled:pointer-events-none disabled:opacity-50 cursor-pointer",
   {
     variants: {
       variant: {
-        // Primary CTA — violet → cyan gradient. Matches the existing visual
-        // identity (search the codebase for "linear-gradient(135deg, #ff3ea5").
+        // Primary CTA — brand gradient (magenta → purple → cyan). Reads from
+        // --gradient-brand so it desaturates correctly in the light theme
+        // instead of burning at full saturation on the cream surface.
         primary:
-          "bg-gradient-to-br from-[#ff3ea5] to-[#4cdfe8] text-white shadow-[0_2px_12px_rgba(255,62,165,0.3)] hover:opacity-90",
+          "bg-[image:var(--gradient-brand)] text-white shadow-[0_2px_12px_rgba(255,62,165,0.3)] hover:opacity-90",
         // Secondary — outlined neutral.
         secondary:
           "border border-[var(--color-border)] bg-[var(--color-surface-raised)] text-[var(--color-text-primary)] hover:border-[rgba(255,62,165,0.5)]",
