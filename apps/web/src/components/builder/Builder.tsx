@@ -1,4 +1,5 @@
 import { getMissingKeyError, useConfig } from "@/hooks/useConfig.js";
+import { useMediaQuery } from "@/hooks/useMediaQuery.js";
 import { useSession } from "@/hooks/useSession.js";
 import { useStreamedGeneration } from "@/hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "@/hooks/useStreamedRefinement.js";
@@ -468,6 +469,13 @@ function BuilderLayout({
     nudgeWidth,
   } = useResizableSidebar();
 
+  // Below the tablet breakpoint the two panes can't sit side by side (a
+  // 280px-min sidebar leaves almost nothing for the preview), so we collapse
+  // to a single pane with a Chat | Preview switcher. Default to Chat while
+  // there's nothing to preview yet.
+  const isMobile = useMediaQuery("(max-width: 768px)");
+  const [mobileTab, setMobileTab] = useState<"chat" | "preview">("chat");
+
   // Cost preview text (#44). Free + lifetime cap on shows trial counters;
   // everyone else sees credit cost vs remaining monthly balance. Admin
   // skips this — unlimited credits make the line meaningless.
@@ -506,6 +514,14 @@ function BuilderLayout({
     return () => window.removeEventListener("keydown", handler);
   }, [isStreaming, stoppable, onStop]);
 
+  // On mobile, reveal the result: when a stream starts, switch to Chat so the
+  // user watches progress; when it finishes with code, switch to Preview.
+  useEffect(() => {
+    if (!isMobile) return;
+    if (isStreaming) setMobileTab("chat");
+    else if (displayCode) setMobileTab("preview");
+  }, [isMobile, isStreaming, displayCode]);
+
   const canSubmit = !isStreaming && prompt.trim().length > 0 && !missingKeyError;
 
   function handleSuggestionClick(text: string) {
@@ -521,20 +537,63 @@ function BuilderLayout({
     <div
       style={{
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         height: "calc(100vh - 56px)",
         overflow: "hidden",
         background: "var(--color-bg)",
       }}
     >
+      {/* ── Mobile tab switcher: only one pane fits on a phone ── */}
+      {isMobile && (
+        <div
+          style={{
+            display: "flex",
+            gap: 2,
+            padding: 4,
+            flexShrink: 0,
+            background: "var(--color-surface)",
+            borderBottom: "1px solid var(--color-border)",
+          }}
+        >
+          {(["chat", "preview"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setMobileTab(tab)}
+              aria-pressed={mobileTab === tab}
+              style={{
+                flex: 1,
+                padding: "8px 0",
+                borderRadius: 8,
+                border: "none",
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                fontFamily: "inherit",
+                cursor: "pointer",
+                transition: "all 0.15s",
+                background: mobileTab === tab ? "var(--gradient-brand-soft)" : "transparent",
+                color: mobileTab === tab ? "var(--color-text-primary)" : "var(--color-text-muted)",
+              }}
+            >
+              {tab === "chat" ? (isNewGame ? "New Game" : "Refine") : "Preview"}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── Left panel: chat ── */}
       <div
         style={{
-          width: sidebarWidth,
-          display: "flex",
+          width: isMobile ? "100%" : sidebarWidth,
+          display: isMobile && mobileTab !== "chat" ? "none" : "flex",
           flexDirection: "column",
           background: "var(--color-surface)",
-          borderRight: "1px solid var(--color-border)",
-          flexShrink: 0,
+          borderRight: isMobile ? "none" : "1px solid var(--color-border)",
+          flexShrink: isMobile ? 1 : 0,
+          flex: isMobile ? 1 : undefined,
+          minHeight: 0,
           position: "relative",
         }}
       >
@@ -818,6 +877,9 @@ function BuilderLayout({
             }
           }}
           style={{
+            // The splitter is meaningless when the panes are stacked into
+            // tabs, so it's removed on mobile.
+            display: isMobile ? "none" : "block",
             position: "absolute",
             top: 0,
             right: -3,
@@ -847,8 +909,9 @@ function BuilderLayout({
       <div
         style={{
           flex: 1,
+          minHeight: 0,
           position: "relative",
-          display: "flex",
+          display: isMobile && mobileTab !== "preview" ? "none" : "flex",
           flexDirection: "column",
           background: "var(--color-bg)",
           overflow: "hidden",
