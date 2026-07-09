@@ -171,7 +171,7 @@ export function PlanBadgeDropdown({
             background:
               "linear-gradient(135deg, rgba(255,62,165,0.15) 0%, rgba(76,223,232,0.15) 100%)",
             border: "1px solid rgba(255,62,165,0.25)",
-            color: "var(--color-accent-violet-light)",
+            color: "var(--color-accent-primary-soft)",
             textDecoration: "none",
             transition: "all 0.15s",
           }}

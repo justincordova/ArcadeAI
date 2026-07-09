@@ -60,7 +60,7 @@ function FullPageState({
               height: 20,
               borderRadius: "50%",
               border: "2px solid var(--color-border)",
-              borderTopColor: "var(--color-accent-violet)",
+              borderTopColor: "var(--color-accent-primary)",
               animation: "spin 0.8s linear infinite",
             }}
           />

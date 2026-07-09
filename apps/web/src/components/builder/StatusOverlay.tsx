@@ -47,7 +47,7 @@ export function StatusOverlay({ status }: StatusOverlayProps) {
             height: 14,
             borderRadius: "50%",
             border: "2px solid var(--color-border)",
-            borderTopColor: "var(--color-accent-violet)",
+            borderTopColor: "var(--color-accent-primary)",
             animation: "overlay-spin 0.7s linear infinite",
             flexShrink: 0,
           }}

@@ -14,7 +14,7 @@ export function AdminBanner() {
         style={{
           fontSize: 13,
           fontWeight: 600,
-          color: "var(--color-accent-violet-light)",
+          color: "var(--color-accent-primary-soft)",
         }}
       >
         Admin access — all features unlocked.
