@@ -13,22 +13,22 @@ const TIER_STYLES: Record<string, { label: string; gradient: string; border: str
   free: {
     label: "FREE",
     gradient: "var(--gradient-brand)",
-    border: "rgba(6,182,212,0.4)",
+    border: "rgba(255,62,165,0.4)",
   },
   creator: {
     label: "CREATOR",
     gradient: "var(--gradient-brand)",
-    border: "rgba(245,158,11,0.4)",
+    border: "rgba(255,62,165,0.4)",
   },
   pro: {
     label: "PRO",
     gradient: "var(--gradient-brand)",
-    border: "rgba(167,139,250,0.4)",
+    border: "rgba(255,62,165,0.4)",
   },
   admin: {
     label: "ADMIN",
     gradient: "var(--gradient-brand)",
-    border: "rgba(167,139,250,0.5)",
+    border: "rgba(255,62,165,0.5)",
   },
 };
 

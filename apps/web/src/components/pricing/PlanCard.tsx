@@ -35,23 +35,23 @@ function ctaToastMessage(planId: string, isActive: boolean): string {
 const PLAN_ACCENTS: Record<string, { gradient: string; border: string; glow: string }> = {
   free: {
     gradient: "var(--gradient-brand)",
-    border: "rgba(34,211,160,0.3)",
-    glow: "rgba(34,211,160,0.08)",
+    border: "rgba(255,62,165,0.3)",
+    glow: "rgba(255,62,165,0.08)",
   },
   creator: {
     gradient: "var(--gradient-brand)",
-    border: "rgba(245,158,11,0.3)",
-    glow: "rgba(245,158,11,0.08)",
+    border: "rgba(255,62,165,0.3)",
+    glow: "rgba(255,62,165,0.08)",
   },
   pro: {
     gradient: "var(--gradient-brand)",
-    border: "rgba(167,139,250,0.35)",
-    glow: "rgba(167,139,250,0.08)",
+    border: "rgba(255,62,165,0.35)",
+    glow: "rgba(255,62,165,0.08)",
   },
   enterprise: {
     gradient: "var(--gradient-brand)",
-    border: "rgba(167,139,250,0.3)",
-    glow: "rgba(167,139,250,0.06)",
+    border: "rgba(255,62,165,0.3)",
+    glow: "rgba(255,62,165,0.06)",
   },
 };
 
