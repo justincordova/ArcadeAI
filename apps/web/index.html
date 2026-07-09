@@ -22,6 +22,27 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' fill='none'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='50%25'%3E%3Cstop offset='0%25' stop-color='%23ff3ea5'/%3E%3Cstop offset='55%25' stop-color='%23b14de8'/%3E%3Cstop offset='100%25' stop-color='%234cdfe8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='%2308070d'/%3E%3Cpath d='M5 13C5 7 9 4 16 4C23 4 27 7 27 13' stroke='url(%23g)' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpath d='M5 13L4 25C4 26.1 4.9 27 6 27H26C27.1 27 28 26.1 28 25L27 13' stroke='url(%23g)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='9' y='11' width='14' height='9' rx='1.5' stroke='url(%23g)' stroke-width='1.8'/%3E%3Ccircle cx='12' cy='22' r='1.5' fill='url(%23g)'/%3E%3Ccircle cx='18' cy='21.5' r='1.1' fill='url(%23g)'/%3E%3Ccircle cx='21.5' cy='22.5' r='1.1' fill='url(%23g)'/%3E%3C/svg%3E"
     />
+    <!-- Pre-hydration theme guard: apply the persisted theme to <html> before
+         React mounts so there's no flash of the wrong surface. Mirrors the
+         logic in src/lib/theme.ts; kept inline and dependency-free so it runs
+         first. -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem("arcadeai-theme") || "dark";
+          var light =
+            pref === "light" ||
+            (pref === "system" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: light)").matches);
+          if (light) {
+            document.documentElement.classList.add("light");
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute("content", "#faf8f1");
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

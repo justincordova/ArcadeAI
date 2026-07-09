@@ -1,3 +1,4 @@
+import { Appearance } from "@/components/settings/appearance.js";
 import { ConnectedAccounts } from "@/components/settings/connected-accounts.js";
 import { CurrentPlan } from "@/components/settings/current-plan.js";
 import { DangerZone } from "@/components/settings/danger-zone.js";
@@ -76,6 +77,10 @@ function SettingsPage() {
             <DisplayName />
             <Email />
           </div>
+        </Section>
+
+        <Section title="Appearance">
+          <Appearance />
         </Section>
 
         <Section title="Connected Accounts">

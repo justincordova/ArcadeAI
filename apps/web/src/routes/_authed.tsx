@@ -1,5 +1,6 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 import { TopBar } from "../components/TopBar.js";
+import { useTheme } from "../hooks/useTheme.js";
 import { fetchMeOrNull } from "../lib/api/auth.js";
 import { queryClient } from "../lib/query-client.js";
 
@@ -25,6 +26,8 @@ export const Route = createFileRoute("/_authed")({
 });
 
 function AuthedLayout() {
+  // Reconcile the DOM theme with the server preference once ["me"] resolves.
+  useTheme();
   return (
     <div
       style={{
