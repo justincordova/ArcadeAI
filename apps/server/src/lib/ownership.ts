@@ -1,3 +1,6 @@
+// Owner-scoped game lookups. Every helper here pushes the `userId` filter
+// into SQL so an unauthorized request can never read another user's row —
+// the single choke point for game ownership checks across the routes.
 import { games, users } from "@arcadeai/db";
 import { and, eq } from "drizzle-orm";
 import { db } from "./db.js";

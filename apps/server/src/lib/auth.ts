@@ -1,3 +1,7 @@
+// Better Auth configuration: Google + GitHub OAuth with account linking,
+// backed by the Drizzle adapter. Throws at import time in production if
+// BETTER_AUTH_SECRET is unset (see guard below) so the server never boots
+// with a forgeable session secret.
 import { TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";

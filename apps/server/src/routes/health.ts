@@ -1,3 +1,5 @@
+// Unauthenticated probes: /api/health (liveness + version) and /api/config
+// (which AI provider keys are present, so the client can warn before a call).
 import type { FastifyInstance } from "fastify";
 
 const version = "0.0.1";

@@ -109,8 +109,6 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
     likeMutation.mutate();
   }
 
-  const playHref = `/play/${game.slug}` as const;
-
   return (
     <Link
       to="/play/$slug"
@@ -312,10 +310,6 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
           <span style={{ color: "var(--color-text-secondary)" }}>"{game.originalPrompt}"</span>
         </p>
       </div>
-
-      {/* hidden href fallback for accessibility — Link already provides this,
-          but keeping the prop in scope guards against bare-route issues. */}
-      <span style={{ display: "none" }}>{playHref}</span>
     </Link>
   );
 }

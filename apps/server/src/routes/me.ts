@@ -1,7 +1,8 @@
+// Account routes: GET/PATCH/DELETE /api/me (profile, theme, account deletion).
+// SPEC §11, §12, §14.
 import { accounts, games, sessions, usageLog, users } from "@arcadeai/db";
 import type { LinkedProvider, MeResponse, Theme } from "@arcadeai/shared";
 import { eq, sql } from "drizzle-orm";
-// SPEC §11, §12, §14: /api/me GET, PATCH, DELETE
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { auth } from "../lib/auth.js";
