@@ -5,11 +5,8 @@
 /* ── Theme tokens ──────────────────────────────────────────────────────────
    Cabinet Neon palette. The accent story moved from the generic
    violet→cyan gradient (used by ~every prompt-to-X tool in 2024) to a
-   saturated magenta primary with cyan as a supporting note. The legacy
-   --color-accent-violet-* tokens are retained as aliases so existing
-   components that hard-code the old gradient keep working until
-   migrated; new components should reach for --color-accent-primary,
-   --color-accent-secondary, and --gradient-brand.
+   saturated magenta primary with cyan as a supporting note. Reach for
+   --color-accent-primary, --color-accent-secondary, and --gradient-brand.
 */
 @theme {
   --color-bg: #08070d;
@@ -29,13 +26,6 @@
   --color-accent-primary-soft: #ff7bc5;
   --color-accent-secondary: #4cdfe8;
   --color-accent-secondary-soft: #95eef3;
-
-  /* Legacy aliases — keep components rendering until each is migrated.
-     New code MUST NOT reference these. */
-  --color-accent-violet: #ff3ea5;
-  --color-accent-violet-light: #ff7bc5;
-  --color-accent-cyan: #4cdfe8;
-  --color-accent-cyan-light: #95eef3;
 
   --color-success: #2ee8a4;
   --color-warning: #ffb547;
@@ -70,11 +60,6 @@
   --color-accent-primary-soft: #ff7bc5;
   --color-accent-secondary: #4cdfe8;
   --color-accent-secondary-soft: #95eef3;
-
-  --color-accent-violet: #ff3ea5;
-  --color-accent-violet-light: #ff7bc5;
-  --color-accent-cyan: #4cdfe8;
-  --color-accent-cyan-light: #95eef3;
 
   --color-success: #2ee8a4;
   --color-warning: #ffb547;
@@ -111,11 +96,6 @@
   --color-accent-primary-soft: #e35aa0;
   --color-accent-secondary: #1e9ba8;
   --color-accent-secondary-soft: #4cc4ce;
-
-  --color-accent-violet: #c4187c;
-  --color-accent-violet-light: #e35aa0;
-  --color-accent-cyan: #1e9ba8;
-  --color-accent-cyan-light: #4cc4ce;
 
   --color-success: #16855e;
   --color-warning: #c2780a;
