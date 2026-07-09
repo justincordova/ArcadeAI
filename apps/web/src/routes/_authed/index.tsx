@@ -6,11 +6,11 @@ import {
 import { EmptyState } from "@/components/dashboard/EmptyState.js";
 import { GameCardSkeletons } from "@/components/dashboard/GameCardSkeleton.js";
 import { GameGrid } from "@/components/dashboard/GameGrid.js";
+import { Button } from "@/components/ui/button.js";
 import { GAMES_QUERY_KEY, type GameSummary, listGames } from "@/lib/api/games.js";
 import { useQuery } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Plus } from "lucide-react";
-import type React from "react";
 import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/_authed/")({
@@ -327,34 +327,19 @@ function Dashboard() {
               </div>
             )}
 
-            {/* New game CTA */}
-            <Link
-              to="/game/new"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                padding: "9px 18px",
-                borderRadius: 10,
-                fontSize: 13,
-                fontWeight: 600,
-                fontFamily: "inherit",
-                textDecoration: "none",
-                background: "var(--gradient-brand)",
-                color: "#fff",
-                transition: "opacity 0.15s",
-                boxShadow: "0 2px 12px rgba(255,62,165,0.3)",
-              }}
-              onMouseEnter={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                (e.currentTarget as HTMLAnchorElement).style.opacity = "0.88";
-              }}
-              onMouseLeave={(e: React.MouseEvent<HTMLAnchorElement>) => {
-                (e.currentTarget as HTMLAnchorElement).style.opacity = "1";
-              }}
+            {/* New game CTA — primary Button wrapping the router Link via
+                asChild, so the brand-gradient fill and hover come from the
+                shared variant instead of an inline opacity handler. */}
+            <Button
+              asChild
+              variant="primary"
+              className="h-auto gap-[7px] rounded-[10px] px-[18px] py-[9px] text-[13px]"
             >
-              <Plus size={13} strokeWidth={2.4} />
-              New Game
-            </Link>
+              <Link to="/game/new">
+                <Plus size={13} strokeWidth={2.4} />
+                New Game
+              </Link>
+            </Button>
           </div>
         </div>
 
@@ -411,22 +396,9 @@ function LoadError({ onRetry }: { onRetry: () => void }) {
       <p style={{ fontSize: 14, color: "var(--color-text-secondary)" }}>
         Couldn't load your games. Check your connection and try again.
       </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        style={{
-          padding: "7px 14px",
-          borderRadius: 8,
-          border: "1px solid var(--color-border)",
-          background: "var(--color-surface)",
-          color: "var(--color-text-secondary)",
-          fontSize: 12,
-          fontFamily: "inherit",
-          cursor: "pointer",
-        }}
-      >
+      <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
         Retry
-      </button>
+      </Button>
     </div>
   );
 }
@@ -447,22 +419,9 @@ function NoResults({ onClear }: { onClear: () => void }) {
       <p style={{ fontSize: 14, color: "var(--color-text-secondary)", marginBottom: 14 }}>
         No games match your filters.
       </p>
-      <button
-        type="button"
-        onClick={onClear}
-        style={{
-          padding: "7px 14px",
-          borderRadius: 8,
-          border: "1px solid var(--color-border)",
-          background: "var(--color-surface)",
-          color: "var(--color-text-secondary)",
-          fontSize: 12,
-          fontFamily: "inherit",
-          cursor: "pointer",
-        }}
-      >
+      <Button type="button" variant="secondary" size="sm" onClick={onClear}>
         Clear filters
-      </button>
+      </Button>
     </div>
   );
 }

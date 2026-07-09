@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { LogoMark } from "../components/Logo.js";
+import { Button } from "../components/ui/button.js";
 import { fetchMeOrNull, startSocialSignIn } from "../lib/api/auth.js";
 
 interface SignInSearch {
@@ -194,51 +195,33 @@ function SignInPage() {
             }}
           />
 
-          {/* Auth buttons */}
+          {/* Auth buttons. The Button primitive's `secondary` variant supplies
+              the border + hover-border affordance via CSS :hover, so it now
+              also responds to keyboard focus and touch (the old inline
+              onMouseEnter/onMouseLeave handlers only fired for mouse). The
+              className overrides just the sign-in-specific sizing. */}
           <div className="flex flex-col gap-3">
-            <button
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => handleSignIn("google")}
               disabled={pending !== null}
-              className="group flex items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50"
-              style={{
-                background: "var(--color-surface-raised)",
-                border: "1px solid var(--color-border)",
-                color: "var(--color-text-primary)",
-              }}
-              onMouseEnter={(e) => {
-                if (pending === null)
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,62,165,0.5)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
-              }}
+              className="h-auto w-full gap-3 rounded-xl px-4 py-3 text-sm"
             >
               <GoogleIcon />
               {pending === "google" ? "Redirecting..." : "Continue with Google"}
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
+              variant="secondary"
               onClick={() => handleSignIn("github")}
               disabled={pending !== null}
-              className="group flex items-center justify-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50"
-              style={{
-                background: "var(--color-surface-raised)",
-                border: "1px solid var(--color-border)",
-                color: "var(--color-text-primary)",
-              }}
-              onMouseEnter={(e) => {
-                if (pending === null)
-                  (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,62,165,0.5)";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--color-border)";
-              }}
+              className="h-auto w-full gap-3 rounded-xl px-4 py-3 text-sm"
             >
               <GitHubIcon />
               {pending === "github" ? "Redirecting..." : "Continue with GitHub"}
-            </button>
+            </Button>
           </div>
 
           {error && (
