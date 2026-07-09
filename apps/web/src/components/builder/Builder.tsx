@@ -25,7 +25,7 @@ import { ShareButton } from "./ShareButton.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
 import { StreamingCodePreview } from "./StreamingCodePreview.js";
 import { StreamingIndicator } from "./StreamingIndicator.js";
-import { useResizableSidebar } from "./useResizableSidebar.js";
+import { SIDEBAR_MAX, SIDEBAR_MIN, useResizableSidebar } from "./useResizableSidebar.js";
 
 interface BuilderProps {
   initialCode?: string;
@@ -460,7 +460,13 @@ function BuilderLayout({
   const { data: config } = useConfig();
   const missingKeyError = getMissingKeyError(config);
   const { data: me } = useSession();
-  const { width: sidebarWidth, resizing, startResize, resetWidth } = useResizableSidebar();
+  const {
+    width: sidebarWidth,
+    resizing,
+    startResize,
+    resetWidth,
+    nudgeWidth,
+  } = useResizableSidebar();
 
   // Cost preview text (#44). Free + lifetime cap on shows trial counters;
   // everyone else sees credit cost vs remaining monthly balance. Admin
@@ -784,11 +790,33 @@ function BuilderLayout({
         <button
           type="button"
           aria-label="Resize chat panel"
+          // Splitter semantics so screen readers announce it as a resizable
+          // separator with its current width, and arrow keys resize it —
+          // previously the handle was focusable but drag-only (mouse). Up/Right
+          // widen the sidebar, Down/Left narrow it, Home/End jump to the
+          // bounds, and double-click / (implicit) Enter resets.
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuenow={sidebarWidth}
+          aria-valuemin={SIDEBAR_MIN}
+          aria-valuemax={SIDEBAR_MAX}
           onMouseDown={(e) => {
             e.preventDefault();
             startResize();
           }}
           onDoubleClick={resetWidth}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+              e.preventDefault();
+              nudgeWidth(1);
+            } else if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+              e.preventDefault();
+              nudgeWidth(-1);
+            } else if (e.key === "Home" || e.key === "End") {
+              e.preventDefault();
+              resetWidth();
+            }
+          }}
           style={{
             position: "absolute",
             top: 0,

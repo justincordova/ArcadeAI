@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 
 const SIDEBAR_WIDTH_KEY = "builder-sidebar-width";
-const SIDEBAR_MIN = 280;
-const SIDEBAR_MAX = 640;
+export const SIDEBAR_MIN = 280;
+export const SIDEBAR_MAX = 640;
 const SIDEBAR_DEFAULT = 340;
+/** Pixels moved per arrow-key press when resizing via the keyboard. */
+const KEYBOARD_STEP = 16;
+
+function clampWidth(n: number): number {
+  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
+}
+
+function persistWidth(n: number) {
+  try {
+    localStorage.setItem(SIDEBAR_WIDTH_KEY, String(n));
+  } catch {}
+}
 
 function getStoredSidebarWidth(): number {
   try {
@@ -23,6 +35,12 @@ export interface ResizableSidebar {
   startResize: () => void;
   /** Reset to the default width and persist — wire to onDoubleClick. */
   resetWidth: () => void;
+  /**
+   * Nudge the width by a fixed step and persist — wire to the handle's
+   * onKeyDown (arrow keys) so the splitter is keyboard-operable, not just
+   * drag-only. Positive widens the sidebar, negative narrows it.
+   */
+  nudgeWidth: (direction: 1 | -1) => void;
 }
 
 /**
@@ -49,14 +67,11 @@ export function useResizableSidebar(): ResizableSidebar {
   useEffect(() => {
     if (!resizing) return;
     function onMove(e: MouseEvent) {
-      const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, e.clientX));
-      setWidth(next);
+      setWidth(clampWidth(e.clientX));
     }
     function onUp() {
       setResizing(false);
-      try {
-        localStorage.setItem(SIDEBAR_WIDTH_KEY, String(widthRef.current));
-      } catch {}
+      persistWidth(widthRef.current);
     }
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -72,10 +87,16 @@ export function useResizableSidebar(): ResizableSidebar {
 
   function resetWidth() {
     setWidth(SIDEBAR_DEFAULT);
-    try {
-      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(SIDEBAR_DEFAULT));
-    } catch {}
+    persistWidth(SIDEBAR_DEFAULT);
   }
 
-  return { width, resizing, startResize: () => setResizing(true), resetWidth };
+  function nudgeWidth(direction: 1 | -1) {
+    setWidth((w) => {
+      const next = clampWidth(w + direction * KEYBOARD_STEP);
+      persistWidth(next);
+      return next;
+    });
+  }
+
+  return { width, resizing, startResize: () => setResizing(true), resetWidth, nudgeWidth };
 }
