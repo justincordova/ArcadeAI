@@ -35,7 +35,8 @@ export const CreateGameBody = z.object({
   prompt: z.string().trim().min(1).max(2000),
 });
 
-export const GameIdParams = z.object({
+// Not exported — only parseGameId (below) consumes it.
+const GameIdParams = z.object({
   id: z.string().min(1),
 });
 
