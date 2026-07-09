@@ -3,9 +3,10 @@
 // PlanBadgeDropdown so this file stays focused on the trigger UI and the
 // outside-click close behavior.
 
+import { useOutsideClick } from "@/hooks/useOutsideClick.js";
 import { useSession } from "@/hooks/useSession.js";
 import { TIER_CREDIT_LIMITS, type Tier } from "@arcadeai/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { PlanBadgeDropdown } from "./PlanBadgeDropdown.js";
 
 const TIER_STYLES: Record<string, { label: string; gradient: string; border: string }> = {
@@ -42,17 +43,11 @@ export function PlanBadge() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Outside-click close
-  useEffect(() => {
-    if (!open) return;
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  useOutsideClick(
+    ref,
+    open,
+    useCallback(() => setOpen(false), [])
+  );
 
   if (isLoading) {
     return <div className={PLACEHOLDER_CLASS} style={{ background: "var(--color-border)" }} />;

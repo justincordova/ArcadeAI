@@ -1,3 +1,5 @@
+import { useInlineRename } from "@/hooks/useInlineRename.js";
+import { useOutsideClick } from "@/hooks/useOutsideClick.js";
 import {
   GAMES_QUERY_KEY,
   type GameSummary,
@@ -6,9 +8,10 @@ import {
   gameThumbnailUrl,
   patchGame,
 } from "@/lib/api/games.js";
+import { formatRelative } from "@/lib/format-time.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { toast } from "../ui/sonner.js";
 import { DeleteGameDialog } from "./DeleteGameDialog.js";
 import { PublicBadge } from "./PublicBadge.js";
@@ -18,45 +21,21 @@ interface GameCardProps {
   view: "grid" | "list";
 }
 
-function formatRelative(ts: number): string {
-  const diff = Date.now() - ts;
-  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-  if (diff < 60_000) return "just now";
-  if (diff < 3_600_000) return rtf.format(-Math.floor(diff / 60_000), "minute");
-  if (diff < 86_400_000) return rtf.format(-Math.floor(diff / 3_600_000), "hour");
-  return rtf.format(-Math.floor(diff / 86_400_000), "day");
-}
-
 export function GameCard({ game, view }: GameCardProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [renaming, setRenaming] = useState(false);
-  const [renameValue, setRenameValue] = useState(game.title);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hovered, setHovered] = useState(false);
 
-  const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!menuOpen) return;
-    function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [menuOpen]);
-
-  useEffect(() => {
-    if (renaming) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [renaming]);
+  useOutsideClick(
+    menuRef,
+    menuOpen,
+    useCallback(() => setMenuOpen(false), [])
+  );
 
   const renameMutation = useMutation({
     mutationFn: (title: string) => patchGame(game.id, { title }),
@@ -89,23 +68,13 @@ export function GameCard({ game, view }: GameCardProps) {
     },
   });
 
-  function commitRename() {
-    // Pressing Enter calls this and sets renaming=false, which unmounts the
-    // input and fires onBlur — calling commitRename a second time. Without
-    // this guard the rename PATCH fires twice. The re-rendered onBlur closure
-    // sees renaming=false, so the guard short-circuits the duplicate call.
-    if (!renaming) return;
-    const trimmed = renameValue.trim();
-    setRenaming(false);
-    if (trimmed && trimmed !== game.title) {
-      renameMutation.mutate(trimmed);
-    } else {
-      setRenameValue(game.title);
-    }
-  }
+  const rename = useInlineRename({
+    value: game.title,
+    onCommit: (title) => renameMutation.mutate(title),
+  });
 
   function handleCardClick() {
-    if (renaming || menuOpen) return;
+    if (rename.renaming || menuOpen) return;
     navigate({ to: "/game/$id", params: { id: game.id } });
   }
 
@@ -171,7 +140,7 @@ export function GameCard({ game, view }: GameCardProps) {
                 danger: false,
                 onClick: () => {
                   setMenuOpen(false);
-                  setRenaming(true);
+                  rename.start();
                 },
               },
               {
@@ -342,18 +311,15 @@ export function GameCard({ game, view }: GameCardProps) {
 
             {/* Title + meta */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              {renaming ? (
+              {rename.renaming ? (
                 <input
-                  ref={inputRef}
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={commitRename}
+                  ref={rename.inputRef}
+                  value={rename.draft}
+                  onChange={(e) => rename.setDraft(e.target.value)}
+                  onBlur={rename.commit}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename();
-                    if (e.key === "Escape") {
-                      setRenameValue(game.title);
-                      setRenaming(false);
-                    }
+                    if (e.key === "Enter") rename.commit();
+                    if (e.key === "Escape") rename.cancel();
                   }}
                   onClick={(e) => e.stopPropagation()}
                   style={{
@@ -552,19 +518,16 @@ export function GameCard({ game, view }: GameCardProps) {
         </button>
 
         {/* Inline rename */}
-        {renaming && (
+        {rename.renaming && (
           <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "10px 12px" }}>
             <input
-              ref={inputRef}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onBlur={commitRename}
+              ref={rename.inputRef}
+              value={rename.draft}
+              onChange={(e) => rename.setDraft(e.target.value)}
+              onBlur={rename.commit}
               onKeyDown={(e) => {
-                if (e.key === "Enter") commitRename();
-                if (e.key === "Escape") {
-                  setRenameValue(game.title);
-                  setRenaming(false);
-                }
+                if (e.key === "Enter") rename.commit();
+                if (e.key === "Escape") rename.cancel();
               }}
               style={{
                 width: "100%",
