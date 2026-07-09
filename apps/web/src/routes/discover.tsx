@@ -181,14 +181,15 @@ function DiscoverPage() {
         </p>
       </section>
 
-      {/* Filters. `top: 56` unconditionally — BOTH header variants above
-          (TopBar and PublicTopBar) are sticky 56px bars, so pinning at 0 for
-          signed-out visitors slid the filter row underneath the public top
-          bar (z 20 < z 50), hiding the sort/genre controls on scroll. */}
+      {/* Filters. Pinned at the top-bar height unconditionally — BOTH header
+          variants above (TopBar and PublicTopBar) are sticky bars of
+          --layout-topbar-h, so pinning at 0 for signed-out visitors slid the
+          filter row underneath the public top bar (z 20 < z 50), hiding the
+          sort/genre controls on scroll. */}
       <div
         style={{
           position: "sticky",
-          top: 56,
+          top: "var(--layout-topbar-h)",
           zIndex: 20,
           background: "color-mix(in srgb, var(--color-bg) 92%, transparent)",
           backdropFilter: "blur(8px)",
@@ -312,7 +313,7 @@ function PublicTopBar() {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        height: 56,
+        height: "var(--layout-topbar-h)",
         padding: "0 24px",
         background: "var(--color-surface)",
         borderBottom: "1px solid var(--color-border)",

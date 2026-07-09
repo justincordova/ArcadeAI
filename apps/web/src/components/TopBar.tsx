@@ -30,7 +30,7 @@ export function TopBar() {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        height: 56,
+        height: "var(--layout-topbar-h)",
         padding: "0 24px",
         background: "var(--color-surface)",
         borderBottom: "1px solid var(--color-border)",

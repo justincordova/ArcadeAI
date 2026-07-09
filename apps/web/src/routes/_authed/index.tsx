@@ -210,7 +210,7 @@ function Dashboard() {
   return (
     <div
       style={{
-        minHeight: "calc(100vh - 56px)",
+        minHeight: "calc(100vh - var(--layout-topbar-h))",
         background: "var(--color-bg)",
         position: "relative",
       }}
