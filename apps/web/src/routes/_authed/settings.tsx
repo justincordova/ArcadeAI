@@ -1,22 +1,16 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { Appearance } from "@/components/settings/Appearance.js";
 import { ConnectedAccounts } from "@/components/settings/ConnectedAccounts.js";
 import { CurrentPlan } from "@/components/settings/CurrentPlan.js";
 import { DangerZone } from "@/components/settings/DangerZone.js";
 import { DisplayName } from "@/components/settings/DisplayName.js";
 import { Email } from "@/components/settings/Email.js";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_authed/settings")({
   component: SettingsPage,
 });
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div
       style={{

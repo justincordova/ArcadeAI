@@ -10,7 +10,7 @@
 // in-memory DB before importing the module under test.
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { type TestDb, createTestDb, insertTestUser } from "./test-db.js";
+import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 

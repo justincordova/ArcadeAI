@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { TopBar } from "../components/TopBar.js";
 import { useTheme } from "../hooks/useTheme.js";
 import { fetchMeOrNull } from "../lib/api/auth.js";

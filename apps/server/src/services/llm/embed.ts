@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { EMBEDDING, computeCost } from "@arcadeai/shared";
+import { computeCost, EMBEDDING } from "@arcadeai/shared";
 import { embed } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { AUX_LLM_TIMEOUT_MS } from "./client.js";

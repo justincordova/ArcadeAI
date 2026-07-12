@@ -13,11 +13,11 @@
 // updates the in-memory cached infinite-query item. On error we roll
 // back. Anonymous likers are routed through /sign-in with a `next`.
 
-import { toast } from "@/components/ui/sonner.js";
-import { type DiscoverGame, likeGame, publicThumbnailUrl, unlikeGame } from "@/lib/api/games.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Heart, Play } from "lucide-react";
+import { toast } from "@/components/ui/sonner.js";
+import { type DiscoverGame, likeGame, publicThumbnailUrl, unlikeGame } from "@/lib/api/games.js";
 
 interface DiscoverCardProps {
   game: DiscoverGame;

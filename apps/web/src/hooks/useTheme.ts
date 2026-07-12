@@ -5,11 +5,11 @@
 // this reconciles with the server value once ["me"] resolves and drives the
 // settings control.
 
-import { patchMe } from "@/lib/api/me.js";
-import { applyTheme, storedTheme } from "@/lib/theme.js";
 import type { MeResponse, Theme } from "@arcadeai/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
+import { patchMe } from "@/lib/api/me.js";
+import { applyTheme, storedTheme } from "@/lib/theme.js";
 import { fetchMeOrNull } from "../lib/api/auth.js";
 
 export function useTheme() {

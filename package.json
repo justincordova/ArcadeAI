@@ -2,7 +2,10 @@
   "name": "arcadeai",
   "private": true,
   "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "bun run --filter '*' dev",
     "build": "bun run --filter '*' build",
@@ -16,7 +19,7 @@
     "db:studio": "bun run --filter @arcadeai/db studio"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
-    "typescript": "^5.7.2"
+    "@biomejs/biome": "^2.5.3",
+    "typescript": "^7.0.2"
   }
 }

@@ -6,9 +6,9 @@
 // when nobody opens it. Only the live turn renders this component;
 // historical turns just show the NL summary.
 
-import { type DiffHunk, type DiffLine, compactDiff, computeLineDiff } from "@/lib/line-diff.js";
 import { ChevronDown } from "lucide-react";
 import { useMemo, useState } from "react";
+import { compactDiff, computeLineDiff, type DiffHunk, type DiffLine } from "@/lib/line-diff.js";
 
 interface DiffViewerProps {
   previousCode: string;

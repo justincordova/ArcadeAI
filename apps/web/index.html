@@ -27,7 +27,7 @@
          logic in src/lib/theme.ts; kept inline and dependency-free so it runs
          first. -->
     <script>
-      (function () {
+      (() => {
         try {
           var pref = localStorage.getItem("arcadeai-theme") || "dark";
           var light =

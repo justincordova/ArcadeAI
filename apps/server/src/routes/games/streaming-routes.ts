@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import { games, messages, usageLog } from "@arcadeai/db";
 import { and, desc, eq, gt, ne, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { ConcurrencyError, acquire, release } from "../../lib/active-streams.js";
+import { acquire, ConcurrencyError, release } from "../../lib/active-streams.js";
 import { db } from "../../lib/db.js";
 import {
   conflictError,
@@ -31,15 +31,15 @@ import { streamGame, streamRefinement, streamRepair } from "../../services/llm/c
 import { generateDiffSummary } from "../../services/llm/diff-summary.js";
 import { embedPrompt } from "../../services/llm/embed.js";
 import { buildGenerationSystemPrompt } from "../../services/llm/prompts/generation/index.js";
-import { REPAIR_SYSTEM_PROMPT, buildRepairUserMessage } from "../../services/llm/prompts/repair.js";
+import { buildRepairUserMessage, REPAIR_SYSTEM_PROMPT } from "../../services/llm/prompts/repair.js";
 import { sanitizeHtmlOutput } from "../../services/llm/sanitize-output.js";
 import { generateTitle } from "../../services/llm/title.js";
 import { retrieveExample } from "../../services/rag/retrieve.js";
 import { buildRefinementContext } from "../../services/refinement/context.js";
 import {
-  InsufficientCreditsError,
   checkUpfront,
   deduct,
+  InsufficientCreditsError,
   markSucceeded,
   refund,
 } from "../../services/usage/charge.js";
@@ -51,13 +51,13 @@ import {
 import { applyResets } from "../../services/usage/reset.js";
 import {
   CreateGameBody,
+  classifyRefundReason,
+  parseGameId,
+  perUser10PerMin,
   REPAIR_DAILY_LIMIT,
   REPAIR_WINDOW_MS,
   RefineBody,
   RepairBody,
-  classifyRefundReason,
-  parseGameId,
-  perUser10PerMin,
 } from "./shared.js";
 
 export function registerGameStreamingRoutes(app: FastifyInstance) {

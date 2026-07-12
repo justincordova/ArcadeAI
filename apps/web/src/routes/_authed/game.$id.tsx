@@ -1,20 +1,14 @@
-import { Builder } from "@/components/builder/Builder.js";
-import { fetchGame } from "@/lib/api/games.js";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle } from "lucide-react";
+import { Builder } from "@/components/builder/Builder.js";
+import { fetchGame } from "@/lib/api/games.js";
 
 export const Route = createFileRoute("/_authed/game/$id")({
   component: GamePage,
 });
 
-function FullPageState({
-  children,
-  isError,
-}: {
-  children: React.ReactNode;
-  isError?: boolean;
-}) {
+function FullPageState({ children, isError }: { children: React.ReactNode; isError?: boolean }) {
   return (
     <div
       style={{

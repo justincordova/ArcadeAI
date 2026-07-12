@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
+    "noEmit": true,
     "types": ["node", "bun-types"],
     "paths": {
       "@arcadeai/db": ["../../packages/db/src"],

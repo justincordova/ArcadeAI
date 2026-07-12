@@ -1,6 +1,6 @@
-import { fetchMeOrNull } from "@/lib/api/auth.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
+import { fetchMeOrNull } from "@/lib/api/auth.js";
 
 export function Email() {
   const { data: me } = useQuery<MeResponse | null>({

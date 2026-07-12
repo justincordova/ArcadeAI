@@ -10,7 +10,7 @@ import { db, sqlite } from "../../lib/db.js";
 import { notFoundError, sendError, validationError } from "../../lib/errors.js";
 import { loadOwnedGame } from "../../lib/ownership.js";
 import { serveThumbnail } from "../../lib/serve-thumbnail.js";
-import { PatchGameBody, STALE_STREAM_CUTOFF_MS, ThumbnailBody, parseGameId } from "./shared.js";
+import { PatchGameBody, parseGameId, STALE_STREAM_CUTOFF_MS, ThumbnailBody } from "./shared.js";
 
 export function registerGameCrudRoutes(app: FastifyInstance) {
   // GET /api/games/:id — get game with messages

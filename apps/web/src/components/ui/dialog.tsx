@@ -1,10 +1,10 @@
 // shadcn/ui Dialog — Radix-backed modal with consistent styling matching
 // the rest of the app (dark surface, subtle border, gradient accent).
 
-import { cn } from "@/lib/cn.js";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import * as React from "react";
+import { cn } from "@/lib/cn.js";
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;

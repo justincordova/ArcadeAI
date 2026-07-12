@@ -1,5 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
-import { GPT_MINI, computeCost } from "@arcadeai/shared";
+import { computeCost, GPT_MINI } from "@arcadeai/shared";
 import { generateText } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { AUX_LLM_TIMEOUT_MS } from "./client.js";

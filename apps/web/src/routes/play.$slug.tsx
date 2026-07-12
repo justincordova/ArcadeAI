@@ -3,18 +3,18 @@
 // the user through /sign-in?next=/play/:slug?intent=remix).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Heart, Play, Sparkles } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { LogoFull } from "../components/Logo.js";
 import { GameIframe } from "../components/builder/GameIframe.js";
+import { LogoFull } from "../components/Logo.js";
 import { toast } from "../components/ui/sonner.js";
 import { useSession } from "../hooks/useSession.js";
 import { API_BASE } from "../lib/api/client.js";
 import {
-  type PublicGame,
   fetchPublicGame,
   likeGame,
+  type PublicGame,
   recordPlay,
   remixPublicGame,
   unlikeGame,
@@ -433,13 +433,7 @@ function PlayLoading() {
   );
 }
 
-function CenteredMessage({
-  children,
-  isError,
-}: {
-  children: React.ReactNode;
-  isError?: boolean;
-}) {
+function CenteredMessage({ children, isError }: { children: React.ReactNode; isError?: boolean }) {
   return (
     <div
       style={{

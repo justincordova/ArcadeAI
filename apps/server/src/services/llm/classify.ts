@@ -1,6 +1,6 @@
 import { openai } from "@ai-sdk/openai";
 import { GENRE_BUCKETS, type GenreBucket } from "@arcadeai/shared/genres.js";
-import { GPT_MINI, computeCost } from "@arcadeai/shared/models.js";
+import { computeCost, GPT_MINI } from "@arcadeai/shared/models.js";
 import { generateObject } from "ai";
 import type { FastifyBaseLogger } from "fastify";
 import { z } from "zod";

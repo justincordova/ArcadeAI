@@ -1,7 +1,7 @@
-import { captureThumbnailWhenReady } from "@/lib/capture-thumbnail.js";
 import { sanitizeHtmlOutput } from "@arcadeai/shared/sanitize-html.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { captureThumbnailWhenReady } from "@/lib/capture-thumbnail.js";
 import { type QuotaError, type SSEStatus, useSSEStream } from "./useSSEStream.js";
 
 export type RefinementStatus = SSEStatus;

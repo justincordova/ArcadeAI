@@ -7,9 +7,9 @@
 // listener, and a listener swap mid-stream could drop the iframe's async
 // `thumbnail` response in the gap between unbind and rebind.
 
-import { GAMES_QUERY_KEY, postThumbnail } from "@/lib/api/games.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { GAMES_QUERY_KEY, postThumbnail } from "@/lib/api/games.js";
 
 export function useThumbnailUploader() {
   const queryClient = useQueryClient();

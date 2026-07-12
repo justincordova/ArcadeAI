@@ -1,6 +1,6 @@
+import { createRootRoute, Outlet, useRouter } from "@tanstack/react-router";
 import { ErrorBoundary } from "@/components/ErrorBoundary.js";
 import { RouteError } from "@/components/RouteError.js";
-import { Outlet, createRootRoute, useRouter } from "@tanstack/react-router";
 
 function RootLayout() {
   const router = useRouter();

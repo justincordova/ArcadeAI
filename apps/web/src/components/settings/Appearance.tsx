@@ -2,9 +2,9 @@
 // the choice paints immediately (useTheme -> applyTheme) and persists to the
 // API. "System" follows the OS colour scheme live.
 
-import { useTheme } from "@/hooks/useTheme.js";
 import type { Theme } from "@arcadeai/shared";
 import { Monitor, Moon, Sun } from "lucide-react";
+import { useTheme } from "@/hooks/useTheme.js";
 
 const OPTIONS: { value: Theme; label: string; icon: typeof Sun }[] = [
   { value: "dark", label: "Dark", icon: Moon },

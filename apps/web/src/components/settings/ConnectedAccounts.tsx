@@ -1,7 +1,7 @@
-import { useSession } from "@/hooks/useSession.js";
-import { linkProviderUrl, unlinkProvider } from "@/lib/api/me.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
+import { useSession } from "@/hooks/useSession.js";
+import { linkProviderUrl, unlinkProvider } from "@/lib/api/me.js";
 import { toast } from "../ui/sonner.js";
 
 const PROVIDERS: { id: "google" | "github"; label: string }[] = [

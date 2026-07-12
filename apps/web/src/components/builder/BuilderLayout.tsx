@@ -4,14 +4,14 @@
 // RefinementBuilder in Builder.tsx); this component only renders props and
 // raises callbacks — keeping the streaming/optimistic logic out of the view.
 
-import { getMissingKeyError, useConfig } from "@/hooks/useConfig.js";
-import { useMediaQuery } from "@/hooks/useMediaQuery.js";
-import { useSession } from "@/hooks/useSession.js";
-import { formatCostLine } from "@/lib/cost-line.js";
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { getMissingKeyError, useConfig } from "@/hooks/useConfig.js";
+import { useMediaQuery } from "@/hooks/useMediaQuery.js";
+import { useSession } from "@/hooks/useSession.js";
+import { formatCostLine } from "@/lib/cost-line.js";
 import { ChatEmptyState } from "./ChatEmptyState.js";
 import { DiffViewer } from "./DiffViewer.js";
 import { ErrorBanner } from "./ErrorBanner.js";

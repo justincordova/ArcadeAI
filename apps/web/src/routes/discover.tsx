@@ -6,16 +6,16 @@
 // texture, brand-marquee gradient) so this surface reads as the
 // product's identity beat, not a utility list.
 
-import { LogoFull } from "@/components/Logo.js";
-import { TopBar } from "@/components/TopBar.js";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
 import { DiscoverCard } from "@/components/discover/DiscoverCard.js";
 import { DiscoverFilters } from "@/components/discover/DiscoverFilters.js";
+import { LogoFull } from "@/components/Logo.js";
+import { TopBar } from "@/components/TopBar.js";
 import { useSession } from "@/hooks/useSession.js";
 import { type DiscoverGame, type DiscoverSort, fetchDiscover } from "@/lib/api/games.js";
 import { setDocumentHead } from "@/lib/document-head.js";
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { Link, createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
 
 interface DiscoverSearch {
   sort?: DiscoverSort;

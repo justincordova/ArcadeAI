@@ -153,8 +153,8 @@ kbd,
 samp,
 .font-mono,
 [style*="font-family: inherit"] {
-  font-family: "IBM Plex Mono", "Geist Mono", ui-monospace, "Cascadia Code", Menlo, Consolas,
-    monospace;
+  font-family:
+    "IBM Plex Mono", "Geist Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
 }
 
 /* ── Scanline texture — used on identity surfaces (hero, sign-in card,
@@ -280,9 +280,11 @@ samp,
   *,
   *::before,
   *::after {
+    /* biome-ignore-start lint/complexity/noImportantStyles: reduced-motion reset must override all animation/transition/scroll declarations regardless of specificity */
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+    /* biome-ignore-end lint/complexity/noImportantStyles: end reduced-motion reset */
   }
 }

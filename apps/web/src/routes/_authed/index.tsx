@@ -1,3 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { AlertCircle, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
   DashboardToolbar,
   type GenreFilter,
@@ -8,10 +12,6 @@ import { GameCardSkeletons } from "@/components/dashboard/GameCardSkeleton.js";
 import { GameGrid } from "@/components/dashboard/GameGrid.js";
 import { Button } from "@/components/ui/button.js";
 import { GAMES_QUERY_KEY, type GameSummary, listGames } from "@/lib/api/games.js";
-import { useQuery } from "@tanstack/react-query";
-import { Link, createFileRoute } from "@tanstack/react-router";
-import { AlertCircle, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/_authed/")({
   component: Dashboard,

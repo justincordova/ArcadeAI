@@ -1,9 +1,9 @@
 // Permanent account deletion. Behind a confirmation dialog because it
 // cascades through games, usage logs, sessions, and OAuth account links.
 
-import { deleteMe } from "@/lib/api/me.js";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { deleteMe } from "@/lib/api/me.js";
 import { Button } from "../ui/button.js";
 import {
   Dialog,

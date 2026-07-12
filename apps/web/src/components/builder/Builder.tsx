@@ -1,10 +1,10 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useStreamedGeneration } from "@/hooks/useStreamedGeneration.js";
 import { useStreamedRefinement } from "@/hooks/useStreamedRefinement.js";
 import { useThumbnailUploader } from "@/hooks/useThumbnailUploader.js";
 import { GAMES_QUERY_KEY, undoRefinement } from "@/lib/api/games.js";
 import { captureThumbnailWhenReady } from "@/lib/capture-thumbnail.js";
-import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
 import { BuilderLayout } from "./BuilderLayout.js";
 import type { Message } from "./MessageBubble.js";
 import { RepairController, type RepairStatus } from "./RepairController.js";

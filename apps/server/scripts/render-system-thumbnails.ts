@@ -116,7 +116,7 @@ async function main() {
           }
         });
 
-        if (!dataUrl || !dataUrl.startsWith("data:image/png;base64,")) {
+        if (!dataUrl?.startsWith("data:image/png;base64,")) {
           throw new Error("captured no canvas data");
         }
 

@@ -1,5 +1,5 @@
-import { queryClient } from "@/lib/query-client.js";
 import type { MeResponse } from "@arcadeai/shared";
+import { queryClient } from "@/lib/query-client.js";
 import { API_BASE, apiFetch, toApiError } from "./client.js";
 
 export type { MeResponse };

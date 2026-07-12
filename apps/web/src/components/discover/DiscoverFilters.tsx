@@ -4,9 +4,9 @@
 //
 // The component is presentational — query state lives in the route URL.
 
-import type { DiscoverSort } from "@/lib/api/games.js";
 import { GENRE_BUCKETS, type GenreBucket } from "@arcadeai/shared";
 import { Flame, Sparkles, Star } from "lucide-react";
+import type { DiscoverSort } from "@/lib/api/games.js";
 
 const SORT_OPTIONS: Array<{ value: DiscoverSort; label: string; icon: typeof Flame }> = [
   { value: "trending", label: "Trending", icon: Flame },

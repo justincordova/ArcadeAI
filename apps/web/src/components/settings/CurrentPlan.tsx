@@ -1,9 +1,9 @@
-import { fetchMeOrNull } from "@/lib/api/auth.js";
 import type { MeResponse } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import type React from "react";
+import { fetchMeOrNull } from "@/lib/api/auth.js";
 
 const PLAN_LABELS: Record<string, string> = {
   free: "Free",

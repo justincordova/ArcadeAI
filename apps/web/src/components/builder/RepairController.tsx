@@ -1,5 +1,5 @@
-import { useStreamedRepair } from "@/hooks/useStreamedRepair.js";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useStreamedRepair } from "@/hooks/useStreamedRepair.js";
 import { RepairFallbackDialog } from "./RepairFallbackDialog.js";
 
 interface GameError {
@@ -138,7 +138,7 @@ export function RepairController({
   useEffect(() => {
     function onMessage(e: MessageEvent) {
       const data = e.data as { type?: string; message?: unknown; stack?: unknown };
-      if (!data || data.type !== "game-error") return;
+      if (data?.type !== "game-error") return;
       // Only accept messages that verifiably came from our iframe. The
       // check must fail CLOSED when the ref is null (iframe unmounted,
       // e.g. during streaming): a `iframeRef.current && ...` guard would

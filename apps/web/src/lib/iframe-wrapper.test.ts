@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { WRAPPER_SCRIPT, injectWrapper } from "./iframe-wrapper.js";
+import { injectWrapper, WRAPPER_SCRIPT } from "./iframe-wrapper.js";
 
 const CSP_MARKER = 'http-equiv="Content-Security-Policy"';
 

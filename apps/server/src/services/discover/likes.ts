@@ -33,7 +33,7 @@ export async function likeGame(gameId: string, userId: string): Promise<LikeResu
       .limit(1)
       .all();
     const row = rows[0];
-    if (!row || !row.isPublic) return null;
+    if (!row?.isPublic) return null;
 
     // INSERT OR IGNORE → idempotent. Drive the "did anything change"
     // signal off the actual insert outcome rather than a pre-check SELECT.
@@ -83,7 +83,7 @@ export async function unlikeGame(gameId: string, userId: string): Promise<LikeRe
       .limit(1)
       .all();
     const row = rows[0];
-    if (!row || !row.isPublic) return null;
+    if (!row?.isPublic) return null;
 
     const deleted = tx
       .delete(gameLikes)

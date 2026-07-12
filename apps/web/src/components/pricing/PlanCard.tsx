@@ -4,7 +4,6 @@
 // Yearly pricing: shows the discounted per-month price next to a strike-
 // through of the regular monthly price, then a "billed yearly" footnote.
 
-import { toast } from "@/components/ui/sonner.js";
 import {
   type BillingInterval,
   PLAN_PRICES,
@@ -13,6 +12,7 @@ import {
 } from "@arcadeai/shared";
 import { Check } from "lucide-react";
 import { useState } from "react";
+import { toast } from "@/components/ui/sonner.js";
 
 interface PlanCardProps {
   plan: PlanCopy;

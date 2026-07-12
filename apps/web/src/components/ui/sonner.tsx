@@ -2,9 +2,9 @@
 // to the active surface. The base sonner theme follows the app theme via the
 // same resolver used elsewhere so toasts don't stay dark in light mode.
 
-import { resolveTheme, storedTheme } from "@/lib/theme.js";
 import { useEffect, useState } from "react";
 import { Toaster as SonnerToaster } from "sonner";
+import { resolveTheme, storedTheme } from "@/lib/theme.js";
 
 export function Toaster() {
   const [resolved, setResolved] = useState<"dark" | "light">(() => resolveTheme(storedTheme()));

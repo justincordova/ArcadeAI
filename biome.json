@@ -1,12 +1,16 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
-  "organizeImports": {
-    "enabled": true
-  },
+  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "preset": "recommended",
+      "a11y": {
+        "noSvgWithoutTitle": "off",
+        "noStaticElementInteractions": "off",
+        "useSemanticElements": "off",
+        "useAriaPropsSupportedByRole": "off"
+      }
     }
   },
   "formatter": {
@@ -21,14 +25,22 @@
       "trailingCommas": "es5"
     }
   },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
   "files": {
-    "ignore": [
-      "node_modules",
-      "dist",
-      ".tanstack",
-      "apps/web/src/routeTree.gen.ts",
-      "packages/db/src/migrations",
-      "apps/server/scripts/rag-embeddings"
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/.tanstack",
+      "!**/apps/web/index.html",
+      "!**/apps/web/src/routeTree.gen.ts",
+      "!**/packages/db/src/migrations",
+      "!**/apps/server/scripts/rag-curated",
+      "!**/apps/server/scripts/rag-embeddings"
     ]
   }
 }

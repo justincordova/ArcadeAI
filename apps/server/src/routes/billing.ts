@@ -2,8 +2,8 @@
 // No real payment processor is wired up (SPEC §10) — see change-plan below
 // for how the prototype caps balances on upgrade/downgrade.
 import { accounts, users } from "@arcadeai/db";
-import { TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import type { LinkedProvider, Theme } from "@arcadeai/shared";
+import { TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";

@@ -15,7 +15,7 @@
 //     incremented it (recorded in usage_log.lifetime_counter_incremented)
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { type TestDb, createTestDb, insertTestUser } from "./test-db.js";
+import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 

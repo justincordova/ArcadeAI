@@ -3,7 +3,7 @@
 // Do not "fix" the empty onClick handlers — they are correct per spec.
 import { type BillingInterval, PLANS } from "@arcadeai/shared";
 import { useQuery } from "@tanstack/react-query";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { AdminBanner } from "../components/pricing/AdminBanner.js";
 import { IntervalToggle } from "../components/pricing/IntervalToggle.js";

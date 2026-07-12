@@ -1,17 +1,17 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useCallback, useRef, useState } from "react";
 import { useInlineRename } from "@/hooks/useInlineRename.js";
 import { useOutsideClick } from "@/hooks/useOutsideClick.js";
 import {
-  GAMES_QUERY_KEY,
-  type GameSummary,
   deleteGame,
   fetchGame,
+  GAMES_QUERY_KEY,
+  type GameSummary,
   gameThumbnailUrl,
   patchGame,
 } from "@/lib/api/games.js";
 import { formatRelative } from "@/lib/format-time.js";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
-import { useCallback, useRef, useState } from "react";
 import { toast } from "../ui/sonner.js";
 import { DeleteGameDialog } from "./DeleteGameDialog.js";
 import { PublicBadge } from "./PublicBadge.js";

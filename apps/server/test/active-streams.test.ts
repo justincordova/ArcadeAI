@@ -3,9 +3,9 @@
 
 import { afterEach, describe, expect, test } from "bun:test";
 import {
-  ConcurrencyError,
   acquire,
   activeCount,
+  ConcurrencyError,
   clear,
   release,
 } from "../src/lib/active-streams.js";

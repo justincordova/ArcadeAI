@@ -2,7 +2,6 @@ import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [
@@ -17,9 +16,13 @@ export default defineConfig({
       routeFileIgnorePattern: ".*\\.test\\.tsx?$",
     }),
     react(),
-    tsconfigPaths(),
     tailwindcss(),
   ],
+  // Native tsconfig `paths` resolution (Vite 6+). Replaces the
+  // vite-tsconfig-paths plugin, which Vite now flags as redundant.
+  resolve: {
+    tsconfigPaths: true,
+  },
   server: {
     port: 5173,
   },
@@ -32,8 +35,14 @@ export default defineConfig({
         // autoCodeSplitting above; this just stabilizes a large shared vendor.
         // React itself is left in the core chunk — React 19's jsx-runtime entry
         // points make a dedicated react chunk resolve empty.
-        manualChunks: {
-          tanstack: ["@tanstack/react-query", "@tanstack/react-router"],
+        // Vite 8 (rolldown) requires manualChunks to be a function, not a map.
+        manualChunks(id) {
+          if (
+            id.includes("node_modules/@tanstack/react-query") ||
+            id.includes("node_modules/@tanstack/react-router")
+          ) {
+            return "tanstack";
+          }
         },
       },
     },
