@@ -27,7 +27,19 @@ export async function ogRoutes(app: FastifyInstance) {
       return sendError(reply, 400, validationError("Invalid slug"));
     }
 
-    const game = await loadPublicGame(parsed.data.slug);
+    // A DB error here (outage, disk) would otherwise escape to Fastify's
+    // global error handler and return a JSON 500 with an application/json
+    // content-type to a crawler expecting an image. Serve the placeholder
+    // PNG instead, mirroring the not-found branch — the sibling public
+    // routes (play.ts, discover.ts) apply the same try/catch treatment.
+    let game: Awaited<ReturnType<typeof loadPublicGame>>;
+    try {
+      game = await loadPublicGame(parsed.data.slug);
+    } catch (err) {
+      request.log.warn({ err }, "loadPublicGame threw serving OG image; serving fallback");
+      game = null;
+    }
+
     if (!game) {
       // Send the fallback rather than 404 so a crawler that hits this
       // before publish-time still gets an unfurl. This is a tradeoff:
