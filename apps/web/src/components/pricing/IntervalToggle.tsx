@@ -56,7 +56,12 @@ export function IntervalToggle({ value, onChange }: IntervalToggleProps) {
                 letterSpacing: "0.04em",
               }}
             >
-              -15%
+              {/* Actual discounts are 13.3% (creator: 15 -> 13) and 13.8%
+                  (pro: 29 -> 25). PLAN_PRICES is the source of truth and its
+                  comment warns that a badge contradicting those prices is the
+                  failure to avoid; -15% overstated both. 13 understates both,
+                  so it is never a false claim. */}
+              -13%
             </span>
           )}
         </button>
