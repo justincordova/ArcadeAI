@@ -194,8 +194,14 @@ export async function deduct(
     } else {
       changed = sqlite
         .prepare(
+          // Tiers with dailyEnforced=false must NOT gate on the daily column,
+          // so it gets no `>= cost` guard here — but it must still not go
+          // negative and surface as a negative balance in GET /api/me. Floor
+          // the decrement. This is safe only by coincidence today (creator and
+          // pro have daily === monthly, so the monthly guard binds first);
+          // lowering either tier's daily below its monthly would break it.
           `UPDATE "user"
-              SET credits_remaining_daily   = credits_remaining_daily   - ?,
+              SET credits_remaining_daily   = MAX(credits_remaining_daily - ?, 0),
                   credits_remaining_monthly = credits_remaining_monthly - ?
             WHERE id = ?
               AND credits_remaining_monthly >= ?`
