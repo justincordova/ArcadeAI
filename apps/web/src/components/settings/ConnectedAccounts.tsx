@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useSession } from "@/hooks/useSession.js";
-import { linkProviderUrl, unlinkProvider } from "@/lib/api/me.js";
+import { linkProvider, unlinkProvider } from "@/lib/api/me.js";
 import { toast } from "../ui/sonner.js";
 
 const PROVIDERS: { id: "google" | "github"; label: string }[] = [
@@ -29,9 +29,22 @@ export function ConnectedAccounts() {
     },
   });
 
+  // Linking is a POST that returns the provider's authorization URL; the
+  // browser navigation happens here, after the call succeeds.
+  const linkMutation = useMutation({
+    mutationFn: (provider: "google" | "github") =>
+      linkProvider(provider, `${window.location.origin}/settings`),
+    onSuccess: (url) => {
+      window.location.href = url;
+    },
+    onError: () => {
+      toast.error("Could not connect provider");
+    },
+  });
+
   function handleConnect(provider: "google" | "github") {
-    const callbackUrl = `${window.location.origin}/settings`;
-    window.location.href = `${linkProviderUrl(provider)}?callbackURL=${encodeURIComponent(callbackUrl)}`;
+    if (linkMutation.isPending) return;
+    linkMutation.mutate(provider);
   }
 
   return (

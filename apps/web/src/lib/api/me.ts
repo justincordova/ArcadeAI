@@ -1,5 +1,5 @@
 import type { MeResponse, Theme } from "@arcadeai/shared";
-import { API_BASE, apiFetch } from "./client.js";
+import { apiFetch } from "./client.js";
 
 // Note: the read path lives at lib/api/auth.ts:fetchMeOrNull (returns null on
 // 401). Mutations below throw an ApiError on failure — they're called from
@@ -14,8 +14,26 @@ export async function deleteMe(): Promise<void> {
   await apiFetch<void>("/api/me", { method: "DELETE" });
 }
 
-export function linkProviderUrl(provider: "google" | "github"): string {
-  return `${API_BASE}/api/auth/link/${provider}`;
+/**
+ * Begin linking an additional OAuth provider to the current account.
+ *
+ * Better Auth exposes linking ONLY as `POST /link-social` with a JSON body; it
+ * has no `GET /link/:provider`. This used to build that non-existent URL and
+ * navigate to it directly, which left the user on the API origin looking at a
+ * raw 404 with account linking entirely non-functional.
+ *
+ * `disableRedirect` keeps the response a plain JSON `{ url }` instead of also
+ * setting a Location header, so the caller owns the navigation.
+ */
+export async function linkProvider(
+  provider: "google" | "github",
+  callbackURL: string
+): Promise<string> {
+  const res = await apiFetch<{ url: string }>("/api/auth/link-social", {
+    method: "POST",
+    json: { provider, callbackURL, disableRedirect: true },
+  });
+  return res.url;
 }
 
 /**
