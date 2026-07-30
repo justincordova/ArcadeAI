@@ -123,7 +123,14 @@ export async function retrieveExample({
     // Reject below the similarity floor so we don't inject an irrelevant
     // reference. The log still captures the rejected candidate so the
     // threshold can be tuned from real traffic.
-    if (similarity < MIN_SIMILARITY) {
+    //
+    // Non-finite distances must be rejected explicitly: SQLite can return NULL
+    // for `distance` (making `1 - null` evaluate to 1, a perfect match), and a
+    // zero-magnitude embedding yields NaN, for which `NaN < MIN_SIMILARITY` is
+    // false. Either would sail past a bare `<` comparison and inject an
+    // arbitrary 2K-token example under "build something in this style"
+    // framing — exactly what this floor exists to prevent.
+    if (!Number.isFinite(similarity) || similarity < MIN_SIMILARITY) {
       log?.info(
         {
           ragExampleId: r.id,
