@@ -27,15 +27,25 @@ export function writeSSEHeaders(reply: FastifyReply, request: FastifyRequest) {
 }
 
 export function writeSSE(reply: FastifyReply, event: string, data: unknown) {
-  // Guard against writing to a socket that the client has already torn
-  // down. `reply.raw.destroyed` flips synchronously inside Node when the
-  // peer's FIN/RST arrives — the `request.raw.on("close")` listener that
-  // the SSE routes register flips a separate flag, but there's a small
-  // window where the event has fired but the listener hasn't run yet
-  // (or vice versa). Without this guard, a transient mid-chunk write
-  // failure throws ERR_STREAM_WRITE_AFTER_END, which the route catches
-  // as a stream error — refunding credits and abandoning generation
-  // work that the LLM is still producing.
+  // Guard against writing to a socket the client already tore down. On Node
+  // `reply.raw.destroyed` flips when the peer's FIN/RST arrives, and without
+  // this guard a mid-chunk write throws ERR_STREAM_WRITE_AFTER_END, which the
+  // route catches as a stream error — refunding credits and abandoning
+  // generation work the LLM is still producing.
+  //
+  // KNOWN LIMITATION (verified on Bun 1.3.13, the production runtime): Bun's
+  // node:http compatibility layer surfaces NO client-disconnect signal for a
+  // hijacked response. After a real peer abort, `reply.raw.destroyed` is
+  // `undefined` (not `true`), `writableEnded` and `socket.destroyed` stay
+  // false, `write()` still returns true, and neither `reply.raw` nor the
+  // socket emits 'close'/'error'/'aborted'. So on Bun this guard never trips
+  // and the disconnect flag in the streaming routes never flips — frames are
+  // written into a dead socket until the stream ends on its own.
+  //
+  // That is wasteful but not harmful: the writes are discarded, the LLM was
+  // going to finish anyway under background-stream semantics, and the
+  // heartbeat interval is cleared by the routes' `finally`. Do not "fix" it
+  // by moving the routes' close listener earlier — see the note there.
   if (reply.raw.destroyed || reply.raw.writableEnded) return;
   // JSON.stringify can throw on circular references — LLM SDK errors and
   // certain object graphs (Response/Request, async generators, etc.) carry

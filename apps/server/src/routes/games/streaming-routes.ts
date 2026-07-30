@@ -196,18 +196,31 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       // streams. The stop function is called in the finally block below.
       stopHeartbeat = startHeartbeat(reply);
 
-      // Background-stream semantics: when the SSE client disconnects (tab
-      // close, navigation away, network drop), we stop writing SSE frames
-      // but DO NOT abort the LLM call. The model finishes, the result is
-      // persisted to current_code, credits are charged as a success. The
-      // user returns to /game/<id> later and sees the completed game. This
-      // matches "fire-and-forget" UX: starting a generation is a commitment;
-      // navigating away doesn't waste the work.
+      // Background-stream semantics: a disconnecting client (tab close,
+      // navigation away, network drop) does NOT abort the LLM call. The model
+      // finishes, the result is persisted to current_code, credits are charged
+      // as a success, and the user returns to /game/<id> later to find the
+      // completed game. Starting a generation is a commitment; navigating away
+      // doesn't waste the work.
       //
       // The AbortController exists only to satisfy the LLM-stream signal
       // parameter — it's never aborted from this route. The server-side
       // timeout inside withTimeout() is the only signal that can cancel
       // the in-flight LLM call.
+      //
+      // `clientClosed` is best-effort and currently never flips. Two reasons,
+      // both verified empirically rather than assumed:
+      //  1. `IncomingMessage`'s 'close' fires when the REQUEST completes (body
+      //     fully read), not when the peer disconnects. It has already fired
+      //     by the time this line runs — several awaits in — so the listener
+      //     is registered after the event. Hoisting the listener above those
+      //     awaits does NOT fix it; it makes 'close' fire immediately with the
+      //     client still connected, so `clientClosed` becomes true before the
+      //     first chunk and every stream silently emits nothing.
+      //  2. On Bun (the production runtime) there is no working disconnect
+      //     signal at all for a hijacked response — see the note in lib/sse.ts.
+      // The consequence is wasted writes into a dead socket, not incorrect
+      // state: endSSE still runs, credits still settle, cleanup still happens.
       const ac = new AbortController();
       let clientClosed = false;
 
@@ -556,7 +569,8 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
 
       // Same background-stream semantics as the generation route — closing
       // the tab mid-refinement lets the LLM finish; the new code is
-      // persisted and credits are consumed.
+      // persisted and credits are consumed. `clientClosed` is best-effort and
+      // currently never flips; see the generation route for why.
       const ac = new AbortController();
       let clientClosed = false;
 
@@ -857,6 +871,8 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       // Same background-stream semantics as the generation route — closing
       // the tab mid-repair lets the LLM finish; the repaired code is
       // persisted. Repair is credit-free so there's no charge to consider.
+      // `clientClosed` is best-effort and currently never flips; see the
+      // generation route for why.
       const ac = new AbortController();
       let clientClosed = false;
       request.raw.on("close", () => {
