@@ -8,7 +8,16 @@ import { ArrowRight } from "lucide-react";
 
 export function ErrorBanner({ message }: { message: string }) {
   const showUpgrade = message.includes("/pricing");
-  const text = showUpgrade ? message.replace(/Upgrade on \/pricing\.?/i, "").trim() : message;
+  // Callers are expected to keep "Upgrade on /pricing." as a trailing clause,
+  // since the button below replaces it. Collapse any interior whitespace the
+  // removal leaves behind so a future mid-sentence phrasing degrades to a
+  // slightly odd sentence rather than a double-spaced fragment.
+  const text = showUpgrade
+    ? message
+        .replace(/Upgrade on \/pricing\.?/i, "")
+        .replace(/\s{2,}/g, " ")
+        .trim()
+    : message;
 
   return (
     <div

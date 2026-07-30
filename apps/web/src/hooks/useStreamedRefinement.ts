@@ -22,7 +22,8 @@ export interface StreamedRefinementState {
 
 function quotaMessage(body: QuotaError): string {
   if (body.kind === "lifetime" || body.resetAt === 0) {
-    return "You've used your free trial. Upgrade on /pricing for more refinements.";
+    // Trailing clause — see the matching note in useStreamedGeneration.
+    return "You've used your free trial for refinements. Upgrade on /pricing.";
   }
   // resetAt is a UTC boundary (midnight UTC). Render in UTC so the displayed
   // calendar day matches the actual reset and the "midnight UTC" tooltip copy,

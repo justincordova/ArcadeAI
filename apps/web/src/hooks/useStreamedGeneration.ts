@@ -18,7 +18,10 @@ export interface StreamedGenerationState {
 
 function quotaMessage(body: QuotaError): string {
   if (body.kind === "lifetime" || body.resetAt === 0) {
-    return "You've used your free trial. Upgrade on /pricing for more generations.";
+    // Keep "Upgrade on /pricing." as a TRAILING clause. ErrorBanner strips it
+    // to render the upgrade button in its place, and its regex can only clean
+    // up the ends — a mid-sentence occurrence left a dangling fragment.
+    return "You've used your free trial for generations. Upgrade on /pricing.";
   }
   // resetAt is a UTC boundary (midnight UTC). Render in UTC so the displayed
   // calendar day matches the actual reset and the "midnight UTC" tooltip copy,
