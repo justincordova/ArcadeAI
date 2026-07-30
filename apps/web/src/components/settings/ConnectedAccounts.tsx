@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useSession } from "@/hooks/useSession.js";
+import { ApiError } from "@/lib/api/client.js";
 import { linkProvider, unlinkProvider } from "@/lib/api/me.js";
 import { toast } from "../ui/sonner.js";
 
@@ -24,7 +25,15 @@ export function ConnectedAccounts() {
       queryClient.invalidateQueries({ queryKey: ["me"] });
       toast.success("Provider disconnected");
     },
-    onError: () => {
+    onError: (err) => {
+      // Better Auth gates unlink behind freshSessionMiddleware: sessions are
+      // valid for 7 days but "fresh" for only 24 hours, so most disconnect
+      // attempts hit 403 SESSION_NOT_FRESH. There is no re-auth flow, so tell
+      // the user the one thing that actually works instead of a generic error.
+      if (err instanceof ApiError && err.status === 403) {
+        toast.error("For security, sign out and sign back in before disconnecting a provider");
+        return;
+      }
       toast.error("Could not disconnect provider");
     },
   });

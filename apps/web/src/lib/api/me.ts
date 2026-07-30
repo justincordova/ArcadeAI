@@ -41,6 +41,14 @@ export async function linkProvider(
  * The server-side last-provider guard (SPEC §11) is enforced separately —
  * this just hits the Better Auth route. Better Auth returns a non-2xx if
  * unlinking would leave the user with no auth method.
+ *
+ * Note this endpoint is behind Better Auth's `freshSessionMiddleware`, unlike
+ * its `link-social` sibling. Sessions here last 7 days (`expiresIn`) but are
+ * "fresh" for only 24 hours (`freshAge` default), and a session refresh
+ * extends `expiresAt` without moving `createdAt` — so from hour 25 onward this
+ * returns 403 SESSION_NOT_FRESH until the user signs in again. Callers must
+ * handle that distinctly; a generic failure message strands the user with no
+ * idea what to do.
  */
 export async function unlinkProvider(provider: "google" | "github"): Promise<void> {
   await apiFetch<void>("/api/auth/unlink-account", {
