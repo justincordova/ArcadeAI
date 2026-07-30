@@ -316,10 +316,21 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       // `inProgress=false`, and no error — a confusing dead state.
       if (!streamError && sanitizedCode) {
         try {
-          await db
+          // RETURNING makes the write self-verifying. A 0-row UPDATE is not an
+          // error in SQLite, so without this a vanished row silently became a
+          // success: DELETE /api/games/:id has no in-flight guard, and
+          // usage_log.game_id is ON DELETE SET NULL, so deleting a game
+          // mid-stream left the log row alive, markSucceeded ran, and the user
+          // kept a 200-credit charge (plus a burned lifetime generation, capped
+          // at 1 on free) for a game that no longer exists.
+          const persisted = await db
             .update(games)
             .set({ currentCode: sanitizedCode, updatedAt: Date.now() })
-            .where(eq(games.id, id));
+            .where(and(eq(games.id, id), eq(games.userId, userId)))
+            .returning({ id: games.id });
+          if (persisted.length === 0) {
+            streamError = new Error("Game no longer exists");
+          }
         } catch (err) {
           streamError = err instanceof Error ? err : new Error("Persistence failed");
           request.log.error(
@@ -594,7 +605,9 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
 
       if (!streamError && sanitizedCode) {
         try {
-          await db
+          // Self-verifying write — see the generation route for why a 0-row
+          // UPDATE must not be treated as success.
+          const persisted = await db
             .update(games)
             // Snapshot the pre-refinement code into previous_code so the user
             // can undo a bad refinement (single-level). game.currentCode was
@@ -604,7 +617,11 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
               currentCode: sanitizedCode,
               updatedAt: Date.now(),
             })
-            .where(eq(games.id, id));
+            .where(and(eq(games.id, id), eq(games.userId, userId)))
+            .returning({ id: games.id });
+          if (persisted.length === 0) {
+            streamError = new Error("Game no longer exists");
+          }
         } catch (err) {
           // Treat persistence failure as a stream error — same rationale as
           // the generation route: refund credits and surface the error to
@@ -885,7 +902,10 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
         // log row to surface the failure (no markRepairSucceeded) and
         // signal the client via an error frame.
         try {
-          await db
+          // Self-verifying write — see the generation route. Repair is free so
+          // there is no credit to refund, but a 0-row UPDATE must still fail
+          // the stream rather than reporting a repair that was never saved.
+          const persisted = await db
             .update(games)
             // Snapshot pre-repair code for single-level undo, mirroring refine.
             .set({
@@ -893,7 +913,11 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
               currentCode: sanitizedRepair,
               updatedAt: Date.now(),
             })
-            .where(eq(games.id, id));
+            .where(and(eq(games.id, id), eq(games.userId, userId)))
+            .returning({ id: games.id });
+          if (persisted.length === 0) {
+            streamError = new Error("Game no longer exists");
+          }
         } catch (err) {
           streamError = err instanceof Error ? err : new Error("Persistence failed");
           request.log.error(
