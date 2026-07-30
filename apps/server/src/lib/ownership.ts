@@ -59,8 +59,11 @@ export async function loadPublicGame(slug: string): Promise<{
   genre: string | null;
   likeCount: number;
   playCount: number;
-  thumbnail: string | null;
 } | null> {
+  // `thumbnail` is deliberately NOT selected. It is a base64 data URL up to
+  // ~350 KB, GET /api/play/:slug spreads this whole object into its response,
+  // and no consumer reads it — the play page loads the image by reference from
+  // /api/og/:slug.png. Same reasoning as GET /api/games and listDiscoverGames.
   const rows = await db
     .select({
       id: games.id,
@@ -73,7 +76,6 @@ export async function loadPublicGame(slug: string): Promise<{
       genre: games.genre,
       likeCount: games.likeCount,
       playCount: games.playCount,
-      thumbnail: games.thumbnail,
     })
     .from(games)
     .where(and(eq(games.publicSlug, slug), eq(games.isPublic, true)))
@@ -101,6 +103,5 @@ export async function loadPublicGame(slug: string): Promise<{
     genre: row.genre,
     likeCount: row.likeCount,
     playCount: row.playCount,
-    thumbnail: row.thumbnail,
   };
 }
