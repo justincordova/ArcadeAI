@@ -91,14 +91,26 @@ export const accounts = sqliteTable(
   (table) => [index("idx_account_user_id").on(table.userId)]
 );
 
-export const verifications = sqliteTable("verification", {
-  id: text("id").primaryKey(),
-  identifier: text("identifier").notNull(),
-  value: text("value").notNull(),
-  expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }),
-  updatedAt: integer("updated_at", { mode: "timestamp" }),
-});
+export const verifications = sqliteTable(
+  "verification",
+  {
+    id: text("id").primaryKey(),
+    identifier: text("identifier").notNull(),
+    value: text("value").notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }),
+    updatedAt: integer("updated_at", { mode: "timestamp" }),
+  },
+  // Better Auth hits this table twice on every OAuth callback: it reads the
+  // stored state back with `WHERE identifier = ? ORDER BY created_at DESC`,
+  // then sweeps expired rows with `WHERE expires_at < ?`. Both were full
+  // table scans — this was the one table that missed the FK/query-index pass
+  // in migration 0006.
+  (table) => [
+    index("idx_verification_identifier_created").on(table.identifier, table.createdAt),
+    index("idx_verification_expires_at").on(table.expiresAt),
+  ]
+);
 
 export const games = sqliteTable(
   "games",
