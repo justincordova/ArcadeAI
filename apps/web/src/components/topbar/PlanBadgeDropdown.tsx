@@ -5,7 +5,11 @@
 // - everyone else → daily + monthly bars
 
 import type { MeResponse } from "@arcadeai/shared";
-import { ENFORCE_LIFETIME_LIMITS_FOR_FREE, FREE_TIER_LIFETIME_LIMITS } from "@arcadeai/shared";
+import {
+  ENFORCE_LIFETIME_LIMITS_FOR_FREE,
+  FREE_TIER_LIFETIME_LIMITS,
+  TIER_CREDIT_LIMITS,
+} from "@arcadeai/shared";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
 import type React from "react";
@@ -73,6 +77,12 @@ export function PlanBadgeDropdown({
 }: PlanBadgeDropdownProps) {
   const isAdmin = tier === "admin";
   const showLifetime = tier === "free" && ENFORCE_LIFETIME_LIMITS_FOR_FREE;
+  // Only tiers that actually enforce a daily cap get a daily bar. Creator and
+  // pro have dailyEnforced=false, so credits_remaining_daily is vestigial for
+  // them — and change-plan's MIN() cap leaves it at the old tier's lower value
+  // on upgrade, so a freshly-upgraded creator showed "Daily credits 0 / 20,000"
+  // in red while holding thousands of usable monthly credits and no daily cap.
+  const showDaily = TIER_CREDIT_LIMITS[tier].dailyEnforced;
 
   return (
     <div
@@ -134,13 +144,19 @@ export function PlanBadgeDropdown({
           />
         ) : (
           <>
-            <UsageBar
-              label="Daily credits"
-              remaining={me?.creditsRemainingDaily ?? 0}
-              total={dailyTotal}
-              tooltip="Per-day cap on free generations. Refills at midnight UTC; doesn't carry over."
-            />
-            {me?.dailyResetAt ? <ResetCountdown resetAt={me.dailyResetAt} label="Daily" /> : null}
+            {showDaily && (
+              <>
+                <UsageBar
+                  label="Daily credits"
+                  remaining={me?.creditsRemainingDaily ?? 0}
+                  total={dailyTotal}
+                  tooltip="Per-day cap on free generations. Refills at midnight UTC; doesn't carry over."
+                />
+                {me?.dailyResetAt ? (
+                  <ResetCountdown resetAt={me.dailyResetAt} label="Daily" />
+                ) : null}
+              </>
+            )}
             <UsageBar
               label="Monthly credits"
               remaining={me?.creditsRemainingMonthly ?? 0}
