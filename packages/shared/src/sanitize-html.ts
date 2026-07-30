@@ -40,6 +40,17 @@ export function sanitizeHtmlOutput(raw: string): string | null {
   const start = Math.min(...candidates);
   let trimmed = raw.slice(start).trimEnd();
 
+  // Drop any postamble after the closing </html>. The model sometimes appends
+  // a trailing explanation ("I also added a bonus power-up!"), and browsers
+  // hoist post-</html> text back into the body, so it renders on top of the
+  // game exactly like a preamble would. The last </html> is the document's
+  // own closing tag: any </html> inside a string literal necessarily precedes
+  // it. This also removes a trailing markdown fence for free.
+  const closeIdx = trimmed.toLowerCase().lastIndexOf("</html>");
+  if (closeIdx >= 0) {
+    return trimmed.slice(0, closeIdx + "</html>".length);
+  }
+
   // Strip a TRAILING markdown fence only. Older logic truncated at the
   // first `` ``` `` substring anywhere after the opener — but games can
   // legitimately contain three-backtick sequences in string literals,
@@ -53,7 +64,11 @@ export function sanitizeHtmlOutput(raw: string): string | null {
   // whitespace: "\n```", "\n```\n", "```html\n...\n```" etc. We don't try
   // to handle every weird wrapper — just the common "model wrapped output
   // in a single fence block" case.
-  const trailingFenceMatch = trimmed.match(/\n```[a-zA-Z]*\s*$/);
+  //
+  // The leading newline is optional: a fence appended directly to the last
+  // tag ("...</body>```") has no separator, and requiring one left the
+  // backticks in the persisted document.
+  const trailingFenceMatch = trimmed.match(/\n?```[a-zA-Z]*\s*$/);
   if (trailingFenceMatch) {
     trimmed = trimmed.slice(0, trailingFenceMatch.index).trimEnd();
   }

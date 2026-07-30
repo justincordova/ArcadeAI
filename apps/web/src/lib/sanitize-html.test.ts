@@ -62,4 +62,34 @@ describe("sanitizeHtmlOutput — markdown fences", () => {
       "<!DOCTYPE html><html><body><pre>```py</pre></body></html>"
     );
   });
+
+  test("strips a trailing fence that has no preceding newline", () => {
+    const raw = "<!DOCTYPE html><html></html>```";
+    expect(sanitizeHtmlOutput(raw)).toBe("<!DOCTYPE html><html></html>");
+  });
+});
+
+describe("sanitizeHtmlOutput — postamble", () => {
+  // Browsers hoist text after </html> back into the body, so a trailing
+  // explanation renders on top of the game exactly like a preamble would.
+  test("strips a prose postamble after </html>", () => {
+    const raw = "<!DOCTYPE html><html>a</html>\n\nI also added a bonus power-up!";
+    expect(sanitizeHtmlOutput(raw)).toBe("<!DOCTYPE html><html>a</html>");
+  });
+
+  test("strips a postamble that follows a trailing fence", () => {
+    const raw = "<!DOCTYPE html><html>a</html>\n```\nNote: enjoy!";
+    expect(sanitizeHtmlOutput(raw)).toBe("<!DOCTYPE html><html>a</html>");
+  });
+
+  test("keeps a </html> that appears inside a string literal", () => {
+    // The document's own closing tag is always the last one.
+    const raw = '<!DOCTYPE html><html><script>const s = "</html>";</script></html>';
+    expect(sanitizeHtmlOutput(raw)).toBe(raw);
+  });
+
+  test("leaves output with no closing </html> untouched apart from fences", () => {
+    const raw = "<!DOCTYPE html><html><body>truncated stream";
+    expect(sanitizeHtmlOutput(raw)).toBe("<!DOCTYPE html><html><body>truncated stream");
+  });
 });
