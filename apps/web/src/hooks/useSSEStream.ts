@@ -174,8 +174,16 @@ export function useSSEStream(opts: UseSSEStreamOptions): UseSSEStream {
           }
 
           if (!res.ok || !res.body) {
+            // Every /api/* error response is `{ code, message }` (lib/errors.ts).
+            // Read it instead of discarding it: this branch catches the 415 from
+            // the CSRF guard, 400 validation failures, 404 for a game deleted in
+            // another tab, and 5xx — all of which carried a usable message that
+            // the user never saw. normalizeError falls back to "Request failed"
+            // on an unparseable body, so nothing regresses. Reading the body
+            // also drains it rather than leaving it unconsumed.
+            const raw = await res.json().catch(() => ({}));
             setStatus("error");
-            setError("Request failed");
+            setError(normalizeError(raw).message);
             return;
           }
 

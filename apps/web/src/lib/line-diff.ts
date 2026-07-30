@@ -49,8 +49,11 @@ function makeLcsTable(m: number, n: number): Uint32Array {
  * available" in those cases.
  */
 export function computeLineDiff(oldText: string, newText: string): DiffHunk {
-  const oldLines = oldText.split("\n");
-  const newLines = newText.split("\n");
+  // "".split("\n") is [""], not [] — an empty document would otherwise be
+  // modeled as one empty line, producing a phantom add/remove row and an
+  // off-by-one in the counts (e.g. "" -> "a\nb" reported +2/-1).
+  const oldLines = oldText === "" ? [] : oldText.split("\n");
+  const newLines = newText === "" ? [] : newText.split("\n");
 
   if (
     oldLines.length > MAX_LINES ||
