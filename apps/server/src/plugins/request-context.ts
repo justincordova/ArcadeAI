@@ -2,7 +2,10 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 
 declare module "fastify" {
   interface FastifyRequest {
-    startTime: number;
+    // Optional: an earlier root-scope onRequest hook (CORS preflight,
+    // rate-limit rejection) can answer the request before this plugin's own
+    // onRequest runs, so it is not guaranteed to be set by onResponse time.
+    startTime?: number;
   }
 }
 
@@ -36,12 +39,18 @@ export function registerRequestContext(app: FastifyInstance) {
   });
 
   app.addHook("onResponse", async (request, reply) => {
+    // Root-scope onRequest hooks run in registration order and the chain stops
+    // as soon as one replies. registerCors and registerRateLimit are both
+    // registered before this plugin, so a CORS preflight or a 429 is answered
+    // before startTime is ever set — `Date.now() - undefined` logged NaN,
+    // which pino serializes to null. onResponse still fires for those, so emit
+    // the line without a duration rather than a bogus one.
     request.log.info(
       {
         route: request.routeOptions?.url ?? request.url,
         method: request.method,
         status: reply.statusCode,
-        duration_ms: Date.now() - request.startTime,
+        duration_ms: request.startTime === undefined ? null : Date.now() - request.startTime,
       },
       "request completed"
     );
