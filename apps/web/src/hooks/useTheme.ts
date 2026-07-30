@@ -30,14 +30,28 @@ export function useTheme() {
 
   const mutation = useMutation({
     mutationFn: (theme: Theme) => patchMe({ theme }),
+    // Paint in onMutate (runs synchronously before the request) so the UI feels
+    // responsive, and capture the previous value so we can roll back.
+    onMutate: (theme: Theme) => {
+      const previous = serverTheme ?? storedTheme();
+      applyTheme(theme);
+      return { previous };
+    },
     onSuccess: (data) => {
       queryClient.setQueryData(["me"], data);
+    },
+    onError: (_err, _theme, context) => {
+      // Roll back. applyTheme writes both the DOM and localStorage, so without
+      // this a failed PATCH left the app painted with the rejected theme while
+      // `theme` below still reported the server value — the settings toggle and
+      // the actual appearance disagreed, with nothing surfacing the error. The
+      // stale localStorage value also made the pre-hydration script in
+      // index.html paint the wrong theme on every subsequent load.
+      if (context?.previous) applyTheme(context.previous);
     },
   });
 
   function setTheme(theme: Theme) {
-    // Paint immediately for a responsive feel; persist in the background.
-    applyTheme(theme);
     mutation.mutate(theme);
   }
 
