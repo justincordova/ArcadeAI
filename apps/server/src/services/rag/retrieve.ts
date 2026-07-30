@@ -1,19 +1,17 @@
+import { GENRE_BUCKETS } from "@arcadeai/shared/genres.js";
 import { sqlite } from "../../lib/db.js";
 
 /**
- * The 8 genre buckets from SPEC §6. `other` is the fallback bucket that
- * exercises the global-nearest-neighbor path (no inner `WHERE genre = ?`).
+ * The genre buckets from SPEC §6, read from the shared package rather than
+ * re-declared here. A local copy silently went stale: adding a bucket to
+ * @arcadeai/shared updates the classifier, the discover filter, and the DB
+ * enum, but a duplicate here would keep rejecting the new value and drop RAG
+ * retrieval for it to the global-nearest path with no error.
+ *
+ * `other` is the fallback bucket that intentionally exercises that
+ * global-nearest path (no inner `WHERE genre = ?`).
  */
-const GENRE_BUCKETS = new Set([
-  "paddle",
-  "snake",
-  "flappy",
-  "shooter",
-  "platformer",
-  "puzzle",
-  "runner",
-  "other",
-]);
+const GENRE_BUCKET_SET: ReadonlySet<string> = new Set(GENRE_BUCKETS);
 
 // Minimum cosine similarity (= 1 - distance) for a curated example to be
 // considered relevant enough to inject as a few-shot reference. The library
@@ -77,7 +75,7 @@ export async function retrieveExample({
     return null;
   }
 
-  const useGenreFilter = GENRE_BUCKETS.has(genre) && genre !== "other";
+  const useGenreFilter = GENRE_BUCKET_SET.has(genre) && genre !== "other";
 
   // `sqlite-vec` accepts embeddings as a Float32Array bound directly to
   // the query parameter (the package coerces it to the binary blob shape
