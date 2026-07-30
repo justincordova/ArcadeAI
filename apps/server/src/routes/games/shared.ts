@@ -9,6 +9,34 @@ import { sendError, validationError } from "../../lib/errors.js";
 import type { RefundReason } from "../../services/usage/charge.js";
 
 /**
+ * A stream failure whose message was authored here specifically to be shown
+ * to the user (e.g. "the game was cut off mid-way — please try again").
+ *
+ * Everything else that lands in `streamError` comes from a third party: the
+ * Anthropic SDK, whose messages carry upstream response bodies and request
+ * IDs, or Drizzle / bun:sqlite, whose messages carry SQL text and constraint
+ * names like `UNIQUE constraint failed: games.public_slug`. Those must not be
+ * echoed to the client.
+ */
+export class UserFacingError extends Error {
+  readonly name = "UserFacingError";
+}
+
+/**
+ * The message to send in an SSE `error` frame.
+ *
+ * SSE responses call `reply.hijack()`, which bypasses Fastify's
+ * `setErrorHandler` — and with it the 5xx message scrubbing in index.ts. This
+ * helper reproduces that scrubbing for the streaming paths: pass through only
+ * messages this codebase authored, and substitute a generic string for
+ * anything originating in an SDK or the database. The original error is still
+ * logged server-side, and `classifyRefundReason` still sees the real message.
+ */
+export function toClientMessage(err: Error, fallback: string): string {
+  return err instanceof UserFacingError ? err.message : fallback;
+}
+
+/**
  * Pick the best `RefundReason` for the failure that ended a stream. The
  * reasons are observability metadata — they show up on `usage_log` rows so
  * we can answer "what's the dominant failure mode?" from logs alone.

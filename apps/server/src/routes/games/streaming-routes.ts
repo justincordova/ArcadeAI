@@ -58,6 +58,8 @@ import {
   REPAIR_WINDOW_MS,
   RefineBody,
   RepairBody,
+  toClientMessage,
+  UserFacingError,
 } from "./shared.js";
 
 export function registerGameStreamingRoutes(app: FastifyInstance) {
@@ -277,7 +279,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
         // check we'd persist broken HTML and charge the user for it.
         const finishReason = await result.finishReason;
         if (finishReason === "length") {
-          streamError = new Error(
+          streamError = new UserFacingError(
             "Generation hit the output token limit. The game was cut off mid-way — please try again or simplify the prompt."
           );
         }
@@ -295,7 +297,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       if (!streamError) {
         sanitizedCode = sanitizeHtmlOutput(accumulatedCode);
         if (!sanitizedCode) {
-          streamError = new Error("Model output contained no recognizable HTML");
+          streamError = new UserFacingError("Model output contained no recognizable HTML");
           request.log.warn(
             { rawLength: accumulatedCode.length, head: accumulatedCode.slice(0, 200) },
             "generation output rejected by sanitizer"
@@ -354,7 +356,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
 
       if (!clientClosed) {
         if (streamError) {
-          writeSSE(reply, "error", { message: streamError.message });
+          writeSSE(reply, "error", { message: toClientMessage(streamError, "Generation failed") });
         } else {
           writeSSE(reply, "done", {});
         }
@@ -561,7 +563,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
         // Output-cap truncation guard — see generation route comment.
         const finishReason = await result.finishReason;
         if (finishReason === "length") {
-          streamError = new Error(
+          streamError = new UserFacingError(
             "Refinement hit the output token limit. The game was cut off mid-way — please try again or simplify the request."
           );
         }
@@ -582,7 +584,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       if (!streamError) {
         sanitizedCode = sanitizeHtmlOutput(accumulatedCode);
         if (!sanitizedCode) {
-          streamError = new Error("Model output contained no recognizable HTML");
+          streamError = new UserFacingError("Model output contained no recognizable HTML");
           request.log.warn(
             { rawLength: accumulatedCode.length, head: accumulatedCode.slice(0, 200) },
             "refinement output rejected by sanitizer"
@@ -642,7 +644,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       // so the summary event below still reaches the client.
       if (!clientClosed) {
         if (streamError) {
-          writeSSE(reply, "error", { message: streamError.message });
+          writeSSE(reply, "error", { message: toClientMessage(streamError, "Refinement failed") });
         } else {
           writeSSE(reply, "done", {});
         }
@@ -847,7 +849,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
         // Output-cap truncation guard — see generation route comment.
         const finishReason = await result.finishReason;
         if (finishReason === "length") {
-          streamError = new Error(
+          streamError = new UserFacingError(
             "Repair hit the output token limit. Please try again or simplify the game first."
           );
         }
@@ -869,7 +871,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       if (!streamError) {
         sanitizedRepair = sanitizeHtmlOutput(accumulated);
         if (!sanitizedRepair) {
-          streamError = new Error("Model output contained no recognizable HTML");
+          streamError = new UserFacingError("Model output contained no recognizable HTML");
           request.log.warn(
             { rawLength: accumulated.length, head: accumulated.slice(0, 200) },
             "repair output rejected by sanitizer"
@@ -922,7 +924,7 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
 
       if (!clientClosed) {
         if (streamError) {
-          writeSSE(reply, "error", { message: streamError.message });
+          writeSSE(reply, "error", { message: toClientMessage(streamError, "Repair failed") });
         } else {
           writeSSE(reply, "done", {});
         }
