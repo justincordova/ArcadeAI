@@ -19,6 +19,27 @@ export async function loadOwnedGame(gameId: string, userId: string) {
 }
 
 /**
+ * Fetch just the thumbnail for a published game.
+ *
+ * The OG image route needs exactly one column. Going through `loadPublicGame`
+ * pulled `currentCode` (tens of KB) and `originalPrompt` out of the DB, plus a
+ * second query for the owner's display name, and discarded all of it — on the
+ * heaviest unauthenticated path in the app. Same rationale as the thumbnail
+ * exclusion on GET /api/games and the id-only lookup in the play-count route.
+ *
+ * Returns `undefined` when no published game matches, which the caller must
+ * distinguish from a published game that simply has no thumbnail (`null`).
+ */
+export async function loadPublicThumbnail(slug: string): Promise<string | null | undefined> {
+  const rows = await db
+    .select({ thumbnail: games.thumbnail })
+    .from(games)
+    .where(and(eq(games.publicSlug, slug), eq(games.isPublic, true)))
+    .limit(1);
+  return rows[0]?.thumbnail;
+}
+
+/**
  * Lookup a game by its public slug. Returns null if no game with that slug
  * exists OR if the matched game has been unpublished. The ONLY non-owner
  * read path. Selects only fields safe to expose publicly (no userId, no

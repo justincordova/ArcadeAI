@@ -10,7 +10,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { sendError, validationError } from "../lib/errors.js";
-import { loadPublicGame } from "../lib/ownership.js";
+import { loadPublicThumbnail } from "../lib/ownership.js";
 import { FALLBACK_PNG, PLACEHOLDER_CACHE_HEADER, serveThumbnail } from "../lib/serve-thumbnail.js";
 
 // Slugs are 8 lowercase hex chars (see routes/games.ts publish handler).
@@ -32,15 +32,18 @@ export async function ogRoutes(app: FastifyInstance) {
     // content-type to a crawler expecting an image. Serve the placeholder
     // PNG instead, mirroring the not-found branch — the sibling public
     // routes (play.ts, discover.ts) apply the same try/catch treatment.
-    let game: Awaited<ReturnType<typeof loadPublicGame>>;
+    // Only the thumbnail column is needed here — see loadPublicThumbnail.
+    // `undefined` means no published game matched; `null` means it matched
+    // but has no thumbnail. Both fall through to the placeholder below.
+    let thumbnail: string | null | undefined;
     try {
-      game = await loadPublicGame(parsed.data.slug);
+      thumbnail = await loadPublicThumbnail(parsed.data.slug);
     } catch (err) {
-      request.log.warn({ err }, "loadPublicGame threw serving OG image; serving fallback");
-      game = null;
+      request.log.warn({ err }, "loadPublicThumbnail threw serving OG image; serving fallback");
+      thumbnail = undefined;
     }
 
-    if (!game) {
+    if (thumbnail === undefined) {
       // Send the fallback rather than 404 so a crawler that hits this
       // before publish-time still gets an unfurl. This is a tradeoff:
       // a totally bogus slug also returns a placeholder. The slug is
@@ -52,6 +55,6 @@ export async function ogRoutes(app: FastifyInstance) {
       return;
     }
 
-    serveThumbnail(reply, game.thumbnail);
+    serveThumbnail(reply, thumbnail);
   });
 }
