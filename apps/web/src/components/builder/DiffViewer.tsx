@@ -207,13 +207,19 @@ function DiffRow({ line }: { line: DiffLine }) {
 function quickCounts(oldText: string, newText: string): { added: number; removed: number } {
   if (oldText === newText) return { added: 0, removed: 0 };
 
+  // "".split("\n") is [""], which would model an empty document as one empty
+  // line and report a phantom add/remove — the same defect fixed in
+  // computeLineDiff. The two must agree or the collapsed pill contradicts the
+  // expanded view.
+  const splitLines = (text: string) => (text === "" ? [] : text.split("\n"));
+
   const counts = new Map<string, number>();
-  for (const line of oldText.split("\n")) {
+  for (const line of splitLines(oldText)) {
     counts.set(line, (counts.get(line) ?? 0) + 1);
   }
 
   let added = 0;
-  for (const line of newText.split("\n")) {
+  for (const line of splitLines(newText)) {
     const remaining = counts.get(line) ?? 0;
     if (remaining > 0) {
       counts.set(line, remaining - 1); // matched an old occurrence
