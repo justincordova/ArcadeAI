@@ -160,10 +160,21 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       try {
         ({ logId } = await deduct(userId, "generation", id));
       } catch (err) {
+        // Roll back the placeholder row we just inserted. Log a failure rather
+        // than discarding it — mirrors the remix cleanup in play.ts — so an
+        // orphaned game (empty current_code, no usage_log row) is findable.
         await db
           .delete(games)
           .where(eq(games.id, id))
-          .catch(() => {});
+          .catch((cleanupErr) => {
+            request.log.error(
+              {
+                err: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+                gameId: id,
+              },
+              "failed to clean up game row after deduct rejection; row is orphaned"
+            );
+          });
         if (err instanceof InsufficientCreditsError) {
           return sendError(
             reply,
@@ -692,8 +703,15 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
               writeSSE(reply, "summary", { id: summaryId, content: summaryText });
             }
           }
-        } catch {
-          // Summary is best-effort; suppress and move on.
+        } catch (err) {
+          // Summary is best-effort; the refinement itself already succeeded and
+          // is persisted, so we continue. Log it rather than swallowing
+          // silently — every other best-effort branch in this file logs, and a
+          // permanently broken summary feature would otherwise be invisible.
+          request.log.warn(
+            { err: err instanceof Error ? err.message : String(err), gameId: id },
+            "diff summary failed; continuing"
+          );
         }
       }
 
