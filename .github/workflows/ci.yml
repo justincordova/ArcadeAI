@@ -5,12 +5,27 @@ on:
     branches: [main]
   pull_request:
 
+# The default GITHUB_TOKEN permissions are repository-wide and often include
+# write access to contents. Nothing in this workflow publishes anything, so
+# drop it to read-only: a postinstall script from a compromised transitive
+# dependency running during `bun install` would otherwise hold a writable token.
+permissions:
+  contents: read
+
+# Superseded runs on the same ref are wasted minutes; cancel them.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     # sqlite-vec is a no-op on Linux's bundled SQLite (the macOS-only
     # Database.setCustomSQLite path in packages/db only fires on darwin),
     # so a stock ubuntu runner is sufficient — no extra system packages.
     runs-on: ubuntu-latest
+    # The whole pipeline runs in well under a minute; without a cap a hung
+    # step burns the 6-hour default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
