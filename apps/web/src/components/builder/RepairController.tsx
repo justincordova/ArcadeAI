@@ -87,7 +87,16 @@ export function RepairController({
   useEffect(() => {
     if (resetTrigger === undefined || prevResetTrigger.current === resetTrigger) return;
     prevResetTrigger.current = resetTrigger;
-    repairAbortedRef.current = true;
+    // Only latch the abort flag when a repair is actually in flight. Setting
+    // it unconditionally left it stuck true in the common case (a refinement
+    // submitted with no repair running): repair.stop() on an already-idle
+    // stream produces no streaming -> idle transition, and that transition is
+    // the only thing that clears the flag. The next genuinely successful
+    // repair then took the abort branch and its code was silently discarded —
+    // overlay gone, game still broken, no fallback dialog.
+    if (repair.status === "streaming") {
+      repairAbortedRef.current = true;
+    }
     repair.stop();
     repairAttemptRef.current = 0;
     setRepairStatus("idle");
