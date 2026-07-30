@@ -49,6 +49,12 @@ export function useStreamedGeneration(): StreamedGenerationState {
   const cleanupsRef = useRef<Set<() => void>>(new Set());
   const mountedRef = useRef(true);
   useEffect(() => {
+    // Re-arm on every mount. StrictMode runs mount -> cleanup -> mount in
+    // development, so without this the cleanup's `false` sticks for the
+    // lifetime of the hook and every guarded call site below early-returns
+    // forever — no thumbnail capture, and no navigate() to /game/$id once
+    // generation finishes.
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       for (const t of timersRef.current) clearTimeout(t);
