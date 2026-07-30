@@ -2,6 +2,9 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    // scripts/ imports sibling modules with explicit .ts extensions (Bun
+    // resolves these natively). Safe here because this project never emits.
+    "allowImportingTsExtensions": true,
     "types": ["node", "bun-types"],
     "paths": {
       "@arcadeai/db": ["../../packages/db/src"],
@@ -10,5 +13,11 @@
       "@arcadeai/shared/*": ["../../packages/shared/src/*"]
     }
   },
-  "include": ["src", "../../packages/db/src/**/*", "../../packages/shared/src/**/*"]
+  "include": [
+    "src",
+    "test",
+    "scripts",
+    "../../packages/db/src/**/*",
+    "../../packages/shared/src/**/*"
+  ]
 }
