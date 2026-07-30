@@ -21,7 +21,10 @@ const DiscoverQuery = z.object({
   sort: z.enum(SORT_VALUES).default("trending"),
   genre: z.enum(GENRE_BUCKETS).optional(),
   limit: z.coerce.number().int().min(1).max(50).default(24),
-  offset: z.coerce.number().int().min(0).default(0),
+  // Bound the offset as well as the limit. This route is unauthenticated, and
+  // the `trending` ORDER BY is a computed expression no index can serve, so a
+  // large offset forces SQLite to rank and discard that many rows per request.
+  offset: z.coerce.number().int().min(0).max(10_000).default(0),
 });
 
 export async function discoverRoutes(app: FastifyInstance) {
