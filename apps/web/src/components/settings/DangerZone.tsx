@@ -28,7 +28,17 @@ export function DangerZone() {
 
   return (
     <div>
-      <Button variant="destructive-outline" size="default" onClick={() => setOpen(true)}>
+      <Button
+        variant="destructive-outline"
+        size="default"
+        onClick={() => {
+          // Clear a previous failure before reopening — mutation.error is
+          // never reset otherwise, so the dialog rendered "Failed to delete
+          // account" before the user had attempted anything.
+          mutation.reset();
+          setOpen(true);
+        }}
+      >
         Delete account
       </Button>
 

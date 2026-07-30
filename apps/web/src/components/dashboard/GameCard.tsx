@@ -148,6 +148,10 @@ export function GameCard({ game, view }: GameCardProps) {
                 danger: true,
                 onClick: () => {
                   setMenuOpen(false);
+                  // Clear any error left by a previous failed attempt.
+                  // isError is never reset otherwise, so reopening the dialog
+                  // rendered "Failed to delete" before the user did anything.
+                  deleteMutation.reset();
                   setConfirmDelete(true);
                 },
               },
