@@ -605,7 +605,14 @@ export function BuilderLayout({
                 undoDisabled={!canUndo || undoing}
               />
             )}
-            {gameId && <ShareButton gameId={gameId} />}
+            {/* Not mounted while streaming. gameId arrives on the mid-stream
+                `meta` frame, so mounting here fired a GET /api/games/:id
+                during generation and seeded the ["game", id] cache with
+                { currentCode: "", inProgress: true }. onDone then navigates to
+                /game/$id, which reads that snapshot and renders the
+                "Generating..." overlay for a cycle on a game that just
+                finished. A game mid-generation cannot be published anyway. */}
+            {gameId && !isStreaming && <ShareButton gameId={gameId} />}
           </div>
         </div>
 
