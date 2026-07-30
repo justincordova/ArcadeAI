@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../lib/errors.js";
+import { guardPath } from "../lib/guard-path.js";
 
 /**
  * Defense-in-depth CSRF guard for `/api/*` (excluding `/api/auth/*`, which
@@ -24,7 +25,7 @@ export function registerCsrfGuard(app: FastifyInstance) {
   app.addHook("preHandler", async (request, reply) => {
     if (!STATE_CHANGING.has(request.method)) return;
 
-    const path = request.url.split("?")[0];
+    const path = guardPath(request);
     if (!path.startsWith("/api/")) return;
     if (path.startsWith("/api/auth/")) return;
 

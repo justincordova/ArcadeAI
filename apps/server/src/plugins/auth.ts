@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { auth } from "../lib/auth.js";
 import { sendError, unauthorizedError } from "../lib/errors.js";
+import { guardPath } from "../lib/guard-path.js";
 
 type AuthSession = Awaited<ReturnType<typeof auth.api.getSession>>;
 
@@ -82,7 +83,7 @@ export function toWebHeaders(request: FastifyRequest): Headers {
  */
 export function registerAuthGuard(app: FastifyInstance) {
   app.addHook("preHandler", async (request, reply) => {
-    const path = request.url.split("?")[0];
+    const path = guardPath(request);
 
     if (
       !path.startsWith("/api/") ||
