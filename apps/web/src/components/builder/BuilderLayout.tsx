@@ -376,7 +376,12 @@ export function BuilderLayout({
                   onSubmit(e as unknown as React.FormEvent);
                   return;
                 }
-                if (e.key === "Enter" && !e.shiftKey) {
+                // Ignore the Enter that confirms an IME candidate (CJK and
+                // other composing input methods). Without this guard the
+                // in-progress composition is submitted as the prompt and the
+                // composition is aborted mid-word. cmd/ctrl+enter above is an
+                // explicit force-submit gesture and does not conflict.
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   onSubmit(e as unknown as React.FormEvent);
                   return;
