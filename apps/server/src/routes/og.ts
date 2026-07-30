@@ -17,7 +17,13 @@ import { FALLBACK_PNG, PLACEHOLDER_CACHE_HEADER, serveThumbnail } from "../lib/s
 // The ".png" suffix is consumed by the route path so the param is the
 // bare slug. Tightening the regex avoids burning a DB lookup on garbage.
 const SlugParams = z.object({
-  slug: z.string().regex(/^[0-9a-f]{8}$/i, "Invalid slug format"),
+  // Normalized to lowercase for the same reason as play.ts: public_slug is
+  // case-sensitive, so an uppercased slug would otherwise silently serve the
+  // fallback image for a game that exists.
+  slug: z
+    .string()
+    .regex(/^[0-9a-f]{8}$/i, "Invalid slug format")
+    .transform((s) => s.toLowerCase()),
 });
 
 export async function ogRoutes(app: FastifyInstance) {

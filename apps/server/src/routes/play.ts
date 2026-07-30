@@ -27,7 +27,14 @@ import { InsufficientCreditsError, markSucceeded, recordRemix } from "../service
 // slug 400s before we run a needless DB lookup — and prevents the slug
 // regex in og.ts / loadPublicGame from ever seeing pathological input.
 const SlugParams = z.object({
-  slug: z.string().regex(/^[0-9a-f]{8}$/i, "Invalid slug format"),
+  // Slugs are generated lowercase (randomUUID hex) and public_slug is plain
+  // TEXT with no COLLATE NOCASE, so the lookup is case-sensitive. The regex
+  // accepts either case, so normalize here — otherwise /play/ABCD1234 passes
+  // validation and then 404s against a game that exists.
+  slug: z
+    .string()
+    .regex(/^[0-9a-f]{8}$/i, "Invalid slug format")
+    .transform((s) => s.toLowerCase()),
 });
 
 // Remix copies a full currentCode blob + message row per call. Every other

@@ -88,6 +88,20 @@ describe("GET /api/og/:slug.png", () => {
     expect(buf[3]).toBe(0x47);
   });
 
+  test("serves the real thumbnail for an uppercased slug", async () => {
+    // The slug regex is case-insensitive but public_slug is stored lowercase
+    // in a case-sensitive TEXT column, so the param must be normalized before
+    // the lookup — otherwise this silently returns the placeholder.
+    const { id } = insertTestUser(testDb.sqlite);
+    insertGame({ userId: id, publicSlug: "abcdef12", thumbnail: TINY_PNG_DATA_URL });
+
+    const res = await app.inject({ method: "GET", url: "/api/og/ABCDEF12.png" });
+    expect(res.statusCode).toBe(200);
+    const buf = res.rawPayload;
+    expect([buf[0], buf[1], buf[2], buf[3]]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(buf.length).toBe(Buffer.from(TINY_PNG_DATA_URL.split(",")[1], "base64").length);
+  });
+
   test("returns fallback PNG when game has no thumbnail", async () => {
     const { id } = insertTestUser(testDb.sqlite);
     insertGame({ userId: id, publicSlug: "0badcafe", thumbnail: null });
