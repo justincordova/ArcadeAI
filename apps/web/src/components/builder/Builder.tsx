@@ -229,11 +229,14 @@ function RefinementBuilder({
   }
 
   // Single-level undo. `canUndo` is the server's authoritative flag (from
-  // GET /api/games/:id); it re-syncs whenever the ["game", id] query refetches
-  // — which the status-change effect above already triggers after a refinement
-  // completes, and which handleUndo triggers after consuming the undo point.
-  // We mirror it into local state only so the button can flip to disabled
-  // immediately on click (optimistic), before the refetch confirms.
+  // GET /api/games/:id). We mirror it into local state only so the button can
+  // flip to disabled immediately on click (optimistic), before the refetch
+  // confirms.
+  //
+  // Note this effect re-syncs on a VALUE change, not on every refetch —
+  // `canUndo` is a boolean primitive. A refetch that returns the same value
+  // does not re-run it, which is why handleUndo must roll its own optimistic
+  // update back on failure rather than waiting for the refetch to do it.
   const [canUndoLocal, setCanUndoLocal] = useState(canUndo);
   useEffect(() => {
     setCanUndoLocal(canUndo);
@@ -254,9 +257,14 @@ function RefinementBuilder({
         queryClient.invalidateQueries({ queryKey: GAMES_QUERY_KEY });
       })
       .catch((err) => {
-        // 409 = nothing to undo (slot already consumed). The flag is already
-        // optimistically false; the refetch will reconfirm server truth.
         console.warn("[undo]", err);
+        // Roll the optimistic disable back. Without this, a transient failure
+        // (network blip, 500) left canUndoLocal false forever: the refetch
+        // returns canUndo=true, unchanged, so the sync effect above never
+        // fires and the Undo button stays greyed out until the user navigates
+        // away and back. For a 409 the server flips the flag to false, the
+        // value genuinely changes, and the effect corrects this right after.
+        setCanUndoLocal(true);
         queryClient.invalidateQueries({ queryKey: ["game", gameId] });
       })
       .finally(() => setUndoing(false));
