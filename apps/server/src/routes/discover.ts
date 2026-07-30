@@ -17,6 +17,10 @@ import { listDiscoverGames } from "../services/discover/list.js";
 
 const SORT_VALUES = ["trending", "top", "new"] as const;
 
+// Deepest page the API will serve. Shared by the query validator and the
+// nextOffset computation so the two can't disagree.
+const MAX_OFFSET = 10_000;
+
 const DiscoverQuery = z.object({
   sort: z.enum(SORT_VALUES).default("trending"),
   genre: z.enum(GENRE_BUCKETS).optional(),
@@ -24,7 +28,7 @@ const DiscoverQuery = z.object({
   // Bound the offset as well as the limit. This route is unauthenticated, and
   // the `trending` ORDER BY is a computed expression no index can serve, so a
   // large offset forces SQLite to rank and discard that many rows per request.
-  offset: z.coerce.number().int().min(0).max(10_000).default(0),
+  offset: z.coerce.number().int().min(0).max(MAX_OFFSET).default(0),
 });
 
 export async function discoverRoutes(app: FastifyInstance) {
@@ -69,7 +73,11 @@ export async function discoverRoutes(app: FastifyInstance) {
 
     // Cursor pagination: if we got fewer than `limit` rows, we're at the
     // end and return null. Otherwise, advance by limit.
-    const nextOffset = items.length < limit ? null : offset + limit;
+    // Never advertise an offset the query schema would reject — the client
+    // feeds this straight back as `offset`, so exceeding the cap would turn
+    // the end of the list into a 400 instead of a clean termination.
+    const next = offset + limit;
+    const nextOffset = items.length < limit || next > MAX_OFFSET ? null : next;
 
     return reply.send({ items, nextOffset });
   });
