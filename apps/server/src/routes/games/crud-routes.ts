@@ -56,7 +56,14 @@ export function registerGameCrudRoutes(app: FastifyInstance) {
     // and the client only needs to know whether an undo is available, not the
     // bytes themselves (undo restores them server-side). Expose that as the
     // boolean `canUndo` instead.
-    const { previousCode, ...rest } = game;
+    //
+    // Strip `thumbnail` for the same reason the list route excludes it: it is
+    // a base64 data URL up to ~350 KB, GameDetail does not declare it, and no
+    // client reads it — the builder loads it by reference from
+    // GET /api/games/:id/thumbnail.png. This response is fetched on every
+    // dashboard card hover (prefetch) and twice per refinement turn, so the
+    // wasted bytes add up fast.
+    const { previousCode, thumbnail, ...rest } = game;
     return reply.send({
       ...rest,
       canUndo: Boolean(previousCode),

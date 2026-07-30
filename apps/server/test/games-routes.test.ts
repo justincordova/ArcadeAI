@@ -125,6 +125,26 @@ describe("GET /api/games/:id", () => {
     expect(Array.isArray(body.messages)).toBe(true);
   });
 
+  test("omits the heavy previousCode and thumbnail columns", async () => {
+    // Both are full-size blobs (a whole HTML document, and a base64 data URL up
+    // to 350 KB) that no client reads off this response. It is fetched on every
+    // dashboard card hover and twice per refinement turn, so shipping them is
+    // pure waste. canUndo carries the only bit the client needs.
+    const { id: userId } = insertTestUser(testDb.sqlite);
+    stubUserId = userId;
+    const gameId = insertGame({ userId, thumbnail: TINY_PNG_DATA_URL });
+    testDb.sqlite
+      .prepare("UPDATE games SET previous_code = ? WHERE id = ?")
+      .run("<html>old</html>", gameId);
+
+    const res = await app.inject({ method: "GET", url: `/api/games/${gameId}` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body).not.toHaveProperty("thumbnail");
+    expect(body).not.toHaveProperty("previousCode");
+    expect(body.canUndo).toBe(true);
+  });
+
   test("returns 404 when caller is not the owner (no leakage of existence)", async () => {
     const { id: ownerId } = insertTestUser(testDb.sqlite, { email: "owner@test" });
     const { id: otherId } = insertTestUser(testDb.sqlite, { email: "other@test" });
