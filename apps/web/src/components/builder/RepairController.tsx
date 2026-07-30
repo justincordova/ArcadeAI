@@ -106,9 +106,17 @@ export function RepairController({
       }
       setRepairStatus("idle");
     } else if (prevRepairStatus.current === "streaming" && repair.status === "error") {
-      // Stream error — leave the attempt counter as-is; the iframe still has
-      // broken code so will re-throw, advancing the counter then.
-      setRepairStatus("idle");
+      // The repair STREAM failed (402, 409, 500, network) — as opposed to the
+      // repair completing with code that still throws.
+      //
+      // Going idle here relied on the iframe re-throwing to advance the
+      // attempt counter. That only holds for an error raised from a live rAF
+      // loop; a one-shot error thrown during init fires once, so nothing
+      // re-arms and the user is left with the overlay gone, a broken game on
+      // screen, and no feedback or path forward. Surface the fallback dialog
+      // instead — `lastError` is already set (handleGameError sets it before
+      // starting the stream), and the dialog offers Try again / Refine.
+      setRepairStatus("fallback");
     }
     prevRepairStatus.current = repair.status;
   }, [repair.status, repair.code, onRepaired]);
