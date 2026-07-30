@@ -44,7 +44,8 @@ export async function applyResets(userId: string) {
   let monthlyResetAt = user.monthlyResetAt;
   let creditsRemainingDaily = user.creditsRemainingDaily;
   let creditsRemainingMonthly = user.creditsRemainingMonthly;
-  let changed = false;
+  let dailyFired = false;
+  let monthlyFired = false;
 
   if (now >= dailyResetAt) {
     // Admin: don't reset counters but still advance timestamp
@@ -52,7 +53,7 @@ export async function applyResets(userId: string) {
       creditsRemainingDaily = limits.daily;
     }
     dailyResetAt = nextUtcMidnight(now);
-    changed = true;
+    dailyFired = true;
   }
 
   if (now >= monthlyResetAt) {
@@ -62,8 +63,10 @@ export async function applyResets(userId: string) {
     }
     monthlyResetAt = nextUtcMonthStart(now);
     dailyResetAt = nextUtcMidnight(now); // sync daily too
-    changed = true;
+    monthlyFired = true;
   }
+
+  const changed = dailyFired || monthlyFired;
 
   if (changed) {
     // Conditional UPDATE keyed on the timestamp we read. If a concurrent
@@ -74,9 +77,23 @@ export async function applyResets(userId: string) {
     // Without this guard, a non-atomic read-decide-write would clobber a
     // concurrent deduct from a parallel request that hit the reset window
     // first, silently restoring credits that were just consumed.
+    //
+    // Write back ONLY the credit columns whose window actually fired. The
+    // WHERE guard keys on the two timestamps, so it cannot see a writer that
+    // changes credits without touching them — and refund() is exactly that
+    // writer. Writing the untouched column back from our stale snapshot would
+    // erase a refund that landed in the window between the SELECT above and
+    // this UPDATE. That loss is unrecoverable: refund() has already committed
+    // `refunded_at`, which is its idempotency guard, so no retry re-credits.
+    const patch: Partial<typeof users.$inferInsert> = { dailyResetAt, monthlyResetAt };
+    // A monthly reset also refills daily (above), so gate the daily column on
+    // either window rather than assuming monthly-due implies daily-due.
+    if (dailyFired || monthlyFired) patch.creditsRemainingDaily = creditsRemainingDaily;
+    if (monthlyFired) patch.creditsRemainingMonthly = creditsRemainingMonthly;
+
     const result = await db
       .update(users)
-      .set({ creditsRemainingDaily, creditsRemainingMonthly, dailyResetAt, monthlyResetAt })
+      .set(patch)
       .where(
         and(
           eq(users.id, userId),

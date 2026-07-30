@@ -185,4 +185,41 @@ describe("applyResets — concurrency guard", () => {
     // The row itself holds the tier limit exactly once.
     expect(readUser(id)?.credits_remaining_monthly).toBe(3000);
   });
+
+  test("a daily-only reset does not clobber a concurrent refund's monthly credit-back", async () => {
+    // applyResets reads a snapshot, then writes back with a conditional UPDATE
+    // keyed on the two reset timestamps. refund() credits the balance WITHOUT
+    // touching those timestamps, so it is invisible to that guard. If the
+    // daily-only path writes back the stale monthly snapshot, it silently
+    // erases the refund — and because refund already committed `refunded_at`
+    // (its idempotency guard), the credits are permanently unrecoverable.
+    const { applyResets } = await import("../src/services/usage/reset.js");
+    const { id } = insertTestUser(testDb.sqlite, {
+      tier: "free",
+      creditsRemainingDaily: 300,
+      creditsRemainingMonthly: 2800,
+      dailyResetAt: Date.now() - 1000, // daily due
+      monthlyResetAt: Date.now() + 30 * 24 * 60 * 60 * 1000, // monthly not due
+    });
+
+    // Land a refund in the window between applyResets' SELECT and its UPDATE.
+    const realUpdate = testDb.db.update.bind(testDb.db);
+    const spy = mock((table: Parameters<typeof realUpdate>[0]) => {
+      testDb.sqlite
+        .prepare(`UPDATE "user" SET credits_remaining_monthly = credits_remaining_monthly + 200
+                  WHERE id = ?`)
+        .run(id);
+      testDb.db.update = realUpdate; // fire once
+      return realUpdate(table);
+    });
+    testDb.db.update = spy as unknown as typeof testDb.db.update;
+
+    await applyResets(id);
+
+    const row = readUser(id);
+    // Daily refilled to the tier limit...
+    expect(row?.credits_remaining_daily).toBe(500);
+    // ...and the refund survived. 2800 + 200, not the stale 2800.
+    expect(row?.credits_remaining_monthly).toBe(3000);
+  });
 });
