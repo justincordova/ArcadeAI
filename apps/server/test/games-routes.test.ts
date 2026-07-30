@@ -38,11 +38,37 @@ async function buildApp() {
   return fastify;
 }
 
+// Minimal stand-in for the AI SDK's streamText result. The repair-budget test
+// deliberately lets a request through the 429 guard, which starts a real
+// stream. Without this stub that reached api.anthropic.com on every run: CI
+// depended on Anthropic being up, a Cloudflare request id landed in public
+// logs, and adding ANTHROPIC_API_KEY to the CI environment would have turned
+// those into billable generations against the fixtures.
+function fakeStream(chunks: string[] = ["<!DOCTYPE html><html></html>"]) {
+  return {
+    textStream: (async function* () {
+      for (const c of chunks) yield c;
+    })(),
+    finishReason: Promise.resolve("stop" as const),
+    usage: Promise.resolve({ inputTokens: 0, outputTokens: 0 }),
+  };
+}
+
 beforeEach(async () => {
   testDb = createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
     sqlite: testDb.sqlite,
+  }));
+  // Override only the three stream entry points. The module's other exports
+  // (withTimeout, AUX_LLM_TIMEOUT_MS, isLlmAuthError, LLM_TIMEOUT_MS) are
+  // imported by the aux LLM modules and must survive the mock.
+  const realLlmClient = await import("../src/services/llm/client.js");
+  mock.module("../src/services/llm/client.ts", () => ({
+    ...realLlmClient,
+    streamGame: async () => fakeStream(),
+    streamRefinement: async () => fakeStream(),
+    streamRepair: async () => fakeStream(),
   }));
   app = await buildApp();
 });
