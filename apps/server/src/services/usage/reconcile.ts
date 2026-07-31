@@ -60,7 +60,7 @@ export async function reconcileStrandedStreams(opts: {
   let refunded = 0;
   for (const row of stranded) {
     try {
-      await refund(row.id, { logger, reason: "persistence_error" });
+      await refund(row.id, { logger, reason: "stranded" });
       refunded++;
     } catch (err) {
       logger?.error({ err, logId: row.id }, "failed to refund stranded usage_log row");

@@ -16,7 +16,7 @@ fields below depending on origin:
 | `request-context.ts` (one per request)   | `route`, `method`, `status`, `duration_ms`                      |
 | `services/llm/client.ts:logUsageOnDrain` | `model`, `tokens_in`, `tokens_out`, `duration_ms`, `cost_usd`   |
 | `services/rag/retrieve.ts`               | `ragExampleId`, `similarity`, `genreFilter`, `fellBackToGlobal` |
-| `services/usage/charge.ts` (refunds)     | `reason` (`abort` / `timeout` / `llm_error` / `persistence_error`) |
+| `services/usage/charge.ts` (refunds)     | `reason` (`abort` / `timeout` / `llm_error` / `persistence_error` / `stranded`) |
 
 That's enough to answer the questions we care about right now: who's
 generating, what's it costing, and which RAG examples are getting picked.

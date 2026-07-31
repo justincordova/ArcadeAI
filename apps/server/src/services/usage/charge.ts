@@ -22,12 +22,20 @@ import type { FastifyBaseLogger } from "fastify";
 import { db, sqlite } from "../../lib/db.js";
 import { applyResets } from "./reset.js";
 
+// Observability metadata only — logged with the refund, not stored on the row,
+// so adding a member needs no migration.
 export type RefundReason =
   | "llm_error"
   | "timeout"
   | "validation_error"
   | "abort"
-  | "persistence_error";
+  | "persistence_error"
+  // Reclaimed by the startup/interval sweep from a stream whose process was
+  // killed before it could finalize. Deliberately distinct from
+  // `persistence_error`, which means "pre-stream DB writes failed after
+  // deduct": after a deploy the sweep would otherwise dominate that reason and
+  // make it useless for answering whether DB writes are actually failing.
+  | "stranded";
 
 export type InsufficientCreditsKind = "daily" | "monthly" | "lifetime";
 
