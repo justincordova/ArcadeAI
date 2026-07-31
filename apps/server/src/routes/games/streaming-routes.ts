@@ -52,6 +52,7 @@ import { applyResets } from "../../services/usage/reset.js";
 import {
   CreateGameBody,
   classifyRefundReason,
+  GameGoneError,
   parseGameId,
   perUser10PerMin,
   REPAIR_DAILY_LIMIT,
@@ -353,7 +354,11 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
             .where(and(eq(games.id, id), eq(games.userId, userId)))
             .returning({ id: games.id });
           if (persisted.length === 0) {
-            streamError = new Error("Game no longer exists");
+            streamError = new GameGoneError();
+            request.log.warn(
+              { gameId: id },
+              "game row vanished mid-stream; refunding instead of persisting"
+            );
           }
         } catch (err) {
           streamError = err instanceof Error ? err : new Error("Persistence failed");
@@ -645,7 +650,11 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
             .where(and(eq(games.id, id), eq(games.userId, userId)))
             .returning({ id: games.id });
           if (persisted.length === 0) {
-            streamError = new Error("Game no longer exists");
+            streamError = new GameGoneError();
+            request.log.warn(
+              { gameId: id },
+              "game row vanished mid-stream; refunding instead of persisting"
+            );
           }
         } catch (err) {
           // Treat persistence failure as a stream error — same rationale as
@@ -950,7 +959,11 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
             .where(and(eq(games.id, id), eq(games.userId, userId)))
             .returning({ id: games.id });
           if (persisted.length === 0) {
-            streamError = new Error("Game no longer exists");
+            streamError = new GameGoneError();
+            request.log.warn(
+              { gameId: id },
+              "game row vanished mid-stream; refunding instead of persisting"
+            );
           }
         } catch (err) {
           streamError = err instanceof Error ? err : new Error("Persistence failed");

@@ -19,7 +19,21 @@ import type { RefundReason } from "../../services/usage/charge.js";
  * echoed to the client.
  */
 export class UserFacingError extends Error {
-  readonly name = "UserFacingError";
+  readonly name: string = "UserFacingError";
+}
+
+/**
+ * The game row disappeared while its stream was still running — the user
+ * deleted it in another tab. Distinct from a generic persistence failure so
+ * `classifyRefundReason` can bill it to `persistence_error` instead of
+ * blaming the model, and so the message reaches the client unscrubbed.
+ */
+export class GameGoneError extends UserFacingError {
+  readonly name = "GameGoneError";
+
+  constructor() {
+    super("This game was deleted while it was still generating.");
+  }
 }
 
 /**
@@ -53,6 +67,10 @@ export function toClientMessage(err: Error, fallback: string): string {
  *  - everything else (LLM 5xx, stream parse failure, etc.) → `llm_error`
  */
 export function classifyRefundReason(err: Error): RefundReason {
+  // The row vanishing is a persistence outcome, not a model failure. Without
+  // this branch it fell through to `llm_error` and polluted the very metric
+  // these reasons exist to answer.
+  if (err instanceof GameGoneError) return "persistence_error";
   const msg = err.message.toLowerCase();
   if (msg.includes("timeout") || msg.includes("timed out")) return "timeout";
   if (err.name === "AbortError") return "abort";

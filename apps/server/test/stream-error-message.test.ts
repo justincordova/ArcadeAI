@@ -7,6 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   classifyRefundReason,
+  GameGoneError,
   toClientMessage,
   UserFacingError,
 } from "../src/routes/games/shared.js";
@@ -56,6 +57,20 @@ describe("classifyRefundReason still sees the unscrubbed message", () => {
 
   test("classifies everything else as llm_error", () => {
     expect(classifyRefundReason(new Error("UNIQUE constraint failed"))).toBe("llm_error");
+  });
+
+  test("a vanished game bills to persistence_error, not llm_error", () => {
+    // The row disappearing is a persistence outcome. Classifying it as
+    // llm_error would pollute the dominant-failure-mode metric these reasons
+    // exist to answer.
+    expect(classifyRefundReason(new GameGoneError())).toBe("persistence_error");
+  });
+
+  test("a vanished game reaches the client unscrubbed", () => {
+    const err = new GameGoneError();
+    expect(err).toBeInstanceOf(UserFacingError);
+    expect(toClientMessage(err, "Generation failed")).toBe(err.message);
+    expect(err.message).toContain("deleted");
   });
 
   test("a UserFacingError classifies on its own message like any other Error", () => {
