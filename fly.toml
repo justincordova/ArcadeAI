@@ -9,6 +9,12 @@ primary_region = 'sjc'
 [build]
   dockerfile = 'Dockerfile'
 
+# src/index.ts drains in-flight SSE streams for up to 30s on SIGINT before
+# closing. Fly's default kill_timeout is 5s, which killed the process a
+# quarter of the way through that drain — stranding usage_log rows mid-stream
+# (the server now reconciles those on boot, but not losing them is better).
+kill_timeout = '35s'
+
 [env]
   DATABASE_PATH = '/data/arcadeai.db'
   NODE_ENV = 'production'

@@ -12,11 +12,13 @@ import { registerRateLimit } from "./plugins/rate-limit.js";
 import { registerRequestContext } from "./plugins/request-context.js";
 import { billingRoutes } from "./routes/billing.js";
 import { discoverRoutes } from "./routes/discover.js";
+import { STALE_STREAM_CUTOFF_MS } from "./routes/games/shared.js";
 import { gamesRoutes } from "./routes/games.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
 import { ogRoutes } from "./routes/og.js";
 import { playRoutes } from "./routes/play.js";
+import { reconcileStrandedStreams } from "./services/usage/reconcile.js";
 
 // Validate env vars first so misconfiguration fails fast with a clear message
 // instead of surfacing as a 30-second-later 401 on an AI call.
@@ -165,6 +167,24 @@ const port = env.PORT;
 // the invariant obvious in startup logs and is safe for tests.
 clearActiveStreams();
 
+// Return credits for streams a previous process was killed in the middle of.
+// deduct() charges before the LLM call, so a hard kill strands the usage_log
+// row at succeeded=0/refunded_at=NULL with the lifetime counter already
+// incremented — permanently consuming a free-tier user's single generation.
+// Nothing else in the system reconciles those rows. Runs before listen() so a
+// restarting instance heals the previous one's casualties immediately.
+await reconcileStrandedStreams({ cutoffMs: STALE_STREAM_CUTOFF_MS, logger: app.log });
+
+// A row stranded shortly before the restart isn't yet older than the cutoff,
+// so the startup pass can't see it. Re-run periodically so it gets reconciled
+// without waiting for the next deploy.
+const RECONCILE_INTERVAL_MS = 5 * 60_000;
+const reconcileTimer = setInterval(() => {
+  void reconcileStrandedStreams({ cutoffMs: STALE_STREAM_CUTOFF_MS, logger: app.log });
+}, RECONCILE_INTERVAL_MS);
+// Don't hold the event loop open on this alone.
+reconcileTimer.unref?.();
+
 try {
   await app.listen({ port, host: "0.0.0.0" });
   app.log.info(`Server listening on port ${port}`);
@@ -181,6 +201,7 @@ let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  clearInterval(reconcileTimer);
   app.log.info({ signal, activeStreams: activeCount() }, "shutdown signal received");
 
   const drainDeadline = Date.now() + 30_000;
