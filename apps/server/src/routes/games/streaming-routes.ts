@@ -354,10 +354,10 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
             .where(and(eq(games.id, id), eq(games.userId, userId)))
             .returning({ id: games.id });
           if (persisted.length === 0) {
-            streamError = new GameGoneError();
+            streamError = new GameGoneError("generating");
             request.log.warn(
               { gameId: id },
-              "game row vanished mid-stream; refunding instead of persisting"
+              "game row vanished mid-generation; refunding instead of persisting"
             );
           }
         } catch (err) {
@@ -650,10 +650,10 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
             .where(and(eq(games.id, id), eq(games.userId, userId)))
             .returning({ id: games.id });
           if (persisted.length === 0) {
-            streamError = new GameGoneError();
+            streamError = new GameGoneError("refining");
             request.log.warn(
               { gameId: id },
-              "game row vanished mid-stream; refunding instead of persisting"
+              "game row vanished mid-refinement; refunding instead of persisting"
             );
           }
         } catch (err) {
@@ -959,10 +959,10 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
             .where(and(eq(games.id, id), eq(games.userId, userId)))
             .returning({ id: games.id });
           if (persisted.length === 0) {
-            streamError = new GameGoneError();
+            streamError = new GameGoneError("repairing");
             request.log.warn(
               { gameId: id },
-              "game row vanished mid-stream; refunding instead of persisting"
+              "game row vanished mid-repair; discarding the repaired code"
             );
           }
         } catch (err) {

@@ -31,8 +31,9 @@ export class UserFacingError extends Error {
 export class GameGoneError extends UserFacingError {
   readonly name = "GameGoneError";
 
-  constructor() {
-    super("This game was deleted while it was still generating.");
+  /** @param activity what the stream was doing — "generating", "refining", … */
+  constructor(activity: string) {
+    super(`This game was deleted while it was still ${activity}.`);
   }
 }
 

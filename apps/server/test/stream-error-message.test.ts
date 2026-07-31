@@ -63,14 +63,16 @@ describe("classifyRefundReason still sees the unscrubbed message", () => {
     // The row disappearing is a persistence outcome. Classifying it as
     // llm_error would pollute the dominant-failure-mode metric these reasons
     // exist to answer.
-    expect(classifyRefundReason(new GameGoneError())).toBe("persistence_error");
+    expect(classifyRefundReason(new GameGoneError("generating"))).toBe("persistence_error");
   });
 
   test("a vanished game reaches the client unscrubbed", () => {
-    const err = new GameGoneError();
+    const err = new GameGoneError("refining");
     expect(err).toBeInstanceOf(UserFacingError);
     expect(toClientMessage(err, "Generation failed")).toBe(err.message);
     expect(err.message).toContain("deleted");
+    // Message reflects the activity, not a hardcoded "generating".
+    expect(err.message).toContain("refining");
   });
 
   test("a UserFacingError classifies on its own message like any other Error", () => {
