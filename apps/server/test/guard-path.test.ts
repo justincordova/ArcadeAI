@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import Fastify, { type FastifyInstance } from "fastify";
+import { guardPath } from "../src/lib/guard-path.js";
 import { registerCsrfGuard } from "../src/plugins/csrf.js";
 
 let app: FastifyInstance;
@@ -24,12 +25,15 @@ afterEach(async () => {
 });
 
 describe("auth guard path resolution", () => {
-  // Mirrors registerAuthGuard's exemption logic without pulling in Better Auth
-  // (which needs a live DB). The property under test is which paths the guard
-  // decides to skip — not what it does once it decides to run.
+  // Calls the REAL guardPath, so reverting lib/guard-path.ts to raw-URL
+  // matching fails these tests. Only the exemption list is mirrored — wiring
+  // up registerAuthGuard itself would drag in Better Auth, whose async session
+  // lookup races app.close() and makes the suite flaky. The property under
+  // test is which paths the guard decides to skip, not what it does once it
+  // decides to run; the CSRF half below exercises a real guard end to end.
   function registerPathOnlyGuard(instance: FastifyInstance) {
     instance.addHook("preHandler", async (request, reply) => {
-      const path = request.routeOptions?.url ?? request.url.split("?")[0];
+      const path = guardPath(request);
       if (
         !path.startsWith("/api/") ||
         path.startsWith("/api/auth/") ||
