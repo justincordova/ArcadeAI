@@ -85,10 +85,16 @@ export async function applyResets(userId: string) {
     // erase a refund that landed in the window between the SELECT above and
     // this UPDATE. That loss is unrecoverable: refund() has already committed
     // `refunded_at`, which is its idempotency guard, so no retry re-credits.
-    const patch: Partial<typeof users.$inferInsert> = { dailyResetAt, monthlyResetAt };
-    // A monthly reset also refills daily (above), so gate the daily column on
-    // either window rather than assuming monthly-due implies daily-due.
-    if (dailyFired || monthlyFired) patch.creditsRemainingDaily = creditsRemainingDaily;
+    // The daily column is always written here: reaching this block means at
+    // least one window fired, and both branches above set creditsRemainingDaily
+    // (a monthly reset also refills daily). Only the monthly column is
+    // conditional — that is the one a concurrent refund can touch without
+    // moving a timestamp.
+    const patch: Partial<typeof users.$inferInsert> = {
+      dailyResetAt,
+      monthlyResetAt,
+      creditsRemainingDaily,
+    };
     if (monthlyFired) patch.creditsRemainingMonthly = creditsRemainingMonthly;
 
     const result = await db

@@ -2,7 +2,7 @@
  * Sanitize the raw streamed output of a generation/refinement/repair
  * call. The contract (see the server's prompts) is "output ONLY the raw
  * HTML file, no explanation, no markdown fences" — but the model
- * occasionally violates this. The two failure modes we see in practice:
+ * occasionally violates this. The failure modes we see in practice:
  *
  *   1. A prose preamble before the HTML. Example: a repair call returned
  *      "The bug is that `squish` can become negative... The fix is to
@@ -14,9 +14,14 @@
  *      "```html\n<!DOCTYPE html>...\n```" — the backticks survive
  *      into srcDoc and break parsing.
  *
+ *   3. A prose postamble after `</html>` ("I also added a power-up!").
+ *      Browsers hoist post-`</html>` text back into the body, so it
+ *      renders on top of the game exactly like a preamble would.
+ *
  * We sanitize by locating the first `<!DOCTYPE` or `<html` tag
- * (case-insensitive) and discarding everything before it, then
- * trimming a trailing markdown fence if one survived.
+ * (case-insensitive) and discarding everything before it, then truncating
+ * at the last `</html>` — which also removes a trailing fence. Output with
+ * no closing tag falls through to explicit trailing-fence trimming.
  *
  * Returns null when no HTML opener is found — the server treats this the
  * same as a stream error (no persistence, refund, surface an error). It
@@ -43,9 +48,17 @@ export function sanitizeHtmlOutput(raw: string): string | null {
   // Drop any postamble after the closing </html>. The model sometimes appends
   // a trailing explanation ("I also added a bonus power-up!"), and browsers
   // hoist post-</html> text back into the body, so it renders on top of the
-  // game exactly like a preamble would. The last </html> is the document's
-  // own closing tag: any </html> inside a string literal necessarily precedes
-  // it. This also removes a trailing markdown fence for free.
+  // game exactly like a preamble would. This also removes a trailing markdown
+  // fence for free.
+  //
+  // Anchoring on the LAST </html> is what makes this safe for a game that
+  // contains the literal string "</html>" in its own source (e.g. inside a
+  // document.write call): in a well-formed document the real closing tag is
+  // last, so the literal necessarily precedes it. The residual risk is output
+  // that contains such a literal but never emits its own closing tag — that
+  // gets truncated at the literal. Such output is already a truncated or
+  // malformed stream, and the caller treats a broken document as a stream
+  // error, so this does not turn a working game into a broken one.
   const closeIdx = trimmed.toLowerCase().lastIndexOf("</html>");
   if (closeIdx >= 0) {
     return trimmed.slice(0, closeIdx + "</html>".length);

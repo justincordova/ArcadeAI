@@ -668,9 +668,9 @@ describe("POST /api/games/:id/repair — daily budget", () => {
     const gameId = insertGame({ userId, currentCode: "<html>broken</html>" });
 
     // 50 attempts, all aged past the rolling window — the budget check must
-    // ignore them. The request then proceeds past the 429 guard; without an
-    // LLM key the stream fails later, but the response is a hijacked SSE
-    // (statusCode !== 429), which is all this test asserts.
+    // ignore them. The request then proceeds past the 429 guard into a
+    // hijacked SSE response driven by the stubbed LLM client, so all this
+    // test asserts is that the budget did not reject it (statusCode !== 429).
     const insert = testDb.sqlite.prepare(
       `INSERT INTO usage_log
          (id, user_id, game_id, action, credits_charged, succeeded, created_at)
