@@ -531,8 +531,32 @@ When a free user hits the lifetime cap, the API returns 402 with `code: "FREE_TI
 | `abort` | Stream errored with `name === 'AbortError'` (user closed the tab) |
 | `timeout` | Error message contained "timeout" / "timed out" (server-side LLM cap, see §14) |
 | `validation_error` | Pre-stream validation failed after deduct (currently unused — moved to `persistence_error`) |
-| `persistence_error` | Pre-stream DB writes / context build failed after deduct |
+| `persistence_error` | Pre-stream DB writes / context build failed after deduct, or the game row vanished mid-stream (deleted in another tab) |
+| `stranded` | Reclaimed by the reconciliation sweep from a stream whose process was killed before it could finalize (see below) |
 | `llm_error` | Anything else — LLM 5xx, parse failure, etc. |
+
+The reason is observability metadata only — it is logged with the refund, not
+stored on `usage_log`, so adding a member needs no migration.
+
+### Stranded-stream reconciliation
+
+`deduct()` charges and increments the lifetime counter *before* the LLM call,
+and only a handler that runs to completion converts the `usage_log` row into
+`markSucceeded` or `refund`. A process killed in between leaves it at
+`succeeded = 0 AND refunded_at IS NULL` forever.
+
+That is not hypothetical — the shutdown drain waits 30s for streams that run up
+to 180s, and an orchestrator kill timeout can cut it shorter still. On the free
+tier, which allows exactly one lifetime generation, the damage is permanent
+without reconciliation: credits gone, `lifetime_generations_used` stuck at the
+cap so every future generate 402s, and an orphaned game with empty
+`current_code` that both refine and publish reject.
+
+`services/usage/reconcile.ts` therefore sweeps on boot and every 5 minutes,
+refunding in-flight rows older than `STALE_STREAM_CUTOFF_MS` (15 min — well
+past the 180s LLM ceiling plus aux calls, so a genuinely live stream is never
+touched, including one owned by another instance). `refund()` is idempotent, so
+racing a live handler is safe.
 
 ### Reset behavior
 
@@ -549,15 +573,22 @@ All routes prefixed with `/api`. Auth required except where noted.
 
 ### Auth (Better Auth handles these)
 
-- `GET  /api/auth/sign-in/google` — initiate Google OAuth flow
-- `GET  /api/auth/sign-in/github` — initiate GitHub OAuth flow
-- `GET  /api/auth/callback/google` — OAuth callback (creates user on first sign-in)
-- `GET  /api/auth/callback/github` — OAuth callback (creates user on first sign-in)
+These are Better Auth's own route shapes — provider is a body field, not a path
+segment. Getting this wrong is silent: the `/api/auth/*` wildcard forwards
+anything to Better Auth, which 404s a route it doesn't have.
+
+- `POST /api/auth/sign-in/social` — body `{ provider: 'google' | 'github', callbackURL }`. Returns `{ url }` to navigate to.
+- `GET  /api/auth/callback/:provider` — OAuth callback (creates user on first sign-in). Built from `BETTER_AUTH_URL`, so that value must match what's registered with the provider.
 - `POST /api/auth/sign-out`
 - `GET  /api/auth/session` — current session/user
-- `POST /api/auth/link/google` — link Google account to existing session
-- `POST /api/auth/link/github` — link GitHub account to existing session
-- `POST /api/auth/unlink-account` — unlink an OAuth provider; Better Auth refuses if it would leave the user with no auth method (last-provider guard)
+- `POST /api/auth/link-social` — body `{ provider, callbackURL, disableRedirect }`. Links a second provider to the current session; returns `{ url }` to navigate to.
+- `POST /api/auth/unlink-account` — unlink an OAuth provider; Better Auth refuses if it would leave the user with no auth method (last-provider guard).
+  Note this route sits behind Better Auth's `freshSessionMiddleware`: sessions
+  live 7 days (`expiresIn`) but are "fresh" only 24h (`freshAge`), and a refresh
+  extends `expiresAt` without moving `createdAt`. Past hour 25 it returns 403
+  `SESSION_NOT_FRESH`, and there is no re-auth flow — the client tells the user
+  to sign out and back in. `link-social` uses plain `sessionMiddleware`, so only
+  the unlink direction is affected.
 
 On first sign-in:
 - User row created with email from OAuth provider
@@ -573,11 +604,17 @@ On first sign-in:
 
 ### Game CRUD
 
-- `GET    /api/games` — list current user's games (id, title, thumbnail, updated_at). For dashboard.
-- `GET    /api/games/:id` — full game (code + messages history). For loading a game in builder.
+Thumbnail bytes are never inlined in a JSON response — they are base64 data
+URLs up to 350 KB. Every payload exposes a `hasThumbnail` boolean and the bytes
+load lazily by reference from a dedicated image route.
+
+- `GET    /api/games` — list current user's games (id, title, `hasThumbnail`, updated_at). For dashboard.
+- `GET    /api/games/:id` — full game (code + messages history) plus `canUndo` and `inProgress`. Excludes `previousCode` (undo restores it server-side) and `thumbnail`.
+- `GET    /api/games/:id/thumbnail.png` — owner-scoped PNG bytes, decoded from the stored data URL. Falls back to a placeholder when absent or malformed.
 - `PATCH  /api/games/:id` — update title (only mutable field exposed).
-- `POST   /api/games/:id/thumbnail` — body: `{ thumbnail: string }` (base64 data URL).
-- `DELETE /api/games/:id` — hard delete.
+- `POST   /api/games/:id/thumbnail` — body: `{ thumbnail: string }` (base64 data URL, ≤350 KB).
+- `POST   /api/games/:id/undo` — single-level undo of the last refinement/repair. Atomic guarded swap of `previous_code` into `current_code`. 409 while a stream is in flight for the game, and 409 when there is nothing to undo.
+- `DELETE /api/games/:id` — hard delete. `usage_log.game_id` is `ON DELETE SET NULL`, so billing history survives.
 
 ### User & usage
 
@@ -593,8 +630,15 @@ On first sign-in:
 
 - `POST /api/games/:id/publish` — owner only. Sets `is_public = true` and generates an 8-hex-char `public_slug` on first publish (retry on collision, max 3 attempts). Returns `{ slug, isPublic, publishedAt }`. Slug is retained on subsequent unpublish/republish so the URL stays stable.
 - `POST /api/games/:id/unpublish` — owner only. Sets `is_public = false`; the slug stays in the row.
-- `GET  /api/play/:slug` — **public**, no auth. Returns `{ id, title, currentCode, originalPrompt, ownerDisplayName, publishedAt }` (no `userId`, no messages, no auth-leaking fields). 404 (not 403) on private/unknown slugs to avoid existence leakage.
+- `GET  /api/play/:slug` — **public**, no auth. Returns `{ id, title, currentCode, originalPrompt, ownerDisplayName, publishedAt, genre, likeCount, playCount, liked }` (no `userId`, no `thumbnail`, no messages, no auth-leaking fields). 404 (not 403) on private/unknown slugs to avoid existence leakage. Slugs are matched case-insensitively at the edge but normalized to lowercase before the lookup, since `public_slug` is case-sensitive.
+- `POST   /api/play/:slug/like` / `DELETE /api/play/:slug/like` — auth required. Toggles a like and returns the authoritative `likeCount` via `RETURNING` rather than client arithmetic.
+- `POST /api/play/:slug/play` — **public**. Increments the play counter feeding Discover's trending sort. Rate-limited per IP *and* per slug.
+- `GET  /api/og/:slug.png` — **public**. OG/Twitter unfurl image for a published game. Fetches only the thumbnail column; serves a placeholder for unknown slugs so crawlers hitting a pre-publish URL still get an image.
 - `POST /api/play/:slug/remix` — auth required. Copies `current_code`, `original_prompt`, and `genre` into a new game owned by the caller, sets `remixed_from_game_id` to the source. Charges 0 credits but counts 1 against the free-tier lifetime generation cap so a remix loop can't bypass the throttle.
+
+### Discover
+
+- `GET /api/discover` — **public**, no auth. Paginated list of published games. Query: `sort` (`trending` | `top` | `new`), optional `genre`, `limit` (1–50, default 24), `offset` (0–10 000). Returns `{ items, nextOffset }`; `nextOffset` is null once the next page would exceed the offset cap, so the tail terminates cleanly rather than 400ing. A viewer's session, when present, hydrates `liked` per row. Thumbnail bytes are excluded here too — `hasThumbnail` plus `/api/og/:slug.png`.
 
 ### Health
 
@@ -609,7 +653,8 @@ All `/api/*` errors (4xx and 5xx) return a uniform body:
 {
   code: ErrorCode,            // closed enum — "VALIDATION_ERROR" | "UNAUTHORIZED" |
                               // "NOT_FOUND" | "CONFLICT" | "INSUFFICIENT_CREDITS" |
-                              // "FREE_TIER_EXHAUSTED" | "PAYLOAD_TOO_LARGE" | "INTERNAL_ERROR"
+                              // "FREE_TIER_EXHAUSTED" | "PAYLOAD_TOO_LARGE" |
+                              // "RATE_LIMITED" | "INTERNAL_ERROR"
   message: string,            // display copy; may change
   details?: Record<string, unknown>  // case-specific (e.g. { resetAt, kind } for quota)
 }

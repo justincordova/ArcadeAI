@@ -13,13 +13,18 @@ fields below depending on origin:
 
 | Source                                   | Notable fields                                                  |
 | ---------------------------------------- | --------------------------------------------------------------- |
-| `request-context.ts` (one per request)   | `route`, `method`, `status`, `duration_ms`                      |
+| `request-context.ts` (one per request)   | `route`, `method`, `status`, `duration_ms` (null when an earlier `onRequest` hook — CORS preflight, 429 — answered before timing started) |
 | `services/llm/client.ts:logUsageOnDrain` | `model`, `tokens_in`, `tokens_out`, `duration_ms`, `cost_usd`   |
 | `services/rag/retrieve.ts`               | `ragExampleId`, `similarity`, `genreFilter`, `fellBackToGlobal` |
 | `services/usage/charge.ts` (refunds)     | `reason` (`abort` / `timeout` / `llm_error` / `persistence_error` / `stranded`) |
+| `services/usage/reconcile.ts` (sweep)    | `found`, `refunded` — emitted at `warn` only when it actually reclaims rows |
 
 That's enough to answer the questions we care about right now: who's
 generating, what's it costing, and which RAG examples are getting picked.
+
+A burst of `reason: "stranded"` right after a deploy is expected — it is the
+sweep returning credits for streams the previous process was killed mid-flight.
+A steady trickle at other times is not, and means processes are dying.
 
 ### Shipping options
 
