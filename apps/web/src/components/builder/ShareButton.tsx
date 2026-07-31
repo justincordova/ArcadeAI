@@ -71,7 +71,13 @@ export function ShareButton({ gameId }: { gameId: string }) {
   // which could be wrong for an actually-published game: the button would
   // briefly read "Share" and clicking it would fire publishGame against
   // unknown state. Don't let the user toggle until the read resolves.
-  const disabled = busy || isError || game === undefined;
+  //
+  // Also refuse while the game has no code yet. Revisiting /game/:id during a
+  // first generation renders the refinement builder (so the button mounts)
+  // against a row whose current_code is still empty; publishing that is
+  // rejected by the server with 400 "Game has no code to publish", surfacing
+  // only as a generic failure toast. Nothing is publishable until code lands.
+  const disabled = busy || isError || game === undefined || !game.currentCode;
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
