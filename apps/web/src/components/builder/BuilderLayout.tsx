@@ -605,14 +605,20 @@ export function BuilderLayout({
                 undoDisabled={!canUndo || undoing}
               />
             )}
-            {/* Not mounted while streaming. gameId arrives on the mid-stream
-                `meta` frame, so mounting here fired a GET /api/games/:id
-                during generation and seeded the ["game", id] cache with
-                { currentCode: "", inProgress: true }. onDone then navigates to
-                /game/$id, which reads that snapshot and renders the
-                "Generating..." overlay for a cycle on a game that just
-                finished. A game mid-generation cannot be published anyway. */}
-            {gameId && !isStreaming && <ShareButton gameId={gameId} />}
+            {/* Held back only during a FIRST generation. There, gameId arrives
+                on the mid-stream `meta` frame, so mounting fired a
+                GET /api/games/:id during the stream and seeded the
+                ["game", id] cache with { currentCode: "", inProgress: true };
+                onDone then navigates to /game/$id, which reads that snapshot
+                and shows the "Generating..." overlay for a cycle on a game
+                that just finished. A game mid-generation can't be published
+                anyway.
+
+                On an existing game the id is known up front and the cache is
+                already warm, so gating on isStreaming there would only make
+                the control unmount and remount on every refinement turn and
+                every auto-repair. */}
+            {gameId && (!isNewGame || !isStreaming) && <ShareButton gameId={gameId} />}
           </div>
         </div>
 
