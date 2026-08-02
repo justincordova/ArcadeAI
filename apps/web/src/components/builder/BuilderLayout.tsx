@@ -22,7 +22,7 @@ import { ShareButton } from "./ShareButton.js";
 import { type OverlayStatus, StatusOverlay } from "./StatusOverlay.js";
 import { StreamingCodePreview } from "./StreamingCodePreview.js";
 import { StreamingIndicator } from "./StreamingIndicator.js";
-import { SIDEBAR_MAX, SIDEBAR_MIN, useResizableSidebar } from "./useResizableSidebar.js";
+import { SIDEBAR_MIN, useResizableSidebar } from "./useResizableSidebar.js";
 
 export interface BuilderLayoutProps {
   messages: Message[];
@@ -146,6 +146,7 @@ export function BuilderLayout({
   const { data: me } = useSession();
   const {
     width: sidebarWidth,
+    max: sidebarMax,
     resizing,
     startResize,
     resetWidth,
@@ -570,7 +571,7 @@ export function BuilderLayout({
           aria-orientation="vertical"
           aria-valuenow={sidebarWidth}
           aria-valuemin={SIDEBAR_MIN}
-          aria-valuemax={SIDEBAR_MAX}
+          aria-valuemax={sidebarMax}
           onMouseDown={(e) => {
             e.preventDefault();
             startResize();

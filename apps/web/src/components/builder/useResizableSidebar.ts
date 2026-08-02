@@ -6,9 +6,23 @@ export const SIDEBAR_MAX = 640;
 const SIDEBAR_DEFAULT = 340;
 /** Pixels moved per arrow-key press when resizing via the keyboard. */
 const KEYBOARD_STEP = 16;
+/**
+ * Room the preview pane must keep. The two-pane layout starts at 769px, so
+ * a persisted 640px sidebar would otherwise leave the preview 129px — and
+ * the chat pane is `flexShrink: 0`, so it never gives any of it back.
+ * Widths are stored in localStorage, so this is reachable simply by
+ * dragging wide on a large monitor and later opening a narrow window.
+ */
+const PREVIEW_MIN = 360;
+
+/** Upper bound that also respects the current viewport, not just the constant. */
+export function maxSidebarWidth(): number {
+  if (typeof window === "undefined") return SIDEBAR_MAX;
+  return Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, window.innerWidth - PREVIEW_MIN));
+}
 
 function clampWidth(n: number): number {
-  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
+  return Math.min(maxSidebarWidth(), Math.max(SIDEBAR_MIN, n));
 }
 
 function persistWidth(n: number) {
@@ -27,8 +41,14 @@ function getStoredSidebarWidth(): number {
 }
 
 export interface ResizableSidebar {
-  /** Current sidebar width in px (clamped to [SIDEBAR_MIN, SIDEBAR_MAX]). */
+  /** Current sidebar width in px (clamped to [SIDEBAR_MIN, max]). */
   width: number;
+  /**
+   * Effective upper bound right now — SIDEBAR_MAX, or less when the
+   * viewport can't spare it. Exposed so the splitter's aria-valuemax
+   * reports the bound the user can actually reach.
+   */
+  max: number;
   /** True while a drag is in progress. */
   resizing: boolean;
   /** Begin a drag — wire to the resize handle's onMouseDown. */
@@ -53,6 +73,20 @@ export interface ResizableSidebar {
 export function useResizableSidebar(): ResizableSidebar {
   const [width, setWidth] = useState<number>(getStoredSidebarWidth);
   const [resizing, setResizing] = useState(false);
+  const [max, setMax] = useState<number>(SIDEBAR_MAX);
+
+  // Re-clamp when the window changes size. The stored width is validated
+  // against the constants at read time, but those say nothing about how
+  // much room the current viewport actually has.
+  useEffect(() => {
+    function onResize() {
+      setMax(maxSidebarWidth());
+      setWidth((w) => clampWidth(w));
+    }
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // Keep the latest width in a ref so the mouseup persister reads the final
   // value without re-binding the listener on every pixel of drag.
@@ -98,5 +132,5 @@ export function useResizableSidebar(): ResizableSidebar {
     });
   }
 
-  return { width, resizing, startResize: () => setResizing(true), resetWidth, nudgeWidth };
+  return { width, max, resizing, startResize: () => setResizing(true), resetWidth, nudgeWidth };
 }
