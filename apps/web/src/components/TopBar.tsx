@@ -28,12 +28,17 @@ export function TopBar() {
 
   return (
     <header
+      // Horizontal padding and the logo/nav gap are classes rather than
+      // inline styles so they can tighten on phones — an inline value can't
+      // be overridden by a media query, which is why this bar previously
+      // carried its desktop spacing all the way down to 320px and pushed
+      // the whole document into horizontal scroll.
+      className="gap-2 px-3 sm:px-6"
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
         height: "var(--layout-topbar-h)",
-        padding: "0 24px",
         background: "var(--color-surface)",
         borderBottom: "1px solid var(--color-border)",
         position: "sticky",
@@ -43,18 +48,25 @@ export function TopBar() {
       }}
     >
       {/* Left: Logo + primary nav */}
-      <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+      <div className="flex min-w-0 items-center gap-3 sm:gap-6">
         <Link to="/" style={{ textDecoration: "none" }} aria-label="ArcadeAI home">
           <LogoFull />
         </Link>
-        <nav style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        {/* overflow-x-auto is the backstop: on a 320px screen the two
+            labels plus the account controls still don't fit, and scrolling
+            the nav within itself is far better than the whole document
+            gaining a horizontal scrollbar. At 375px and up nothing
+            overflows and the scroller is inert. */}
+        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <NavLink to="/" label="My Games" />
           <NavLink to="/discover" label="Discover" />
         </nav>
       </div>
 
-      {/* Right: PlanBadge + User */}
-      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      {/* Right: PlanBadge + User. Never shrinks — the account menu is the
+          only way out of a signed-in session, so it outranks the nav for
+          the last few pixels. */}
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <PlanBadge />
 
         {/* User avatar + dropdown */}
@@ -124,6 +136,11 @@ export function TopBar() {
             <ChevronDown
               size={12}
               strokeWidth={1.8}
+              // Hidden with the display name below sm: it's purely
+              // decorative there (open state is carried by aria-expanded
+              // and by the menu itself), and the avatar already reads as a
+              // menu trigger without it.
+              className="hidden sm:block"
               style={{
                 transform: open ? "rotate(180deg)" : "none",
                 transition: "transform 0.15s",
@@ -270,9 +287,11 @@ function NavLink({ to, label }: { to: "/" | "/discover"; label: string }) {
   return (
     <Link
       to={to}
+      // nowrap: without it these wrap to two lines when the bar gets tight
+      // and blow out the fixed 56px header height.
+      className="whitespace-nowrap px-2 py-1.5 sm:px-3"
       style={{
         position: "relative",
-        padding: "6px 12px",
         borderRadius: 8,
         fontSize: 13,
         fontWeight: active ? 600 : 500,
@@ -293,10 +312,11 @@ function NavLink({ to, label }: { to: "/" | "/discover"; label: string }) {
       {active && (
         <span
           aria-hidden="true"
+          // Insets track the link's responsive padding so the underline
+          // stays flush with the label at both sizes.
+          className="left-2 right-2 sm:left-3 sm:right-3"
           style={{
             position: "absolute",
-            left: 12,
-            right: 12,
             bottom: -2,
             height: 2,
             backgroundImage: "var(--gradient-brand)",

@@ -211,12 +211,12 @@ function PlayPage() {
     >
       {/* Top bar — minimal, no auth chrome */}
       <header
+        className="gap-2 px-3 sm:px-6"
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           height: "var(--layout-topbar-h)",
-          padding: "0 24px",
           background: "var(--color-surface)",
           borderBottom: "1px solid var(--color-border)",
           flexShrink: 0,
@@ -225,7 +225,7 @@ function PlayPage() {
         <Link to="/" style={{ textDecoration: "none" }} aria-label="ArcadeAI home">
           <LogoFull />
         </Link>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2.5">
           <Link
             to="/discover"
             style={{

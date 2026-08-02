@@ -310,12 +310,13 @@ function DiscoverPage() {
 function PublicTopBar() {
   return (
     <header
+      className="px-3 sm:px-6"
       style={{
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        gap: 8,
         height: "var(--layout-topbar-h)",
-        padding: "0 24px",
         background: "var(--color-surface)",
         borderBottom: "1px solid var(--color-border)",
         position: "sticky",

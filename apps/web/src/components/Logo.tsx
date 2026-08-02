@@ -73,11 +73,17 @@ export function LogoMark({ size = 28, className = "" }: LogoProps) {
   );
 }
 
+// All three consumers are header bars (TopBar, discover, play), and all
+// three are tight for horizontal room on a phone. The wordmark is the
+// single largest non-shrinkable item in them at ~79px, so it drops below
+// `sm` and the mark carries the brand on its own — the usual icon-only
+// treatment. Nothing else needs to change at the call sites.
 export function LogoFull({ className = "" }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-2 ${className}`}>
+    <span className={`inline-flex shrink-0 items-center gap-2 ${className}`}>
       <LogoMark size={26} />
       <span
+        className="hidden sm:inline"
         style={{
           backgroundImage: "var(--gradient-brand)",
           WebkitBackgroundClip: "text",
