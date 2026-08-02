@@ -41,7 +41,11 @@ export const DialogContent = React.forwardRef<
         "fixed left-1/2 top-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2",
         "rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 shadow-[0_24px_64px_rgba(0,0,0,0.6)]",
         "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
-        "focus:outline-none",
+        // No `focus:outline-none` here. Radix's FocusScope gives the panel
+        // tabIndex={-1} and focuses it when the dialog has no focusable
+        // child, and suppressing the outline left that state with no
+        // indicator at all — the class also outranks the global
+        // :focus-visible rule, so nothing else could restore it.
         className
       )}
       {...props}

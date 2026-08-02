@@ -355,7 +355,6 @@ export function GameCard({ game, view }: GameCardProps) {
                     fontSize: 13,
                     color: "var(--color-text-primary)",
                     fontFamily: "inherit",
-                    outline: "none",
                   }}
                 />
               ) : (
@@ -566,7 +565,6 @@ export function GameCard({ game, view }: GameCardProps) {
                 fontSize: 13,
                 color: "var(--color-text-primary)",
                 fontFamily: "inherit",
-                outline: "none",
               }}
             />
           </div>

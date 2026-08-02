@@ -350,19 +350,30 @@ export function BuilderLayout({
             background: "var(--color-surface)",
           }}
         >
+          {/* The textarea keeps `outline: none` because the focus indicator
+              belongs on this wrapper — the textarea is borderless and inset,
+              so outlining it would draw a ring inside the visible control.
+              The previous treatment was a 1px border tint at 40% alpha,
+              which is a colour-only change too faint to satisfy WCAG 2.4.11
+              on the app's primary input. Now the border goes solid accent
+              and picks up a 3px halo. */}
           <div
             style={{
               position: "relative",
               borderRadius: 12,
               border: "1px solid var(--color-border)",
               background: "var(--color-surface-raised)",
-              transition: "border-color 0.15s",
+              transition: "border-color 0.15s, box-shadow 0.15s",
             }}
             onFocusCapture={(e) => {
-              (e.currentTarget as HTMLDivElement).style.borderColor = "rgba(255,62,165,0.4)";
+              const el = e.currentTarget as HTMLDivElement;
+              el.style.borderColor = "var(--color-accent-primary)";
+              el.style.boxShadow = "0 0 0 3px rgba(255,62,165,0.22)";
             }}
             onBlurCapture={(e) => {
-              (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-border)";
+              const el = e.currentTarget as HTMLDivElement;
+              el.style.borderColor = "var(--color-border)";
+              el.style.boxShadow = "none";
             }}
           >
             <textarea

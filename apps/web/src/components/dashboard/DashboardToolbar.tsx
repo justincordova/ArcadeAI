@@ -89,7 +89,6 @@ export function DashboardToolbar({
             color: "var(--color-text-primary)",
             fontSize: 12,
             fontFamily: "inherit",
-            outline: "none",
             transition: "border-color 0.15s",
           }}
           onFocus={(e) => {
@@ -162,7 +161,6 @@ export function DashboardToolbar({
             fontSize: 12,
             fontFamily: "inherit",
             cursor: "pointer",
-            outline: "none",
             appearance: "none",
             backgroundImage:
               "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'><path d='M2.5 4l2.5 2.5L7.5 4' stroke='%237878a0' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",

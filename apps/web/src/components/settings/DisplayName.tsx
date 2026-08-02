@@ -16,7 +16,6 @@ const inputStyle: React.CSSProperties = {
   fontSize: 13,
   color: "var(--color-text-primary)",
   fontFamily: "inherit",
-  outline: "none",
   transition: "border-color 0.15s",
 };
 
