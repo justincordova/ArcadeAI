@@ -12,14 +12,16 @@ export function TopBar() {
   const { data: me } = useSession();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // Close the user menu when the user clicks anywhere outside it. Without
-  // this, the menu only closed on the two links it contains (both of which
-  // navigate away).
+  // Close the user menu when the user clicks anywhere outside it, or on
+  // Escape. Without this, the menu only closed on the two links it contains
+  // (both of which navigate away).
   useOutsideClick(
     menuRef,
     open,
-    useCallback(() => setOpen(false), [])
+    useCallback(() => setOpen(false), []),
+    triggerRef
   );
 
   const initial = me?.displayName?.[0]?.toUpperCase() ?? "?";
@@ -58,8 +60,11 @@ export function TopBar() {
         {/* User avatar + dropdown */}
         <div ref={menuRef} style={{ position: "relative" }}>
           <button
+            ref={triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={open}
             style={{
               display: "flex",
               alignItems: "center",
@@ -129,6 +134,8 @@ export function TopBar() {
 
           {open && (
             <div
+              role="menu"
+              aria-label="User menu"
               style={{
                 position: "absolute",
                 right: 0,

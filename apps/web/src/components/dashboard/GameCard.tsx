@@ -30,11 +30,13 @@ export function GameCard({ game, view }: GameCardProps) {
   const [hovered, setHovered] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
+  const kebabRef = useRef<HTMLButtonElement>(null);
 
   useOutsideClick(
     menuRef,
     menuOpen,
-    useCallback(() => setMenuOpen(false), [])
+    useCallback(() => setMenuOpen(false), []),
+    kebabRef
   );
 
   const renameMutation = useMutation({
@@ -90,11 +92,18 @@ export function GameCard({ game, view }: GameCardProps) {
   const kebab = (
     <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
       <button
+        ref={kebabRef}
         type="button"
         onClick={(e) => {
           e.stopPropagation();
           setMenuOpen((v) => !v);
         }}
+        // In grid view the kebab is hover-revealed, which leaves it
+        // invisible-but-focusable for keyboard users. Treating focus like
+        // hover reveals it when tabbed to.
+        onFocus={() => setHovered(true)}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
         style={{
           display: "flex",
           width: 28,
@@ -120,11 +129,14 @@ export function GameCard({ game, view }: GameCardProps) {
 
       {menuOpen && (
         <div
+          role="menu"
+          aria-label="Game options"
           style={{
             position: "absolute",
             right: 0,
             top: "calc(100% + 4px)",
             width: 140,
+
             background: "var(--color-surface)",
             border: "1px solid var(--color-border)",
             borderRadius: 10,

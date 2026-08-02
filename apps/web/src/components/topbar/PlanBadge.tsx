@@ -42,11 +42,13 @@ export function PlanBadge() {
   const { data: me, isLoading } = useSession();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useOutsideClick(
     ref,
     open,
-    useCallback(() => setOpen(false), [])
+    useCallback(() => setOpen(false), []),
+    triggerRef
   );
 
   if (isLoading) {
@@ -61,8 +63,12 @@ export function PlanBadge() {
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label={`${style.label} plan — usage details`}
         style={{
           display: "inline-flex",
           alignItems: "center",
