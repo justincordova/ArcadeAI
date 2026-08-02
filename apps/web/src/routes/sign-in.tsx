@@ -86,7 +86,7 @@ function SignInPage() {
 
   return (
     <div
-      className="flex min-h-screen items-center justify-center px-4"
+      className="flex min-h-dvh items-center justify-center px-4"
       style={{ background: "var(--color-bg)" }}
     >
       {/* Background grid pattern */}

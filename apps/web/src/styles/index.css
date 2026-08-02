@@ -82,11 +82,30 @@
   );
 
   /* Layout — height of the sticky top bar. Full-page surfaces size
-     themselves against this via calc(100vh - var(--layout-topbar-h)),
-     and the public header variants (play, discover) reuse it so every
-     header stays the same height. Not theme-dependent, so it lives only
+     themselves against this via
+     calc(var(--layout-viewport-h) - var(--layout-topbar-h)), and the
+     public header variants (play, discover) reuse it so every header
+     stays the same height. Not theme-dependent, so it lives only
      here in :root. */
   --layout-topbar-h: 56px;
+
+  /* Usable viewport height. Mobile browsers report 100vh as the *large*
+     viewport — the height the page would have if the address bar were
+     retracted — so a 100vh-tall container with overflow:hidden puts its
+     bottom edge underneath the toolbar and cannot scroll to recover it.
+     In the builder that bottom edge is the prompt box and the send
+     button. 100dvh tracks the toolbar instead.
+
+     Declared as a token because it is needed from inline styles, which
+     cannot carry a duplicate-property fallback the way a stylesheet can.
+     The @supports block below is that fallback. */
+  --layout-viewport-h: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --layout-viewport-h: 100dvh;
+  }
 }
 
 /* ── Light theme ──

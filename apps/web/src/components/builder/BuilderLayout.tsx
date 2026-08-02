@@ -204,7 +204,7 @@ export function BuilderLayout({
       style={{
         display: "flex",
         flexDirection: isMobile ? "column" : "row",
-        height: "calc(100vh - var(--layout-topbar-h))",
+        height: "calc(var(--layout-viewport-h) - var(--layout-topbar-h))",
         overflow: "hidden",
         background: "var(--color-bg)",
       }}

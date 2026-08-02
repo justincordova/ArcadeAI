@@ -204,7 +204,7 @@ function PlayPage() {
         // Fixed viewport height so the inner flex:1 chain has a real height
         // to resolve against. With minHeight, the iframe (height:100%) had
         // no resolved parent height and collapsed, cropping the canvas.
-        height: "100vh",
+        height: "var(--layout-viewport-h)",
         background: "var(--color-bg)",
         color: "var(--color-text-primary)",
       }}
@@ -416,7 +416,7 @@ function PlayLoading() {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        minHeight: "100vh",
+        minHeight: "var(--layout-viewport-h)",
         gap: 14,
         background: "var(--color-bg)",
       }}
@@ -447,7 +447,7 @@ function CenteredMessage({ children, isError }: { children: React.ReactNode; isE
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        minHeight: "100vh",
+        minHeight: "var(--layout-viewport-h)",
         gap: 12,
         background: "var(--color-bg)",
         color: isError ? "var(--color-danger)" : "var(--color-text-secondary)",

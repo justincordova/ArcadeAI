@@ -35,7 +35,7 @@ function PricingPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "var(--layout-viewport-h)",
         background: "var(--color-bg)",
         padding: "64px 24px",
         position: "relative",

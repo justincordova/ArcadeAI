@@ -16,7 +16,7 @@ function FullPageState({ children, isError }: { children: React.ReactNode; isErr
       role={isError ? "alert" : "status"}
       style={{
         display: "flex",
-        height: "calc(100vh - var(--layout-topbar-h))",
+        height: "calc(var(--layout-viewport-h) - var(--layout-topbar-h))",
         alignItems: "center",
         justifyContent: "center",
         flexDirection: "column",

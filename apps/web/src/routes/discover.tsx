@@ -93,7 +93,7 @@ function DiscoverPage() {
       style={{
         display: "flex",
         flexDirection: "column",
-        minHeight: "100vh",
+        minHeight: "var(--layout-viewport-h)",
         background: "var(--color-bg)",
         color: "var(--color-text-primary)",
       }}
