@@ -95,9 +95,7 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
     },
   });
 
-  function handleLikeClick(e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  function handleLikeClick() {
     if (!isAuthed) {
       navigate({ to: "/sign-in", search: { next: "/discover" } });
       return;
@@ -110,9 +108,13 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
   }
 
   return (
-    <Link
-      to="/play/$slug"
-      params={{ slug: game.slug }}
+    // The card is a plain container, not a link. It used to be a <Link>
+    // with the like <button> nested inside it — interactive content inside
+    // an <a> is invalid HTML, and assistive tech announces a link that
+    // contains a button with no reliable way to reach the inner control.
+    // Instead the anchor is a transparent overlay covering the card (the
+    // "stretched link" pattern) and the like button raises itself above it.
+    <div
       onMouseEnter={() => onHoverChange(true)}
       onMouseLeave={() => onHoverChange(false)}
       style={{
@@ -123,7 +125,6 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
         border: hovered ? "1px solid rgba(255,62,165,0.4)" : "1px solid var(--color-border)",
         background: "var(--color-surface)",
         overflow: "hidden",
-        textDecoration: "none",
         transition: "all 0.18s",
         boxShadow: hovered
           ? "0 8px 32px rgba(255,62,165,0.12), 0 1px 0 rgba(255,62,165,0.15)"
@@ -189,6 +190,11 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
             aria-label={game.liked ? "Unlike" : "Like"}
             aria-pressed={game.liked}
             style={{
+              // Lifts the button above the full-card link overlay below.
+              // The surrounding stats strip stays at z-index auto so the
+              // play count doesn't punch a dead spot in the link.
+              position: "relative",
+              zIndex: 2,
               display: "inline-flex",
               alignItems: "center",
               gap: 5,
@@ -310,7 +316,29 @@ export function DiscoverCard({ game, hovered, onHoverChange, isAuthed }: Discove
           <span style={{ color: "var(--color-text-secondary)" }}>"{game.originalPrompt}"</span>
         </p>
       </div>
-    </Link>
+
+      {/* Full-card link overlay. Rendered last and pinned over the tile so
+          the whole card stays clickable, while the like button above opts
+          out via z-index. The title is decorative text, so the accessible
+          name lives here. */}
+      <Link
+        to="/play/$slug"
+        params={{ slug: game.slug }}
+        aria-label={`Play ${game.title}`}
+        // Keyboard focus gets the same treatment as hover, so tabbing the
+        // gallery reveals the Play affordance instead of moving an outline
+        // across visually inert tiles.
+        onFocus={() => onHoverChange(true)}
+        onBlur={() => onHoverChange(false)}
+        style={{
+          position: "absolute",
+          inset: 0,
+          zIndex: 1,
+          borderRadius: 12,
+          textDecoration: "none",
+        }}
+      />
+    </div>
   );
 }
 
