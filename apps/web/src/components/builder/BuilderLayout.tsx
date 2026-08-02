@@ -114,6 +114,33 @@ export function BuilderLayout({
   const resolvedOverlay: OverlayStatus = overlayStatus ?? (isStreaming ? "generating" : "idle");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isNewGame = submitLabel === "Generate";
+
+  // Screen-reader narration for the stream lifecycle.
+  //
+  // StreamingIndicator and StatusOverlay carry this state visually, but both
+  // mount and unmount with it — and a live region inserted at the same moment
+  // as its own text is announced unreliably. Worse, nothing marked the *end*
+  // of a stream: the indicator simply disappeared, so a non-sighted user got
+  // no signal that the game was ready. This region stays mounted for the life
+  // of the builder and only its text changes, which is the shape assistive
+  // tech actually reacts to.
+  const [announcement, setAnnouncement] = useState("");
+  const prevOverlay = useRef<OverlayStatus>("idle");
+  useEffect(() => {
+    const prev = prevOverlay.current;
+    prevOverlay.current = resolvedOverlay;
+    if (prev === resolvedOverlay) return;
+
+    if (resolvedOverlay === "generating") {
+      setAnnouncement(streamLabel);
+    } else if (resolvedOverlay === "repairing") {
+      setAnnouncement("Detected an error in the game. Fixing it automatically.");
+    } else if (prev !== "idle") {
+      // A failed stream is already announced by ErrorBanner's role="alert";
+      // repeating it here would double up.
+      setAnnouncement(error ? "" : isNewGame ? "Game ready." : "Update applied.");
+    }
+  }, [resolvedOverlay, streamLabel, error, isNewGame]);
   const { data: config } = useConfig();
   const missingKeyError = getMissingKeyError(config);
   const { data: me } = useSession();
@@ -336,6 +363,10 @@ export function BuilderLayout({
           {isStreaming && streamingCode && <StreamingCodePreview code={streamingCode} />}
 
           {error && <ErrorBanner message={error} />}
+
+          <p className="sr-only" aria-live="polite" aria-atomic="true">
+            {announcement}
+          </p>
 
           <div ref={messagesEndRef} />
         </div>
