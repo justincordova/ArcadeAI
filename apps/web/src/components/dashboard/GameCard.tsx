@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useRef, useState } from "react";
 import { useInlineRename } from "@/hooks/useInlineRename.js";
+import { useMediaQuery } from "@/hooks/useMediaQuery.js";
 import { useOutsideClick } from "@/hooks/useOutsideClick.js";
 import {
   deleteGame,
@@ -28,6 +29,7 @@ export function GameCard({ game, view }: GameCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const canHover = useMediaQuery("(hover: hover)");
 
   const menuRef = useRef<HTMLDivElement>(null);
   const kebabRef = useRef<HTMLButtonElement>(null);
@@ -119,7 +121,11 @@ export function GameCard({ game, view }: GameCardProps) {
           cursor: "pointer",
           fontSize: 16,
           lineHeight: 1,
-          opacity: view === "list" ? 1 : hovered || menuOpen ? 1 : 0,
+          // Hover-to-reveal only where hover exists. On a touch device
+          // `hovered` is never set, so in grid view this rendered a fully
+          // transparent — but still tappable — button, leaving Rename and
+          // Delete invisible on every phone and tablet.
+          opacity: view === "list" || !canHover || hovered || menuOpen ? 1 : 0,
           transition: "opacity 0.15s",
         }}
         aria-label="Game options"
