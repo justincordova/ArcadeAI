@@ -229,6 +229,10 @@ export function BuilderLayout({
               aria-pressed={mobileTab === tab}
               style={{
                 flex: 1,
+                // ~31px before. This is the only way to move between the
+                // chat and the game on a phone, so it gets a full 44px
+                // touch target rather than the app's usual dense sizing.
+                minHeight: 44,
                 padding: "8px 0",
                 borderRadius: 8,
                 border: "none",
@@ -504,8 +508,8 @@ export function BuilderLayout({
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    width: 30,
-                    height: 30,
+                    width: 36,
+                    height: 36,
                     borderRadius: 8,
                     border: "none",
                     background: "var(--color-danger)",
@@ -523,11 +527,15 @@ export function BuilderLayout({
                   disabled={!canSubmit}
                   aria-label="Send"
                   style={{
+                    // 30px before. Submitting the prompt is the app's
+                    // primary action; 36 clears WCAG 2.5.8 with margin
+                    // while still sitting proportionate to the cost line
+                    // it shares a row with.
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    width: 30,
-                    height: 30,
+                    width: 36,
+                    height: 36,
                     borderRadius: 8,
                     border: "none",
                     background: canSubmit

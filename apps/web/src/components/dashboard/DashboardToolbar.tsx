@@ -111,8 +111,9 @@ export function DashboardToolbar({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 20,
-              height: 20,
+              // 20x20 was below the 24x24 floor in WCAG 2.5.8.
+              width: 24,
+              height: 24,
               border: "none",
               background: "transparent",
               color: "var(--color-text-muted)",
