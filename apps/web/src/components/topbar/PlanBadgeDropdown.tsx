@@ -91,6 +91,11 @@ export function PlanBadgeDropdown({
         right: 0,
         top: "calc(100% + 8px)",
         width: 280,
+        // The panel is right-anchored to a badge that sits ~108px in from
+        // the right edge, so a hard 280px ran off the left of the screen
+        // below ~388px wide — the usage numbers were the part that got
+        // clipped. Cap it to the viewport minus a gutter instead.
+        maxWidth: "calc(100vw - 24px)",
         background: "var(--color-surface)",
         border: "1px solid var(--color-border)",
         borderRadius: 14,
