@@ -346,6 +346,7 @@ export function GameCard({ game, view }: GameCardProps) {
                     if (e.key === "Escape") rename.cancel();
                   }}
                   onClick={(e) => e.stopPropagation()}
+                  aria-label={`Rename ${game.title}`}
                   style={{
                     width: "100%",
                     background: "var(--color-surface-overlay)",
@@ -556,6 +557,7 @@ export function GameCard({ game, view }: GameCardProps) {
                 if (e.key === "Enter") rename.commit();
                 if (e.key === "Escape") rename.cancel();
               }}
+              aria-label={`Rename ${game.title}`}
               style={{
                 width: "100%",
                 borderRadius: 6,

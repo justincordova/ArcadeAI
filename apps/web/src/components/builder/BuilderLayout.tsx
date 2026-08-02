@@ -404,6 +404,14 @@ export function BuilderLayout({
               }}
               disabled={isStreaming || Boolean(missingKeyError)}
               rows={3}
+              // Placeholders are not accessible names — they vanish on the
+              // first keystroke, so a screen-reader user who navigates back
+              // to a partly-typed prompt hears an unlabelled edit field.
+              aria-label={
+                submitLabel === "Refine"
+                  ? "Describe a change to this game"
+                  : "Describe the game you want to build"
+              }
               placeholder={
                 missingKeyError
                   ? "Configure API keys to enable generation..."
