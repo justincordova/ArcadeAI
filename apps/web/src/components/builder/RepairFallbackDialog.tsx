@@ -4,7 +4,14 @@
 
 import { AlertCircle, ChevronDown } from "lucide-react";
 import { Button } from "../ui/button.js";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog.js";
 
 interface RepairFallbackDialogProps {
   open: boolean;
@@ -44,7 +51,13 @@ export function RepairFallbackDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <p
+        {/* DialogDescription rather than a bare <p>: Radix always stamps
+            aria-describedby onto the dialog, so with no description
+            rendered this was the one dialog in the app pointing at an id
+            that existed nowhere in the DOM. The error text is the
+            description, so wiring it up is also the accurate markup.
+            Renders a <p>; inline styles win over the component's defaults. */}
+        <DialogDescription
           className="font-mono"
           style={{
             fontSize: 12,
@@ -58,7 +71,7 @@ export function RepairFallbackDialog({
           }}
         >
           {truncatedMessage}
-        </p>
+        </DialogDescription>
         <details style={{ cursor: "pointer", marginTop: 12 }}>
           <summary
             style={{
