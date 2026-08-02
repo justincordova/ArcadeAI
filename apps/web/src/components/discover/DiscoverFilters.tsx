@@ -110,7 +110,16 @@ export function DiscoverFilters({ sort, onSortChange, genre, onGenreChange }: Fi
           alignItems: "center",
           gap: 6,
           overflowX: "auto",
-          flex: 1,
+          // `flex: 1` here meant flex-basis:0, so the rail's hypothetical
+          // size was always zero and it never triggered the parent's
+          // flex-wrap — it just compressed. At 375px that left it 49px wide
+          // holding 623px of pills, i.e. one-and-a-bit visible genres in a
+          // scroller most people would never think to swipe.
+          //
+          // A real basis makes it wrap to its own full-width row once the
+          // sort group no longer leaves it room (below a ~530px container),
+          // while still sharing the row and growing on wider screens.
+          flex: "1 1 260px",
           minWidth: 0,
           paddingBottom: 2,
         }}
