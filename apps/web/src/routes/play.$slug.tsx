@@ -328,7 +328,11 @@ function PlayPage() {
                 marginBottom: 2,
               }}
             >
-              <p
+              {/* The game's name is what this page is about, so it is the
+                  document heading — the route previously had none at all.
+                  Styling is unchanged; it stays visually a compact header
+                  label rather than a display heading. */}
+              <h1
                 style={{
                   fontSize: 13,
                   fontWeight: 600,
@@ -341,7 +345,7 @@ function PlayPage() {
                 }}
               >
                 {game.title}
-              </p>
+              </h1>
               {game.genre && (
                 <span
                   style={{

@@ -103,8 +103,11 @@ export function PlanCard({ plan, interval, isActive }: PlanCardProps) {
         </span>
       )}
 
-      {/* Plan name — small uppercase label, gradient via text-clip */}
-      <h3
+      {/* Plan name — small uppercase label, gradient via text-clip.
+          h2, not h3: /pricing's only other heading is its h1, so an h3 here
+          skipped a level and left the page with no second-level structure
+          to navigate by. */}
+      <h2
         style={{
           fontSize: 12,
           fontWeight: 700,
@@ -117,7 +120,7 @@ export function PlanCard({ plan, interval, isActive }: PlanCardProps) {
         }}
       >
         {plan.name.toUpperCase()}
-      </h3>
+      </h2>
 
       {/* Price */}
       <div style={{ marginBottom: 4 }}>

@@ -295,17 +295,23 @@ export function BuilderLayout({
             <ChevronLeft size={12} strokeWidth={1.8} />
             Dashboard
           </Link>
-          <span
+          {/* Both builder routes (/game/new and /game/$id) rendered without
+              any heading element at all. This label already names the mode,
+              so it becomes the document heading rather than inventing new
+              copy. Visual treatment is unchanged — margin is zeroed because
+              h1 carries a UA default the span did not. */}
+          <h1
             style={{
               fontSize: 11,
               fontWeight: 700,
               letterSpacing: "0.06em",
               color: "var(--color-text-muted)",
               textTransform: "uppercase",
+              margin: 0,
             }}
           >
             {isNewGame ? "New Game" : "Refine"}
-          </span>
+          </h1>
         </div>
 
         {/* Missing key banner */}
