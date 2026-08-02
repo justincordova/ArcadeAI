@@ -381,6 +381,7 @@ function Dashboard() {
 function LoadError({ onRetry }: { onRetry: () => void }) {
   return (
     <div
+      role="alert"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -406,6 +407,9 @@ function LoadError({ onRetry }: { onRetry: () => void }) {
 function NoResults({ onClear }: { onClear: () => void }) {
   return (
     <div
+      // Announces as the user types in the search box, so a screen-reader
+      // user learns the query emptied the grid instead of hearing silence.
+      role="status"
       style={{
         display: "flex",
         flexDirection: "column",

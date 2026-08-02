@@ -311,6 +311,10 @@ export function BuilderLayout({
         {/* Missing key banner */}
         {missingKeyError && (
           <div
+            // Appears only once useConfig() resolves, and it disables the
+            // prompt box — a silent swap would leave the input inexplicably
+            // dead for anyone not looking at the banner.
+            role="alert"
             style={{
               margin: "12px 12px 0",
               padding: "10px 14px",

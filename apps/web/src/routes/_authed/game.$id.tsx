@@ -11,6 +11,9 @@ export const Route = createFileRoute("/_authed/game/$id")({
 function FullPageState({ children, isError }: { children: React.ReactNode; isError?: boolean }) {
   return (
     <div
+      // Both branches replace the whole route after an async resolve, so
+      // without a role the swap is silent — an error reads as an empty page.
+      role={isError ? "alert" : "status"}
       style={{
         display: "flex",
         height: "calc(100vh - var(--layout-topbar-h))",

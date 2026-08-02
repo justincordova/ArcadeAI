@@ -35,7 +35,9 @@ export function DeleteGameDialog({
           <DialogDescription>This action cannot be undone.</DialogDescription>
         </DialogHeader>
         {hasError && (
-          <p className="text-xs text-[var(--color-danger)]">Failed to delete. Please try again.</p>
+          <p role="alert" className="text-xs text-[var(--color-danger)]">
+            Failed to delete. Please try again.
+          </p>
         )}
         <DialogFooter>
           <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={isDeleting}>

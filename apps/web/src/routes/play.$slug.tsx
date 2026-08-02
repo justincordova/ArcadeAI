@@ -406,6 +406,7 @@ function PlayPage() {
 function PlayLoading() {
   return (
     <div
+      role="status"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -436,6 +437,7 @@ function PlayLoading() {
 function CenteredMessage({ children, isError }: { children: React.ReactNode; isError?: boolean }) {
   return (
     <div
+      role={isError ? "alert" : "status"}
       style={{
         display: "flex",
         flexDirection: "column",

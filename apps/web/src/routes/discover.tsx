@@ -274,6 +274,7 @@ function DiscoverPage() {
                 the failure so the user knows more didn't load and can retry. */}
             {query.isError && items.length > 0 && (
               <p
+                role="alert"
                 style={{
                   textAlign: "center",
                   marginTop: 16,
@@ -404,6 +405,7 @@ function DiscoverSkeleton() {
 function DiscoverError({ onRetry }: { onRetry: () => void }) {
   return (
     <div
+      role="alert"
       style={{
         display: "flex",
         flexDirection: "column",

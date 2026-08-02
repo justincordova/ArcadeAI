@@ -58,7 +58,7 @@ export function DangerZone() {
           </DialogHeader>
 
           {mutation.error && (
-            <p className="text-xs text-[var(--color-danger)]">
+            <p role="alert" className="text-xs text-[var(--color-danger)]">
               Failed to delete account. Try again.
             </p>
           )}
