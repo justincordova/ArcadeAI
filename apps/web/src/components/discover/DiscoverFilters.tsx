@@ -43,8 +43,15 @@ export function DiscoverFilters({ sort, onSortChange, genre, onGenreChange }: Fi
       }}
     >
       {/* Sort pill group */}
+      {/* Not a tablist. These reorder the gallery in place via a URL param
+          rather than swapping panels, and the ARIA tabs pattern would owe a
+          tabpanel, aria-controls, roving tabindex, and arrow-key handling —
+          none of which existed, so screen readers announced "tab 1 of 3" and
+          promised keyboard behaviour the component did not implement.
+          Toggle buttons in a labelled group is what they actually are, and
+          matches DashboardToolbar's FilterPill and IntervalToggle. */}
       <div
-        role="tablist"
+        role="group"
         aria-label="Sort"
         style={{
           display: "inline-flex",
@@ -59,8 +66,7 @@ export function DiscoverFilters({ sort, onSortChange, genre, onGenreChange }: Fi
           return (
             <button
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-pressed={active}
               key={value}
               onClick={() => onSortChange(value)}
               style={{
@@ -97,6 +103,8 @@ export function DiscoverFilters({ sort, onSortChange, genre, onGenreChange }: Fi
 
       {/* Genre rail — horizontally scrollable on narrow screens */}
       <div
+        role="group"
+        aria-label="Filter by genre"
         style={{
           display: "flex",
           alignItems: "center",
@@ -134,6 +142,9 @@ function GenrePill({
     <button
       type="button"
       onClick={onClick}
+      // The selected genre was signalled by background and border only, so
+      // the active filter was invisible to assistive tech.
+      aria-pressed={active}
       style={{
         flexShrink: 0,
         padding: "5px 12px",
