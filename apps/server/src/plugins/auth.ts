@@ -1,7 +1,10 @@
+import { users } from "@arcadeai/db";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { auth } from "../lib/auth.js";
+import { db } from "../lib/db.js";
 import { sendError, unauthorizedError } from "../lib/errors.js";
 import { guardPath } from "../lib/guard-path.js";
+import { getSupabaseSession } from "../lib/supabase-auth.js";
 
 type AuthSession = Awaited<ReturnType<typeof auth.api.getSession>>;
 
@@ -107,9 +110,26 @@ export function registerAuthGuard(app: FastifyInstance) {
     }
 
     try {
-      const session = await getSession(request);
+      const session =
+        process.env.AUTH_MODE === "supabase"
+          ? await getSupabaseSession(request.headers.authorization)
+          : await getSession(request);
       if (!session) {
         return sendError(reply, 401, unauthorizedError());
+      }
+      if (process.env.AUTH_MODE === "supabase") {
+        const now = new Date();
+        await db
+          .insert(users)
+          .values({
+            id: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            displayName: session.user.name,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing();
       }
       // biome-ignore lint/suspicious/noExplicitAny: Better Auth session shape
       (request as FastifyRequest & { authSession: any }).authSession = session;
@@ -120,6 +140,7 @@ export function registerAuthGuard(app: FastifyInstance) {
 }
 
 export async function authPlugin(app: FastifyInstance) {
+  if (process.env.AUTH_MODE === "supabase") return;
   // Capture form-encoded bodies as raw Buffers (Fastify only auto-parses
   // application/json out of the box). Better Auth needs to receive these
   // verbatim so it can parse them itself. JSON bodies are still parsed by

@@ -2,7 +2,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { LogoMark } from "../components/Logo.js";
 import { Button } from "../components/ui/button.js";
-import { fetchMeOrNull, startSocialSignIn } from "../lib/api/auth.js";
+import {
+  fetchMeOrNull,
+  isSupabaseAuthEnabled,
+  signInWithPassword,
+  signUpWithPassword,
+  startSocialSignIn,
+} from "../lib/api/auth.js";
 
 interface SignInSearch {
   next?: string;
@@ -72,6 +78,9 @@ function SignInPage() {
   const nextUrl = validateNext(next);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<"google" | "github" | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordPending, setPasswordPending] = useState<"sign-in" | "sign-up" | null>(null);
 
   const handleSignIn = async (provider: "google" | "github") => {
     setError(null);
@@ -81,6 +90,22 @@ function SignInPage() {
     } catch (err) {
       setPending(null);
       setError(err instanceof Error ? err.message : "Sign-in failed");
+    }
+  };
+
+  const handlePasswordAuth = async (action: "sign-in" | "sign-up") => {
+    setError(null);
+    setPasswordPending(action);
+    try {
+      if (action === "sign-in") {
+        await signInWithPassword(email, password);
+      } else {
+        await signUpWithPassword(email, password);
+      }
+      window.location.assign(nextUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed");
+      setPasswordPending(null);
     }
   };
 
@@ -200,29 +225,81 @@ function SignInPage() {
               also responds to keyboard focus and touch (the old inline
               onMouseEnter/onMouseLeave handlers only fired for mouse). The
               className overrides just the sign-in-specific sizing. */}
-          <div className="flex flex-col gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => handleSignIn("google")}
-              disabled={pending !== null}
-              className="h-auto w-full gap-3 rounded-xl px-4 py-3 text-sm"
+          {isSupabaseAuthEnabled ? (
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handlePasswordAuth("sign-in");
+              }}
             >
-              <GoogleIcon />
-              {pending === "google" ? "Redirecting..." : "Continue with Google"}
-            </Button>
+              <label className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                Email
+                <input
+                  required
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ background: "var(--color-bg)", borderColor: "var(--color-border)" }}
+                />
+              </label>
+              <label className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                Password
+                <input
+                  required
+                  minLength={6}
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  style={{ background: "var(--color-bg)", borderColor: "var(--color-border)" }}
+                />
+              </label>
+              <Button
+                type="submit"
+                disabled={passwordPending !== null}
+                className="h-auto w-full rounded-xl px-4 py-3 text-sm"
+              >
+                {passwordPending === "sign-in" ? "Signing in..." : "Sign in"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handlePasswordAuth("sign-up")}
+                disabled={passwordPending !== null}
+                className="h-auto w-full rounded-xl px-4 py-3 text-sm"
+              >
+                {passwordPending === "sign-up" ? "Creating account..." : "Create local account"}
+              </Button>
+            </form>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => handleSignIn("google")}
+                disabled={pending !== null}
+                className="h-auto w-full gap-3 rounded-xl px-4 py-3 text-sm"
+              >
+                <GoogleIcon />
+                {pending === "google" ? "Redirecting..." : "Continue with Google"}
+              </Button>
 
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => handleSignIn("github")}
-              disabled={pending !== null}
-              className="h-auto w-full gap-3 rounded-xl px-4 py-3 text-sm"
-            >
-              <GitHubIcon />
-              {pending === "github" ? "Redirecting..." : "Continue with GitHub"}
-            </Button>
-          </div>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => handleSignIn("github")}
+                disabled={pending !== null}
+                className="h-auto w-full gap-3 rounded-xl px-4 py-3 text-sm"
+              >
+                <GitHubIcon />
+                {pending === "github" ? "Redirecting..." : "Continue with GitHub"}
+              </Button>
+            </div>
+          )}
 
           {error && (
             <p

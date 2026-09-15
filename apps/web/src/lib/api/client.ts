@@ -46,6 +46,12 @@ export interface ApiFetchOptions extends Omit<RequestInit, "body"> {
   json?: unknown;
 }
 
+export async function getApiAuthHeaders(): Promise<HeadersInit | undefined> {
+  if (!supabase) return undefined;
+  const { data } = await supabase.auth.getSession();
+  return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : undefined;
+}
+
 /**
  * Single fetch wrapper for all `/api/*` calls. Centralizes the four things
  * every call site used to repeat by hand:
@@ -69,6 +75,10 @@ export async function apiFetch<T>(path: string, opts: ApiFetchOptions = {}): Pro
   const isStateChanging = STATE_CHANGING.has(upperMethod);
 
   const finalHeaders = new Headers(headers);
+  const authHeaders = await getApiAuthHeaders();
+  if (authHeaders) {
+    for (const [key, value] of Object.entries(authHeaders)) finalHeaders.set(key, value);
+  }
   let body: BodyInit | undefined;
   if (json !== undefined) {
     finalHeaders.set("Content-Type", "application/json");
@@ -137,3 +147,5 @@ export async function toApiError(res: Response): Promise<ApiError> {
   }
   return new ApiError(res.status, code, message, details);
 }
+
+import { supabase } from "@/lib/supabase.js";

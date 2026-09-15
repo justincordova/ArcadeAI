@@ -50,6 +50,9 @@ const BaseSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
   GITHUB_CLIENT_ID: z.string().min(1).optional(),
   GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+  AUTH_MODE: z.enum(["better-auth", "supabase"]).default("better-auth"),
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_JWKS_URL: z.string().url().optional(),
 
   // LLM
   ANTHROPIC_API_KEY: z.string().min(1).optional(),

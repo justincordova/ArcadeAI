@@ -1,6 +1,7 @@
 import type { MeResponse } from "@arcadeai/shared";
 import { queryClient } from "@/lib/query-client.js";
-import { API_BASE, apiFetch, toApiError } from "./client.js";
+import { isSupabaseAuthEnabled, supabase } from "@/lib/supabase.js";
+import { API_BASE, apiFetch, getApiAuthHeaders, toApiError } from "./client.js";
 
 export type { MeResponse };
 
@@ -19,7 +20,8 @@ export type { MeResponse };
  * mapping is the opposite of apiFetch's throw-on-non-2xx contract.
  */
 export async function fetchMeOrNull(): Promise<MeResponse | null> {
-  const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
+  const headers = await getApiAuthHeaders();
+  const res = await fetch(`${API_BASE}/api/me`, { credentials: "include", headers });
   if (res.status === 401) return null;
   if (!res.ok) {
     // 4xx (except 401) and 5xx are real errors — surface them with code.
@@ -30,10 +32,14 @@ export async function fetchMeOrNull(): Promise<MeResponse | null> {
 
 export async function signOut(): Promise<void> {
   try {
-    await fetch(`${API_BASE}/api/auth/sign-out`, {
-      method: "POST",
-      credentials: "include",
-    });
+    if (supabase) {
+      await supabase.auth.signOut();
+    } else {
+      await fetch(`${API_BASE}/api/auth/sign-out`, {
+        method: "POST",
+        credentials: "include",
+      });
+    }
   } catch {
     // Network failure — proceed anyway. Callers fire-and-forget this
     // (TopBar's onClick), so an uncaught rejection here meant the click
@@ -48,6 +54,20 @@ export async function signOut(): Promise<void> {
   queryClient.clear();
   window.location.href = "/sign-in";
 }
+
+export async function signInWithPassword(email: string, password: string): Promise<void> {
+  if (!supabase) throw new Error("Supabase authentication is not configured");
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+}
+
+export async function signUpWithPassword(email: string, password: string): Promise<void> {
+  if (!supabase) throw new Error("Supabase authentication is not configured");
+  const { error } = await supabase.auth.signUp({ email, password });
+  if (error) throw error;
+}
+
+export { isSupabaseAuthEnabled };
 
 /**
  * Initiates a social sign-in via Better Auth.

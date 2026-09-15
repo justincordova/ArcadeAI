@@ -68,6 +68,41 @@ bun run dev
 - Web: <http://localhost:5173>
 - Server: <http://localhost:3000>
 
+### Local Supabase
+
+The checked-in Supabase project uses Docker through the official CLI. Its
+dedicated `553xx` ports avoid the common `543xx` range used by other projects.
+
+```bash
+bun run supabase:start
+cp apps/server/.env.local.example apps/server/.env.local
+cp apps/web/.env.local.example apps/web/.env.local
+bun run supabase:status # copy PUBLISHABLE_KEY into apps/web/.env.local
+bun run db:migrate:local
+bun run dev
+```
+
+`AUTH_MODE=supabase` enables local Supabase email/password authentication. The
+browser uses the configured publishable key; the API validates access tokens
+against `SUPABASE_JWKS_URL`. Email confirmations are disabled locally, so a
+new account can sign in immediately without OAuth credentials. The app creates
+its profile on the first authenticated API request. Better Auth and OAuth remain
+the default when `AUTH_MODE` and the Vite Supabase variables are absent.
+
+- Studio: <http://127.0.0.1:55323>
+- Mailpit: <http://127.0.0.1:55325>
+- Auth/Admin API: <http://127.0.0.1:55321/auth/v1>
+- JWKS: <http://127.0.0.1:55321/auth/v1/.well-known/jwks.json>
+
+`bun run supabase:reset` resets Supabase-owned local state, then reapplies the
+Postgres application schema from `packages/db/src/migrations/postgres`. The
+application schema intentionally is not duplicated under `supabase/migrations`.
+Run `bun run supabase:stop` when finished.
+
+The existing SQLite database is never modified by these commands. The initial
+Postgres baseline is ready for application-data migration; Better Auth OAuth
+sessions and provider credentials are not portable and users must sign in again.
+
 ```bash
 curl http://localhost:3000/api/health   # → {"ok":true,...}
 ```
@@ -84,6 +119,11 @@ bun run test          # bun test across workspaces
 bun run db:migrate    # apply pending migrations + post-migrate (sqlite-vec)
 bun run db:generate   # drizzle-kit generate (after schema edits)
 bun run db:studio     # open Drizzle Studio against the local DB
+bun run supabase:start  # start local Postgres, Auth, Studio, and Mailpit
+bun run supabase:stop   # stop the local stack
+bun run supabase:status # show URLs and generated local keys
+bun run db:migrate:local # apply package-owned app schema to local Postgres
+bun run supabase:reset  # reset local Supabase then reapply app schema
 ```
 
 ## Architecture
