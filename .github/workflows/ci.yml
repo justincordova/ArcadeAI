@@ -31,11 +31,10 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          # Pin to the same minor as the production image (Dockerfile:
-          # oven/bun:1.2-debian). `latest` let CI green-light code against a
-          # Bun version production never runs — and a new Bun release could
-          # break CI with no code change.
-          bun-version: "1.2"
+          # Bun 1.4 respects the checked-in isolated workspace linker. Bun 1.2
+          # installed duplicate Drizzle copies, which made private SQL types
+          # incompatible across the server and database workspaces.
+          bun-version: "1.4.2"
 
       - run: bun install --frozen-lockfile
 
