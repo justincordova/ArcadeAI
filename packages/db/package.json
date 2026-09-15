@@ -10,10 +10,12 @@
     "typecheck": "tsc --noEmit",
     "migrate": "bun run src/migrate.ts",
     "generate": "drizzle-kit generate",
-    "studio": "drizzle-kit studio"
+    "studio": "drizzle-kit studio",
+    "migrate:postgres": "bun run src/migrate-postgres.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.8",
     "sqlite-vec": "^0.1.9"
   },
   "devDependencies": {

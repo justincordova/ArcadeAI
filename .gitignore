@@ -12,3 +12,5 @@ apps/server/data/
 .tanstack/
 apps/web/src/routeTree.gen.ts
 apps/server/scripts/rag-embeddings/
+supabase/.temp/
+supabase/.branches/

@@ -1,0 +1,4 @@
+[install]
+# Workspace dependencies need isolated links; hoisting leaves Bun 1.3/1.4 with
+# invalid transitive links in this monorepo.
+linker = "isolated"

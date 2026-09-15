@@ -39,6 +39,8 @@
       "!**/apps/web/index.html",
       "!**/apps/web/src/routeTree.gen.ts",
       "!**/packages/db/src/migrations",
+      "!**/supabase/.temp",
+      "!**/supabase/.branches",
       "!**/apps/server/scripts/rag-curated",
       "!**/apps/server/scripts/rag-embeddings"
     ]
