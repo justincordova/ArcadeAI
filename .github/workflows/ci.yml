@@ -19,9 +19,8 @@ concurrency:
 
 jobs:
   build:
-    # sqlite-vec is a no-op on Linux's bundled SQLite (the macOS-only
-    # Database.setCustomSQLite path in packages/db only fires on darwin),
-    # so a stock ubuntu runner is sufficient — no extra system packages.
+    # The pgvector service below supplies the extensions required by the
+    # PostgreSQL test fixture; no runner-level database packages are needed.
     runs-on: ubuntu-latest
     services:
       postgres:
