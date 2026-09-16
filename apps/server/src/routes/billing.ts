@@ -1,8 +1,8 @@
 // Billing routes: plan/tier changes and the resulting credit-limit resets.
 // No real payment processor is wired up (SPEC §10) — see change-plan below
 // for how the prototype caps balances on upgrade/downgrade.
-import { accounts, users } from "@arcadeai/db";
-import type { LinkedProvider, Theme } from "@arcadeai/shared";
+import { users } from "@arcadeai/db";
+import type { Theme } from "@arcadeai/shared";
 import { TIER_CREDIT_LIMITS } from "@arcadeai/shared";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
@@ -76,11 +76,11 @@ export async function billingRoutes(app: FastifyInstance) {
       .update(users)
       .set({
         tier,
-        creditsRemainingMonthly: sql`MIN(${users.creditsRemainingMonthly}, ${limits.monthly})`,
-        creditsRemainingDaily: sql`MIN(${users.creditsRemainingDaily}, ${limits.daily})`,
+        creditsRemainingMonthly: sql`LEAST(${users.creditsRemainingMonthly}, ${limits.monthly})`,
+        creditsRemainingDaily: sql`LEAST(${users.creditsRemainingDaily}, ${limits.daily})`,
         monthlyResetAt,
         dailyResetAt,
-        updatedAt: new Date(now),
+        updatedAt: now,
       })
       .where(eq(users.id, user.id));
 
@@ -91,14 +91,6 @@ export async function billingRoutes(app: FastifyInstance) {
     const fresh = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
     const u = fresh[0];
     if (!u) return sendError(reply, 404, notFoundError("User not found"));
-
-    const accountRows = await db
-      .select({ providerId: accounts.providerId })
-      .from(accounts)
-      .where(eq(accounts.userId, user.id));
-    const linkedProviders = accountRows
-      .map((r) => r.providerId)
-      .filter((p): p is LinkedProvider => p === "google" || p === "github");
 
     return reply.send({
       id: u.id,
@@ -112,7 +104,7 @@ export async function billingRoutes(app: FastifyInstance) {
       monthlyResetAt: u.monthlyResetAt,
       lifetimeGenerationsUsed: u.lifetimeGenerationsUsed,
       lifetimeRefinementsUsed: u.lifetimeRefinementsUsed,
-      linkedProviders,
+      linkedProviders: [],
     });
   });
 }

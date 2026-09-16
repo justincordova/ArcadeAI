@@ -7,40 +7,35 @@
 // user-deleted-mid-flight null return.
 //
 // Same strategy as charge.test.ts: mock the singleton lib/db.ts with a fresh
-// in-memory DB before importing the module under test.
+// PostgreSQL test schema before importing the module under test.
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 
-beforeEach(() => {
-  testDb = createTestDb();
+beforeEach(async () => {
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
 });
 
-afterEach(() => {
-  testDb.close();
+afterEach(async () => {
+  await testDb.close();
 });
 
-function readUser(userId: string) {
-  return testDb.sqlite
-    .query<
-      {
-        credits_remaining_daily: number;
-        credits_remaining_monthly: number;
-        daily_reset_at: number;
-        monthly_reset_at: number;
-      },
-      [string]
-    >(
-      `SELECT credits_remaining_daily, credits_remaining_monthly, daily_reset_at, monthly_reset_at
-       FROM "user" WHERE id = ?`
-    )
-    .get(userId);
+async function readUser(userId: string) {
+  const [user] = await testDb.sql<
+    {
+      credits_remaining_daily: number;
+      credits_remaining_monthly: number;
+      daily_reset_at: number;
+      monthly_reset_at: number;
+    }[]
+  >`SELECT credits_remaining_daily, credits_remaining_monthly, daily_reset_at::float8 daily_reset_at, monthly_reset_at::float8 monthly_reset_at FROM "user" WHERE id = ${userId}::uuid`;
+  return user;
 }
 
 describe("nextUtcMidnight / nextUtcMonthStart", () => {
@@ -70,7 +65,7 @@ describe("applyResets — reset boundaries", () => {
   test("no-op when neither boundary is due (returns stored counters)", async () => {
     const { applyResets } = await import("../src/services/usage/reset.js");
     const future = Date.now() + 60_000;
-    const { id } = insertTestUser(testDb.sqlite, {
+    const { id } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 123,
       creditsRemainingMonthly: 456,
@@ -82,14 +77,14 @@ describe("applyResets — reset boundaries", () => {
     expect(result?.creditsRemainingDaily).toBe(123);
     expect(result?.creditsRemainingMonthly).toBe(456);
     // Timestamps untouched.
-    expect(readUser(id)?.daily_reset_at).toBe(future);
+    expect((await readUser(id))?.daily_reset_at).toBe(future);
   });
 
   test("daily boundary passed refills daily only, leaves monthly balance", async () => {
     const { applyResets } = await import("../src/services/usage/reset.js");
     const past = Date.now() - 1000;
     const future = Date.now() + 30 * 24 * 60 * 60 * 1000;
-    const { id } = insertTestUser(testDb.sqlite, {
+    const { id } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 10, // depleted
       creditsRemainingMonthly: 1500, // partially spent, monthly not due
@@ -102,7 +97,7 @@ describe("applyResets — reset boundaries", () => {
     expect(result?.creditsRemainingDaily).toBe(500);
     expect(result?.creditsRemainingMonthly).toBe(1500);
     // Persisted, and the daily timestamp advanced into the future.
-    const row = readUser(id);
+    const row = await readUser(id);
     expect(row?.credits_remaining_daily).toBe(500);
     expect(row?.credits_remaining_monthly).toBe(1500);
     expect(row?.daily_reset_at).toBeGreaterThan(Date.now());
@@ -112,7 +107,7 @@ describe("applyResets — reset boundaries", () => {
   test("monthly boundary passed refills both monthly and daily", async () => {
     const { applyResets } = await import("../src/services/usage/reset.js");
     const past = Date.now() - 1000;
-    const { id } = insertTestUser(testDb.sqlite, {
+    const { id } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 10,
       creditsRemainingMonthly: 50,
@@ -123,7 +118,7 @@ describe("applyResets — reset boundaries", () => {
     const result = await applyResets(id);
     expect(result?.creditsRemainingDaily).toBe(500);
     expect(result?.creditsRemainingMonthly).toBe(3000);
-    const row = readUser(id);
+    const row = await readUser(id);
     expect(row?.daily_reset_at).toBeGreaterThan(Date.now());
     expect(row?.monthly_reset_at).toBeGreaterThan(Date.now());
   });
@@ -131,7 +126,7 @@ describe("applyResets — reset boundaries", () => {
   test("admin advances timestamps but does NOT refill counters", async () => {
     const { applyResets } = await import("../src/services/usage/reset.js");
     const past = Date.now() - 1000;
-    const { id } = insertTestUser(testDb.sqlite, {
+    const { id } = await insertTestUser(testDb, {
       tier: "admin",
       creditsRemainingDaily: 7,
       creditsRemainingMonthly: 9,
@@ -145,7 +140,7 @@ describe("applyResets — reset boundaries", () => {
     // re-run the UPDATE on every subsequent call.
     expect(result?.creditsRemainingDaily).toBe(7);
     expect(result?.creditsRemainingMonthly).toBe(9);
-    const row = readUser(id);
+    const row = await readUser(id);
     expect(row?.credits_remaining_daily).toBe(7);
     expect(row?.credits_remaining_monthly).toBe(9);
     expect(row?.daily_reset_at).toBeGreaterThan(Date.now());
@@ -154,7 +149,7 @@ describe("applyResets — reset boundaries", () => {
 
   test("returns null for a nonexistent user", async () => {
     const { applyResets } = await import("../src/services/usage/reset.js");
-    const result = await applyResets("does-not-exist");
+    const result = await applyResets(crypto.randomUUID());
     expect(result).toBeNull();
   });
 });
@@ -168,7 +163,7 @@ describe("applyResets — concurrency guard", () => {
     // left stale.
     const { applyResets } = await import("../src/services/usage/reset.js");
     const past = Date.now() - 1000;
-    const { id } = insertTestUser(testDb.sqlite, {
+    const { id } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 10,
       creditsRemainingMonthly: 50,
@@ -183,7 +178,7 @@ describe("applyResets — concurrency guard", () => {
     expect(a?.creditsRemainingDaily).toBe(500);
     expect(b?.creditsRemainingDaily).toBe(500);
     // The row itself holds the tier limit exactly once.
-    expect(readUser(id)?.credits_remaining_monthly).toBe(3000);
+    expect((await readUser(id))?.credits_remaining_monthly).toBe(3000);
   });
 
   test("a daily-only reset does not clobber a concurrent refund's monthly credit-back", async () => {
@@ -194,7 +189,7 @@ describe("applyResets — concurrency guard", () => {
     // erases the refund — and because refund already committed `refunded_at`
     // (its idempotency guard), the credits are permanently unrecoverable.
     const { applyResets } = await import("../src/services/usage/reset.js");
-    const { id } = insertTestUser(testDb.sqlite, {
+    const { id } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 300,
       creditsRemainingMonthly: 2800,
@@ -204,19 +199,19 @@ describe("applyResets — concurrency guard", () => {
 
     // Land a refund in the window between applyResets' SELECT and its UPDATE.
     const realUpdate = testDb.db.update.bind(testDb.db);
+    let concurrentRefund: Promise<unknown> | undefined;
     const spy = mock((table: Parameters<typeof realUpdate>[0]) => {
-      testDb.sqlite
-        .prepare(`UPDATE "user" SET credits_remaining_monthly = credits_remaining_monthly + 200
-                  WHERE id = ?`)
-        .run(id);
+      concurrentRefund =
+        testDb.sql`UPDATE "user" SET credits_remaining_monthly = credits_remaining_monthly + 200 WHERE id = ${id}::uuid`.execute();
       testDb.db.update = realUpdate; // fire once
       return realUpdate(table);
     });
     testDb.db.update = spy as unknown as typeof testDb.db.update;
 
     await applyResets(id);
+    await concurrentRefund;
 
-    const row = readUser(id);
+    const row = await readUser(id);
     // Daily refilled to the tier limit...
     expect(row?.credits_remaining_daily).toBe(500);
     // ...and the refund survived. 2800 + 200, not the stale 2800.

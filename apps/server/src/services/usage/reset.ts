@@ -106,15 +106,12 @@ export async function applyResets(userId: string) {
           eq(users.dailyResetAt, user.dailyResetAt),
           eq(users.monthlyResetAt, user.monthlyResetAt)
         )
-      );
+      )
+      .returning({ id: users.id });
 
-    // Drizzle's run-result `.changes` reflects rows actually written. If the
-    // conditional WHERE missed (someone else already reset), reread the row
+    // If the conditional WHERE missed (someone else already reset), reread the row
     // and return the fresh canonical values instead of our stale plan.
-    // Drizzle's update for bun-sqlite returns a RunResult-like object; we
-    // detect a miss by re-selecting (cheap on the same indexed pk).
-    // biome-ignore lint/suspicious/noExplicitAny: bun-sqlite RunResult shape
-    if ((result as any)?.changes === 0) {
+    if (result.length === 0) {
       const fresh = await db
         .select({
           tier: users.tier,

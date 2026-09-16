@@ -44,15 +44,9 @@ const BaseSchema = z.object({
     .transform((s) => s === "true"),
 
   // Auth
-  BETTER_AUTH_SECRET: z.string().min(1).optional(),
-  BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
-  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
-  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
-  GITHUB_CLIENT_ID: z.string().min(1).optional(),
-  GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
-  AUTH_MODE: z.enum(["better-auth", "supabase"]).default("better-auth"),
-  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_URL: z.string().url().default("http://127.0.0.1:55321"),
   SUPABASE_JWKS_URL: z.string().url().optional(),
+  DATABASE_URL: z.string().url().default("postgresql://postgres:postgres@127.0.0.1:55322/postgres"),
 
   // LLM
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
@@ -60,17 +54,12 @@ const BaseSchema = z.object({
 
   // Optional everywhere
   ADMIN_EMAILS: z.string().default(""),
-  DATABASE_PATH: z.string().optional(),
 });
 
 const PROD_REQUIRED_KEYS = [
-  "BETTER_AUTH_SECRET",
-  "BETTER_AUTH_URL",
   "WEB_ORIGIN",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
+  "SUPABASE_URL",
+  "DATABASE_URL",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
 ] as const;
@@ -81,9 +70,9 @@ const PROD_REQUIRED_KEYS = [
 // session signed by it would be forgeable. Reject it explicitly here so
 // startup fails loudly rather than booting with a publicly-known key.
 const FORBIDDEN_PROD_VALUES: Partial<Record<(typeof PROD_REQUIRED_KEYS)[number], string[]>> = {
-  BETTER_AUTH_SECRET: ["dev-secret-change-me"],
   WEB_ORIGIN: ["http://localhost:5173"],
-  BETTER_AUTH_URL: ["http://localhost:3000"],
+  SUPABASE_URL: ["http://127.0.0.1:55321"],
+  DATABASE_URL: ["postgresql://postgres:postgres@127.0.0.1:55322/postgres"],
 };
 
 export type Env = z.infer<typeof BaseSchema>;

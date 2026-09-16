@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { games, messages, usageLog } from "@arcadeai/db";
 import { and, asc, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import { db, sqlite } from "../../lib/db.js";
+import { db, sql as pg } from "../../lib/db.js";
 import { notFoundError, sendError, validationError } from "../../lib/errors.js";
 import { loadOwnedGame } from "../../lib/ownership.js";
 import { serveThumbnail } from "../../lib/serve-thumbnail.js";
@@ -223,7 +223,7 @@ export function registerGameCrudRoutes(app: FastifyInstance) {
         } catch (err) {
           lastErr = err;
           const msg = err instanceof Error ? err.message : String(err);
-          // bun:sqlite surfaces unique-index violations as
+          // PostgreSQL surfaces unique-index violations as
           // "UNIQUE constraint failed: ..." or with SQLITE_CONSTRAINT.
           // Anything else is non-retryable.
           if (!/UNIQUE|SQLITE_CONSTRAINT/i.test(msg)) {
@@ -305,16 +305,10 @@ export function registerGameCrudRoutes(app: FastifyInstance) {
     // row. RETURNING hands back the restored code from the same statement, so
     // there's no second read to race against a concurrent write. Mirrors the
     // atomic-guarded-UPDATE pattern in services/usage/charge.ts.
-    const restored = sqlite
-      .query<{ current_code: string }, [number, string, string]>(
-        `UPDATE games
-         SET current_code = previous_code,
-             previous_code = NULL,
-             updated_at = ?
-         WHERE id = ? AND user_id = ? AND previous_code IS NOT NULL
-         RETURNING current_code`
-      )
-      .get(Date.now(), id, userId);
+    const [restored] = await pg<{ current_code: string }[]>`UPDATE games
+      SET current_code = previous_code, previous_code = NULL, updated_at = ${Date.now()}
+      WHERE id = ${id} AND user_id = ${userId}::uuid AND previous_code IS NOT NULL
+      RETURNING current_code`;
 
     if (!restored) {
       // Owned (we passed loadOwnedGame) but nothing to undo — the game has

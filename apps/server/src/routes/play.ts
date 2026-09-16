@@ -138,41 +138,32 @@ export async function playRoutes(app: FastifyInstance) {
     const newId = randomUUID();
     const now = Date.now();
 
-    // Insert the new game + seed message in one transaction so a partial
-    // failure can't leave an orphan game without its source prompt. The
-    // callback MUST be synchronous — an `async` callback commits at the first
-    // `await`, so Drizzle's bun-sqlite driver wouldn't roll back the game
-    // insert if the message insert failed. Use `.run()` for sync execution
-    // inside bun's native transaction.
+    // Insert the new game + seed message atomically.
     try {
-      db.transaction((tx) => {
-        tx.insert(games)
-          .values({
-            id: newId,
-            userId,
-            title: `Remix of ${source.title}`,
-            currentCode: source.currentCode,
-            thumbnail: null,
-            genre: null,
-            originalPrompt: source.originalPrompt,
-            isPublic: false,
-            publicSlug: null,
-            publishedAt: null,
-            remixedFromGameId: source.id,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .run();
+      await db.transaction(async (tx) => {
+        await tx.insert(games).values({
+          id: newId,
+          userId,
+          title: `Remix of ${source.title}`,
+          currentCode: source.currentCode,
+          thumbnail: null,
+          genre: null,
+          originalPrompt: source.originalPrompt,
+          isPublic: false,
+          publicSlug: null,
+          publishedAt: null,
+          remixedFromGameId: source.id,
+          createdAt: now,
+          updatedAt: now,
+        });
 
-        tx.insert(messages)
-          .values({
-            id: randomUUID(),
-            gameId: newId,
-            kind: "prompt",
-            content: source.originalPrompt,
-            createdAt: now,
-          })
-          .run();
+        await tx.insert(messages).values({
+          id: randomUUID(),
+          gameId: newId,
+          kind: "prompt",
+          content: source.originalPrompt,
+          createdAt: now,
+        });
       });
     } catch (err) {
       request.log.error({ err }, "remix insert failed");

@@ -3,7 +3,7 @@
  * loading its HTML in headless Chromium, waiting for the title screen to
  * draw, and capturing the canvas as a PNG data URL.
  *
- * Run: DATABASE_PATH=apps/server/data/arcadeai.db bun run \
+ * Run: DATABASE_URL=postgresql://... bun run \
  *        apps/server/scripts/render-system-thumbnails.ts
  *
  * Independent from seed-system-games.ts so it can be re-run without
@@ -28,7 +28,7 @@ import { RAG_PROMPTS } from "./rag-prompts.ts";
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const CURATED_DIR = join(SCRIPTS_DIR, "rag-curated");
 
-const SYSTEM_USER_ID = "system-arcadeai";
+const SYSTEM_USER_ID = "00000000-0000-4000-8000-000000000001";
 
 // Match the chunk of seed-system-games.ts — duplicated rather than
 // imported because pulling that file in would also import the DB client
@@ -44,9 +44,9 @@ const VIEWPORT = { width: 1280, height: 800 };
 // noticeably (20 * 0.3s = 6s extra at worst).
 const RENDER_WAIT_MS = 800;
 
-const dbPath = process.env.DATABASE_PATH;
-if (!dbPath) {
-  console.error("DATABASE_PATH environment variable is required");
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  console.error("DATABASE_URL environment variable is required");
   process.exit(1);
 }
 
@@ -64,12 +64,12 @@ async function main() {
     process.exit(1);
   }
 
-  const { sqlite } = createClient(dbPath as string);
+  const { sql } = createClient(databaseUrl as string);
 
   // Confirm the system rows exist before we spin up a browser.
-  const existingCount = sqlite
-    .prepare("SELECT count(*) AS n FROM games WHERE user_id = ?")
-    .get(SYSTEM_USER_ID) as { n: number };
+  const [existingCount] = await sql<
+    { n: number }[]
+  >`SELECT count(*)::int AS n FROM games WHERE user_id = ${SYSTEM_USER_ID}::uuid`;
   if (existingCount.n === 0) {
     console.error("No system-arcadeai games found. Run seed-system-games.ts first to create rows.");
     process.exit(1);
@@ -79,10 +79,6 @@ async function main() {
     `Rendering ${RAG_PROMPTS.length} thumbnails at ${VIEWPORT.width}x${VIEWPORT.height}…`
   );
   const browser = await chromium.launch({ headless: true });
-
-  const updateThumbnail = sqlite.prepare(
-    "UPDATE games SET thumbnail = ?, updated_at = ? WHERE id = ? AND user_id = ?"
-  );
 
   const startedAt = Date.now();
   let success = 0;
@@ -132,8 +128,10 @@ async function main() {
         // A 0-row UPDATE means the system game row is missing (e.g. a new
         // rag-prompts entry that hasn't been seeded yet). Previously this
         // was silently counted as a success and logged with a ✓.
-        const written = updateThumbnail.run(dataUrl, Date.now(), gameId, SYSTEM_USER_ID).changes;
-        if (written !== 1) {
+        const written = await sql<
+          { id: string }[]
+        >`UPDATE games SET thumbnail = ${dataUrl}, updated_at = ${Date.now()} WHERE id = ${gameId} AND user_id = ${SYSTEM_USER_ID}::uuid RETURNING id`;
+        if (written.length !== 1) {
           throw new Error(`game row ${gameId} not found — run seed-system-games first`);
         }
         success++;
@@ -149,7 +147,7 @@ async function main() {
     await context.close();
   } finally {
     await browser.close();
-    sqlite.close();
+    await sql.end();
   }
 
   const elapsed = Math.round((Date.now() - startedAt) / 1000);

@@ -14,7 +14,7 @@ import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 let app: FastifyInstance;
-let stubUserId = "user-stub";
+let stubUserId = crypto.randomUUID();
 
 async function buildApp() {
   const fastify = Fastify({ logger: false });
@@ -29,21 +29,21 @@ async function buildApp() {
 }
 
 beforeEach(async () => {
-  testDb = createTestDb();
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
   app = await buildApp();
 });
 
 afterEach(async () => {
   await app.close();
-  testDb.close();
+  await testDb.close();
 });
 
 function readCredits(userId: string) {
-  return testDb.sqlite
+  return testDb.client
     .query<
       { credits_remaining_daily: number; credits_remaining_monthly: number; tier: string },
       [string]
@@ -53,8 +53,8 @@ function readCredits(userId: string) {
 
 describe("POST /api/billing/change-plan — credit cap", () => {
   test("caps balance to the new tier limit on downgrade", async () => {
-    stubUserId = "user-cap";
-    insertTestUser(testDb.sqlite, {
+    stubUserId = crypto.randomUUID();
+    await insertTestUser(testDb, {
       id: stubUserId,
       tier: "pro",
       creditsRemainingDaily: 5000,
@@ -69,7 +69,7 @@ describe("POST /api/billing/change-plan — credit cap", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const u = readCredits(stubUserId);
+    const u = await readCredits(stubUserId);
     // Free tier limits are 500 daily / 3000 monthly — balance capped down.
     expect(u?.credits_remaining_daily).toBe(500);
     expect(u?.credits_remaining_monthly).toBe(3000);
@@ -77,8 +77,8 @@ describe("POST /api/billing/change-plan — credit cap", () => {
   });
 
   test("does not raise a balance already below the new tier limit", async () => {
-    stubUserId = "user-nolift";
-    insertTestUser(testDb.sqlite, {
+    stubUserId = crypto.randomUUID();
+    await insertTestUser(testDb, {
       id: stubUserId,
       tier: "free",
       creditsRemainingDaily: 120,
@@ -93,7 +93,7 @@ describe("POST /api/billing/change-plan — credit cap", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const u = readCredits(stubUserId);
+    const u = await readCredits(stubUserId);
     // MIN(current, limit) keeps the lower current balance — no free top-up.
     expect(u?.credits_remaining_daily).toBe(120);
     expect(u?.credits_remaining_monthly).toBe(800);
@@ -105,8 +105,8 @@ describe("POST /api/billing/change-plan — credit cap", () => {
     // compute MIN in JS, then blind-UPDATE an absolute value. A deduct that
     // committed in between was overwritten, restoring the spent credits.
     // With MIN computed inside the UPDATE the deduct survives.
-    stubUserId = "user-race";
-    insertTestUser(testDb.sqlite, {
+    stubUserId = crypto.randomUUID();
+    await insertTestUser(testDb, {
       id: stubUserId,
       tier: "creator",
       creditsRemainingDaily: 5000,
@@ -128,7 +128,7 @@ describe("POST /api/billing/change-plan — credit cap", () => {
 
     expect(planRes.statusCode).toBe(200);
 
-    const u = readCredits(stubUserId);
+    const u = await readCredits(stubUserId);
     // The deduct charged 200. Final monthly balance must reflect that charge
     // (<= 20000 - 200), never be restored to the pre-deduct 20000. Because
     // MIN(balance, 20000) is evaluated atomically against whatever the
@@ -139,10 +139,10 @@ describe("POST /api/billing/change-plan — credit cap", () => {
 
 describe("POST /api/billing/change-plan — applyResets integration", () => {
   test("grants a pending monthly reset before capping", async () => {
-    stubUserId = "user-reset";
+    stubUserId = crypto.randomUUID();
     // monthlyResetAt in the past → a lazy reset is owed. Stored balance is
     // depleted; applyResets should refill to the tier limit first.
-    insertTestUser(testDb.sqlite, {
+    await insertTestUser(testDb, {
       id: stubUserId,
       tier: "creator",
       creditsRemainingDaily: 0,
@@ -159,7 +159,7 @@ describe("POST /api/billing/change-plan — applyResets integration", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    const u = readCredits(stubUserId);
+    const u = await readCredits(stubUserId);
     // Creator monthly limit is 20000; the owed refill is granted, not consumed
     // by the plan change capping against the stale depleted balance.
     expect(u?.credits_remaining_monthly).toBe(20000);
@@ -168,8 +168,8 @@ describe("POST /api/billing/change-plan — applyResets integration", () => {
 
 describe("POST /api/billing/change-plan — guards", () => {
   test("rejects an invalid tier with 400", async () => {
-    stubUserId = "user-bad";
-    insertTestUser(testDb.sqlite, { id: stubUserId });
+    stubUserId = crypto.randomUUID();
+    await insertTestUser(testDb, { id: stubUserId });
     const res = await app.inject({
       method: "POST",
       url: "/api/billing/change-plan",
@@ -180,8 +180,8 @@ describe("POST /api/billing/change-plan — guards", () => {
   });
 
   test("refuses to change an admin tier", async () => {
-    stubUserId = "user-admin";
-    insertTestUser(testDb.sqlite, { id: stubUserId, tier: "admin" });
+    stubUserId = crypto.randomUUID();
+    await insertTestUser(testDb, { id: stubUserId, tier: "admin" });
     const res = await app.inject({
       method: "POST",
       url: "/api/billing/change-plan",

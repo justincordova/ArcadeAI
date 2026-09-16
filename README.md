@@ -103,6 +103,25 @@ The existing SQLite database is never modified by these commands. The initial
 Postgres baseline is ready for application-data migration; Better Auth OAuth
 sessions and provider credentials are not portable and users must sign in again.
 
+### Import existing SQLite data
+
+After applying the Postgres migration, import a legacy ArcadeAI SQLite database
+explicitly with the source path, Postgres URL, and a Supabase service-role key:
+
+```bash
+SOURCE_DATABASE_PATH=/absolute/path/to/arcadeai.db \
+DATABASE_URL=postgresql://... \
+SUPABASE_URL=https://your-project.supabase.co \
+SUPABASE_SERVICE_ROLE_KEY=... \
+bun run db:import:sqlite
+```
+
+The importer is idempotent and never writes to the SQLite source. It creates
+or reuses Supabase Auth users by email, maps legacy user IDs to those UUIDs,
+then upserts user profiles, games, messages, likes, usage logs, RAG examples,
+and RAG embeddings. Better Auth accounts, sessions, and verifications are not
+imported, so users must sign in again after the migration.
+
 ```bash
 curl http://localhost:3000/api/health   # → {"ok":true,...}
 ```
@@ -119,6 +138,7 @@ bun run test          # bun test across workspaces
 bun run db:migrate    # apply pending migrations + post-migrate (sqlite-vec)
 bun run db:generate   # drizzle-kit generate (after schema edits)
 bun run db:studio     # open Drizzle Studio against the local DB
+bun run db:import:sqlite # import legacy SQLite application data into Supabase
 bun run supabase:start  # start local Postgres, Auth, Studio, and Mailpit
 bun run supabase:stop   # stop the local stack
 bun run supabase:status # show URLs and generated local keys

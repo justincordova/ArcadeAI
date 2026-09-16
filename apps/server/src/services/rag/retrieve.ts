@@ -1,5 +1,5 @@
 import { GENRE_BUCKETS } from "@arcadeai/shared/genres.js";
-import { sqlite } from "../../lib/db.js";
+import { sql } from "../../lib/db.js";
 
 /**
  * The genre buckets from SPEC §6, read from the shared package rather than
@@ -34,7 +34,7 @@ interface Logger {
  * Returns the full HTML of the chosen reference, or `null` if:
  *  - the input embedding is null (upstream embedding call failed),
  *  - no rows are returned (curated library is empty), OR
- *  - the underlying vec0 query throws.
+ *  - the underlying pgvector query throws.
  *
  * Graceful degrade is by design: a `null` return lets the generation
  * pipeline fall back to the base contract without a few-shot example
@@ -54,9 +54,7 @@ interface Logger {
  * A/B testing, prompt-summarization quality assessment, editorial library
  * tuning) — the logs are the data source. Failures emit WARN.
  *
- * `bun:sqlite` calls are synchronous; the function is async only for
- * forward-compat with the route's awaited shape (and possible swap to
- * a remote vector store later).
+ * pgvector's cosine-distance operator (`<=>`) returns distance in [0, 2].
  */
 export async function retrieveExample({
   embedding,
@@ -77,36 +75,17 @@ export async function retrieveExample({
 
   const useGenreFilter = GENRE_BUCKET_SET.has(genre) && genre !== "other";
 
-  // `sqlite-vec` accepts embeddings as a Float32Array bound directly to
-  // the query parameter (the package coerces it to the binary blob shape
-  // it expects). See sqlite-vec JS docs.
-  const vec = new Float32Array(embedding);
+  const vector = `[${embedding.join(",")}]`;
 
   try {
-    // Pull id + raw cosine distance alongside the html so we can log how
-    // close the chosen example was. distance ∈ [0, 2] for unit vectors;
-    // similarity = 1 - distance is the more intuitive number to log.
-    const sql = useGenreFilter
-      ? `SELECT e.id AS id, e.html AS html, m.distance AS distance
-           FROM rag_examples e
-           JOIN (
-             SELECT id, vec_distance_cosine(embedding, ?) AS distance
-               FROM rag_embeddings
-              WHERE genre = ?
-              ORDER BY distance
-              LIMIT 1
-           ) m ON m.id = e.id`
-      : `SELECT e.id AS id, e.html AS html, m.distance AS distance
-           FROM rag_examples e
-           JOIN (
-             SELECT id, vec_distance_cosine(embedding, ?) AS distance
-               FROM rag_embeddings
-              ORDER BY distance
-              LIMIT 1
-           ) m ON m.id = e.id`;
-
-    const stmt = sqlite.prepare(sql);
-    const row = useGenreFilter ? stmt.get(vec, genre) : stmt.get(vec);
+    const rows = useGenreFilter
+      ? await sql<
+          { id: string; html: string; distance: number }[]
+        >`SELECT e.id, e.html, r.embedding <=> ${vector}::extensions.vector AS distance FROM rag_embeddings r JOIN rag_examples e ON e.id = r.id WHERE r.genre = ${genre} ORDER BY r.embedding <=> ${vector}::extensions.vector LIMIT 1`
+      : await sql<
+          { id: string; html: string; distance: number }[]
+        >`SELECT e.id, e.html, r.embedding <=> ${vector}::extensions.vector AS distance FROM rag_embeddings r JOIN rag_examples e ON e.id = r.id ORDER BY r.embedding <=> ${vector}::extensions.vector LIMIT 1`;
+    const row = rows[0];
     if (!row) {
       log?.info(
         { genre, fellBackToGlobal: !useGenreFilter, ragExampleId: null, reason: "no_match" },
@@ -115,7 +94,7 @@ export async function retrieveExample({
       return null;
     }
 
-    const r = row as { id: string; html: string; distance: number };
+    const r = row;
     const similarity = 1 - r.distance;
 
     // Reject below the similarity floor so we don't inject an irrelevant

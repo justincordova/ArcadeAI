@@ -12,16 +12,12 @@ const MANAGED_KEYS = [
   "LOG_LEVEL",
   "PORT",
   "WEB_ORIGIN",
-  "BETTER_AUTH_SECRET",
-  "BETTER_AUTH_URL",
-  "GOOGLE_CLIENT_ID",
-  "GOOGLE_CLIENT_SECRET",
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
+  "SUPABASE_URL",
+  "SUPABASE_JWKS_URL",
+  "DATABASE_URL",
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "ADMIN_EMAILS",
-  "DATABASE_PATH",
   "TRUST_PROXY",
 ];
 
@@ -77,31 +73,26 @@ describe("loadEnv — development mode", () => {
 
 describe("loadEnv — production mode", () => {
   function setProdRequiredKeys() {
-    process.env.BETTER_AUTH_SECRET = "secret";
-    process.env.BETTER_AUTH_URL = "https://auth.example.com";
     process.env.WEB_ORIGIN = "https://app.example.com";
-    process.env.GOOGLE_CLIENT_ID = "g";
-    process.env.GOOGLE_CLIENT_SECRET = "g";
-    process.env.GITHUB_CLIENT_ID = "h";
-    process.env.GITHUB_CLIENT_SECRET = "h";
+    process.env.SUPABASE_URL = "https://project.supabase.co";
+    process.env.DATABASE_URL = "postgresql://postgres:password@db.example.com:5432/postgres";
     process.env.ANTHROPIC_API_KEY = "a";
     process.env.OPENAI_API_KEY = "o";
   }
 
-  test("rejects missing BETTER_AUTH_SECRET in production", () => {
+  test("rejects missing SUPABASE_URL in production", () => {
     process.env.NODE_ENV = "production";
     setProdRequiredKeys();
-    const k = "BETTER_AUTH_SECRET";
+    const k = "SUPABASE_URL";
     delete process.env[k];
-    expect(() => loadEnv()).toThrow(/BETTER_AUTH_SECRET/);
+    expect(() => loadEnv()).toThrow(/SUPABASE_URL/);
   });
 
-  test("rejects missing OAuth credentials in production", () => {
+  test("rejects missing DATABASE_URL in production", () => {
     process.env.NODE_ENV = "production";
-    process.env.BETTER_AUTH_SECRET = "secret";
-    process.env.ANTHROPIC_API_KEY = "x";
-    process.env.OPENAI_API_KEY = "x";
-    expect(() => loadEnv()).toThrow();
+    setProdRequiredKeys();
+    delete process.env.DATABASE_URL;
+    expect(() => loadEnv()).toThrow(/DATABASE_URL/);
   });
 
   test("succeeds in production with all required keys present", () => {
@@ -110,11 +101,11 @@ describe("loadEnv — production mode", () => {
     expect(loadEnv().NODE_ENV).toBe("production");
   });
 
-  test("rejects the dev-fallback BETTER_AUTH_SECRET in production", () => {
+  test("rejects the development SUPABASE_URL in production", () => {
     process.env.NODE_ENV = "production";
     setProdRequiredKeys();
-    process.env.BETTER_AUTH_SECRET = "dev-secret-change-me";
-    expect(() => loadEnv()).toThrow(/BETTER_AUTH_SECRET/);
+    process.env.SUPABASE_URL = "http://127.0.0.1:55321";
+    expect(() => loadEnv()).toThrow(/SUPABASE_URL/);
   });
 
   test("rejects the localhost WEB_ORIGIN default in production", () => {
@@ -124,11 +115,11 @@ describe("loadEnv — production mode", () => {
     expect(() => loadEnv()).toThrow(/WEB_ORIGIN/);
   });
 
-  test("rejects the localhost BETTER_AUTH_URL default in production", () => {
+  test("rejects the development DATABASE_URL in production", () => {
     process.env.NODE_ENV = "production";
     setProdRequiredKeys();
-    process.env.BETTER_AUTH_URL = "http://localhost:3000";
-    expect(() => loadEnv()).toThrow(/BETTER_AUTH_URL/);
+    process.env.DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:55322/postgres";
+    expect(() => loadEnv()).toThrow(/DATABASE_URL/);
   });
 
   test("requires WEB_ORIGIN to be set in production", () => {
@@ -145,7 +136,6 @@ describe("loadEnv — production mode", () => {
     process.env.NODE_ENV = "production";
     // Override the localhost defaults so we're testing "missing" not "forbidden"
     process.env.WEB_ORIGIN = "https://app.example.com";
-    process.env.BETTER_AUTH_URL = "https://auth.example.com";
     let caught: unknown;
     try {
       loadEnv();
@@ -154,8 +144,8 @@ describe("loadEnv — production mode", () => {
     }
     expect(caught).toBeInstanceOf(Error);
     const msg = (caught as Error).message;
-    expect(msg).toMatch(/BETTER_AUTH_SECRET/);
-    expect(msg).toMatch(/GOOGLE_CLIENT_ID/);
+    expect(msg).toMatch(/SUPABASE_URL/);
+    expect(msg).toMatch(/DATABASE_URL/);
     expect(msg).toMatch(/ANTHROPIC_API_KEY/);
   });
 });

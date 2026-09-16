@@ -8,16 +8,16 @@ import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 
-beforeEach(() => {
-  testDb = createTestDb();
+beforeEach(async () => {
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
 });
 
-afterEach(() => {
-  testDb.close();
+afterEach(async () => {
+  await testDb.close();
 });
 
 interface InsertGameArgs {
@@ -31,10 +31,10 @@ interface InsertGameArgs {
   playCount?: number;
 }
 
-function insertGame(args: InsertGameArgs): string {
+async function insertGame(args: InsertGameArgs): Promise<string> {
   const id = args.id ?? randomUUID();
   const now = Date.now();
-  testDb.sqlite
+  await testDb.client
     .prepare(
       `INSERT INTO games (
         id, user_id, title, current_code, thumbnail, genre,
@@ -48,7 +48,7 @@ function insertGame(args: InsertGameArgs): string {
       `t-${id.slice(0, 6)}`,
       "<html>",
       args.genre ?? null,
-      args.isPublic ? 1 : 0,
+      args.isPublic ?? false,
       args.publicSlug ?? null,
       args.publishedAt ?? null,
       args.playCount ?? 0,
@@ -61,14 +61,14 @@ function insertGame(args: InsertGameArgs): string {
 
 describe("listDiscoverGames", () => {
   test("returns only public games", async () => {
-    const { id: u } = insertTestUser(testDb.sqlite);
-    const pubId = insertGame({
+    const { id: u } = await insertTestUser(testDb);
+    const pubId = await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "abc12345",
       publishedAt: Date.now(),
     });
-    insertGame({ userId: u, isPublic: false, publicSlug: null });
+    await insertGame({ userId: u, isPublic: false, publicSlug: null });
 
     const { listDiscoverGames } = await import("../src/services/discover/list.js");
     const items = await listDiscoverGames({ sort: "new", limit: 10, offset: 0 });
@@ -78,8 +78,8 @@ describe("listDiscoverGames", () => {
   });
 
   test("excludes public games with a null slug so pagination counts stay correct", async () => {
-    const { id: u } = insertTestUser(testDb.sqlite);
-    const withSlug = insertGame({
+    const { id: u } = await insertTestUser(testDb);
+    const withSlug = await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "hasslug1",
@@ -88,7 +88,7 @@ describe("listDiscoverGames", () => {
     // Public but no slug (e.g. a remix copy) — must be filtered in SQL, not
     // post-fetch, so a full DB page isn't shrunk below `limit` and the route
     // doesn't stop paginating early.
-    insertGame({ userId: u, isPublic: true, publicSlug: null, publishedAt: Date.now() });
+    await insertGame({ userId: u, isPublic: true, publicSlug: null, publishedAt: Date.now() });
 
     const { listDiscoverGames } = await import("../src/services/discover/list.js");
     const items = await listDiscoverGames({ sort: "new", limit: 10, offset: 0 });
@@ -98,15 +98,15 @@ describe("listDiscoverGames", () => {
   });
 
   test("'top' sorts by likeCount desc", async () => {
-    const { id: u } = insertTestUser(testDb.sqlite);
-    const lo = insertGame({
+    const { id: u } = await insertTestUser(testDb);
+    const lo = await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "lo000001",
       publishedAt: Date.now(),
       likeCount: 1,
     });
-    const hi = insertGame({
+    const hi = await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "hi000001",
@@ -121,14 +121,14 @@ describe("listDiscoverGames", () => {
   });
 
   test("'new' sorts by publishedAt desc", async () => {
-    const { id: u } = insertTestUser(testDb.sqlite);
-    const older = insertGame({
+    const { id: u } = await insertTestUser(testDb);
+    const older = await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "old00001",
       publishedAt: 1000,
     });
-    const newer = insertGame({
+    const newer = await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "new00001",
@@ -142,15 +142,15 @@ describe("listDiscoverGames", () => {
   });
 
   test("genre filter narrows results", async () => {
-    const { id: u } = insertTestUser(testDb.sqlite);
-    const snake = insertGame({
+    const { id: u } = await insertTestUser(testDb);
+    const snake = await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "snake001",
       publishedAt: Date.now(),
       genre: "snake",
     });
-    insertGame({
+    await insertGame({
       userId: u,
       isPublic: true,
       publicSlug: "puzzle01",
@@ -171,22 +171,22 @@ describe("listDiscoverGames", () => {
   });
 
   test("hydrates `liked` for the viewer when given a userId", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite, { email: "o@t" });
-    const { id: viewer } = insertTestUser(testDb.sqlite, { email: "v@t" });
-    const liked = insertGame({
+    const { id: owner } = await insertTestUser(testDb, { email: "o@t" });
+    const { id: viewer } = await insertTestUser(testDb, { email: "v@t" });
+    const liked = await insertGame({
       userId: owner,
       isPublic: true,
       publicSlug: "liked001",
       publishedAt: Date.now(),
     });
-    const unliked = insertGame({
+    const unliked = await insertGame({
       userId: owner,
       isPublic: true,
       publicSlug: "noliket1",
       publishedAt: Date.now(),
     });
 
-    testDb.sqlite
+    await testDb.client
       .prepare("INSERT INTO game_likes (game_id, user_id, created_at) VALUES (?, ?, ?)")
       .run(liked, viewer, Date.now());
 
@@ -206,9 +206,9 @@ describe("listDiscoverGames", () => {
 
 describe("likeGame / unlikeGame", () => {
   test("like increments counter; second like is idempotent", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite, { email: "o@t" });
-    const { id: viewer } = insertTestUser(testDb.sqlite, { email: "v@t" });
-    const gameId = insertGame({
+    const { id: owner } = await insertTestUser(testDb, { email: "o@t" });
+    const { id: viewer } = await insertTestUser(testDb, { email: "v@t" });
+    const gameId = await insertGame({
       userId: owner,
       isPublic: true,
       publicSlug: "ldbl0001",
@@ -228,16 +228,18 @@ describe("likeGame / unlikeGame", () => {
     expect(second?.likeCount).toBe(1);
 
     // Counter on games row should reflect 1
-    const row = testDb.sqlite.prepare("SELECT like_count FROM games WHERE id = ?").get(gameId) as {
+    const row = (await testDb.client
+      .prepare("SELECT like_count FROM games WHERE id = ?")
+      .get(gameId)) as {
       like_count: number;
     };
     expect(row.like_count).toBe(1);
   });
 
   test("unlike decrements counter; unliking when not liked is idempotent", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite, { email: "o@t" });
-    const { id: viewer } = insertTestUser(testDb.sqlite, { email: "v@t" });
-    const gameId = insertGame({
+    const { id: owner } = await insertTestUser(testDb, { email: "o@t" });
+    const { id: viewer } = await insertTestUser(testDb, { email: "v@t" });
+    const gameId = await insertGame({
       userId: owner,
       isPublic: true,
       publicSlug: "ulbl0001",
@@ -262,9 +264,9 @@ describe("likeGame / unlikeGame", () => {
   });
 
   test("liking a private game returns null", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite, { email: "o@t" });
-    const { id: viewer } = insertTestUser(testDb.sqlite, { email: "v@t" });
-    const gameId = insertGame({ userId: owner, isPublic: false });
+    const { id: owner } = await insertTestUser(testDb, { email: "o@t" });
+    const { id: viewer } = await insertTestUser(testDb, { email: "v@t" });
+    const gameId = await insertGame({ userId: owner, isPublic: false });
 
     const { likeGame } = await import("../src/services/discover/likes.js");
     const result = await likeGame(gameId, viewer);
@@ -274,8 +276,8 @@ describe("likeGame / unlikeGame", () => {
 
 describe("recordPlay", () => {
   test("increments playCount on a public game", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite);
-    const gameId = insertGame({
+    const { id: owner } = await insertTestUser(testDb);
+    const gameId = await insertGame({
       userId: owner,
       isPublic: true,
       publicSlug: "play0001",
@@ -286,20 +288,24 @@ describe("recordPlay", () => {
     await recordPlay(gameId);
     await recordPlay(gameId);
 
-    const row = testDb.sqlite.prepare("SELECT play_count FROM games WHERE id = ?").get(gameId) as {
+    const row = (await testDb.client
+      .prepare("SELECT play_count FROM games WHERE id = ?")
+      .get(gameId)) as {
       play_count: number;
     };
     expect(row.play_count).toBe(2);
   });
 
   test("does not increment a private game's playCount", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite);
-    const gameId = insertGame({ userId: owner, isPublic: false });
+    const { id: owner } = await insertTestUser(testDb);
+    const gameId = await insertGame({ userId: owner, isPublic: false });
 
     const { recordPlay } = await import("../src/services/discover/likes.js");
     await recordPlay(gameId);
 
-    const row = testDb.sqlite.prepare("SELECT play_count FROM games WHERE id = ?").get(gameId) as {
+    const row = (await testDb.client
+      .prepare("SELECT play_count FROM games WHERE id = ?")
+      .get(gameId)) as {
       play_count: number;
     };
     expect(row.play_count).toBe(0);

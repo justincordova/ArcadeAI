@@ -1,7 +1,7 @@
 // Tests for services/usage/charge.ts.
 //
 // Strategy: replace the singleton `lib/db.ts` module export with a per-test
-// in-memory SQLite via `mock.module`. The module mock must be installed
+// PostgreSQL schema via `mock.module`. The module mock must be installed
 // BEFORE charge.ts is imported, so we use a lazy `import()` inside the
 // test bodies.
 //
@@ -20,23 +20,23 @@ import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 let testDb: TestDb;
 
 // We re-create the DB before each test and re-mock the module so the freshly
-// created Drizzle/sqlite handles are what charge.ts sees on import.
-beforeEach(() => {
-  testDb = createTestDb();
+// created Drizzle/Postgres handles are what charge.ts sees on import.
+beforeEach(async () => {
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
 });
 
-afterEach(() => {
-  testDb.close();
+afterEach(async () => {
+  await testDb.close();
 });
 
 describe("deduct — basic credit accounting", () => {
   test("succeeds when balance >= cost (free tier)", async () => {
     const { deduct } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 3000,
@@ -45,18 +45,16 @@ describe("deduct — basic credit accounting", () => {
     const { logId } = await deduct(userId, "generation", null);
 
     expect(logId).toBeTruthy();
-    const user = testDb.sqlite
-      .query<{ credits_remaining_daily: number; credits_remaining_monthly: number }, [string]>(
-        `SELECT credits_remaining_daily, credits_remaining_monthly FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      { credits_remaining_daily: number; credits_remaining_monthly: number }[]
+    >`SELECT credits_remaining_daily, credits_remaining_monthly FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.credits_remaining_daily).toBe(300); // 500 - 200
     expect(user?.credits_remaining_monthly).toBe(2800); // 3000 - 200
   });
 
   test("throws InsufficientCreditsError(monthly) when monthly < cost", async () => {
     const { deduct, InsufficientCreditsError } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 100, // less than 200 generation cost
@@ -74,7 +72,7 @@ describe("deduct — basic credit accounting", () => {
 
   test("throws InsufficientCreditsError(daily) when daily < cost on free tier", async () => {
     const { deduct, InsufficientCreditsError } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 100,
       creditsRemainingMonthly: 3000,
@@ -92,7 +90,7 @@ describe("deduct — basic credit accounting", () => {
 
   test("admin tier bypasses all checks and inserts a 0-cost log row", async () => {
     const { deduct } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "admin",
       creditsRemainingDaily: 0,
       creditsRemainingMonthly: 0,
@@ -101,13 +99,11 @@ describe("deduct — basic credit accounting", () => {
     const { logId } = await deduct(userId, "generation", null);
     expect(logId).toBeTruthy();
 
-    const log = testDb.sqlite
-      .query<{ credits_charged: number; lifetime_counter_incremented: number }, [string]>(
-        "SELECT credits_charged, lifetime_counter_incremented FROM usage_log WHERE id = ?"
-      )
-      .get(logId);
+    const [log] = await testDb.sql<
+      { credits_charged: number; lifetime_counter_incremented: boolean }[]
+    >`SELECT credits_charged, lifetime_counter_incremented FROM usage_log WHERE id = ${logId}`;
     expect(log?.credits_charged).toBe(0);
-    expect(log?.lifetime_counter_incremented).toBe(0);
+    expect(log?.lifetime_counter_incremented).toBe(false);
   });
 });
 
@@ -115,7 +111,7 @@ describe("deduct — TOCTOU atomicity", () => {
   test("two concurrent deducts at exact balance: only one succeeds", async () => {
     const { deduct, InsufficientCreditsError } = await import("../src/services/usage/charge.js");
     // Set balance to exactly one generation worth of credits in both windows
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 200,
       creditsRemainingMonthly: 200,
@@ -125,11 +121,7 @@ describe("deduct — TOCTOU atomicity", () => {
       // the flag off conceptually — but the flag is on. Instead, use paid tier.
     });
     // Actually: use creator tier so the lifetime cap doesn't apply at all.
-    testDb.sqlite
-      .prepare(
-        `UPDATE "user" SET tier = 'creator', credits_remaining_daily = 200, credits_remaining_monthly = 200, lifetime_generations_used = 0 WHERE id = ?`
-      )
-      .run(userId);
+    await testDb.sql`UPDATE "user" SET tier = 'creator', credits_remaining_daily = 200, credits_remaining_monthly = 200, lifetime_generations_used = 0 WHERE id = ${userId}::uuid`;
 
     const results = await Promise.allSettled([
       deduct(userId, "generation", null),
@@ -142,11 +134,9 @@ describe("deduct — TOCTOU atomicity", () => {
     expect(failed.length).toBe(1);
     expect((failed[0] as PromiseRejectedResult).reason).toBeInstanceOf(InsufficientCreditsError);
 
-    const user = testDb.sqlite
-      .query<{ credits_remaining_monthly: number }, [string]>(
-        `SELECT credits_remaining_monthly FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      { credits_remaining_monthly: number }[]
+    >`SELECT credits_remaining_monthly FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.credits_remaining_monthly).toBe(0); // 200 - 200, not -200
   });
 });
@@ -154,7 +144,7 @@ describe("deduct — TOCTOU atomicity", () => {
 describe("deduct — lifetime cap on free tier", () => {
   test("free user with lifetime_generations_used = 0 succeeds first generation", async () => {
     const { deduct } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 3000,
@@ -163,17 +153,15 @@ describe("deduct — lifetime cap on free tier", () => {
 
     await deduct(userId, "generation", null);
 
-    const user = testDb.sqlite
-      .query<{ lifetime_generations_used: number }, [string]>(
-        `SELECT lifetime_generations_used FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      { lifetime_generations_used: number }[]
+    >`SELECT lifetime_generations_used FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.lifetime_generations_used).toBe(1);
   });
 
   test("free user at the lifetime cap is rejected with kind=lifetime", async () => {
     const { deduct, InsufficientCreditsError } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 3000,
@@ -193,7 +181,7 @@ describe("deduct — lifetime cap on free tier", () => {
 
   test("free user can do exactly 3 refinements then is blocked", async () => {
     const { deduct, InsufficientCreditsError } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 3000,
@@ -216,17 +204,15 @@ describe("deduct — lifetime cap on free tier", () => {
     expect(caught).toBeInstanceOf(InsufficientCreditsError);
     expect((caught as InstanceType<typeof InsufficientCreditsError>).kind).toBe("lifetime");
 
-    const user = testDb.sqlite
-      .query<{ lifetime_refinements_used: number }, [string]>(
-        `SELECT lifetime_refinements_used FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      { lifetime_refinements_used: number }[]
+    >`SELECT lifetime_refinements_used FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.lifetime_refinements_used).toBe(3);
   });
 
   test("paid tier (creator) ignores lifetime cap entirely", async () => {
     const { deduct } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "creator",
       creditsRemainingDaily: 20000,
       creditsRemainingMonthly: 20000,
@@ -236,19 +222,15 @@ describe("deduct — lifetime cap on free tier", () => {
     const { logId } = await deduct(userId, "generation", null);
     expect(logId).toBeTruthy();
 
-    const log = testDb.sqlite
-      .query<{ lifetime_counter_incremented: number }, [string]>(
-        "SELECT lifetime_counter_incremented FROM usage_log WHERE id = ?"
-      )
-      .get(logId);
-    expect(log?.lifetime_counter_incremented).toBe(0);
+    const [log] = await testDb.sql<
+      { lifetime_counter_incremented: boolean }[]
+    >`SELECT lifetime_counter_incremented FROM usage_log WHERE id = ${logId}`;
+    expect(log?.lifetime_counter_incremented).toBe(false);
 
     // Lifetime counter on user row is NOT incremented for creator tier
-    const user = testDb.sqlite
-      .query<{ lifetime_generations_used: number }, [string]>(
-        `SELECT lifetime_generations_used FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      { lifetime_generations_used: number }[]
+    >`SELECT lifetime_generations_used FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.lifetime_generations_used).toBe(100);
   });
 });
@@ -256,35 +238,27 @@ describe("deduct — lifetime cap on free tier", () => {
 describe("refund — idempotency and lifetime decrement", () => {
   test("refund credits + decrement lifetime counter for free user", async () => {
     const { deduct, refund } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 3000,
     });
 
     const { logId } = await deduct(userId, "generation", null);
-    expect(
-      testDb.sqlite
-        .query<{ lifetime_generations_used: number }, [string]>(
-          `SELECT lifetime_generations_used FROM "user" WHERE id = ?`
-        )
-        .get(userId)?.lifetime_generations_used
-    ).toBe(1);
+    const [chargedUser] = await testDb.sql<
+      { lifetime_generations_used: number }[]
+    >`SELECT lifetime_generations_used FROM "user" WHERE id = ${userId}::uuid`;
+    expect(chargedUser?.lifetime_generations_used).toBe(1);
 
     await refund(logId);
 
-    const user = testDb.sqlite
-      .query<
-        {
-          credits_remaining_daily: number;
-          credits_remaining_monthly: number;
-          lifetime_generations_used: number;
-        },
-        [string]
-      >(
-        `SELECT credits_remaining_daily, credits_remaining_monthly, lifetime_generations_used FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      {
+        credits_remaining_daily: number;
+        credits_remaining_monthly: number;
+        lifetime_generations_used: number;
+      }[]
+    >`SELECT credits_remaining_daily, credits_remaining_monthly, lifetime_generations_used FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.credits_remaining_daily).toBe(500);
     expect(user?.credits_remaining_monthly).toBe(3000);
     expect(user?.lifetime_generations_used).toBe(0);
@@ -292,7 +266,7 @@ describe("refund — idempotency and lifetime decrement", () => {
 
   test("refund is idempotent — second call is a no-op", async () => {
     const { deduct, refund } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 3000,
@@ -302,11 +276,9 @@ describe("refund — idempotency and lifetime decrement", () => {
     await refund(logId);
     await refund(logId); // second call should NOT double-credit
 
-    const user = testDb.sqlite
-      .query<{ credits_remaining_monthly: number }, [string]>(
-        `SELECT credits_remaining_monthly FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      { credits_remaining_monthly: number }[]
+    >`SELECT credits_remaining_monthly FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.credits_remaining_monthly).toBe(3000); // not 3200
   });
 
@@ -316,7 +288,7 @@ describe("refund — idempotency and lifetime decrement", () => {
     // calls would pass the SELECT-then-check guard and run the unguarded
     // UPDATE on users, doubling the credit.
     const { deduct, refund } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "free",
       creditsRemainingDaily: 500,
       creditsRemainingMonthly: 3000,
@@ -326,18 +298,13 @@ describe("refund — idempotency and lifetime decrement", () => {
 
     await Promise.all([refund(logId), refund(logId), refund(logId)]);
 
-    const user = testDb.sqlite
-      .query<
-        {
-          credits_remaining_daily: number;
-          credits_remaining_monthly: number;
-          lifetime_generations_used: number;
-        },
-        [string]
-      >(
-        `SELECT credits_remaining_daily, credits_remaining_monthly, lifetime_generations_used FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      {
+        credits_remaining_daily: number;
+        credits_remaining_monthly: number;
+        lifetime_generations_used: number;
+      }[]
+    >`SELECT credits_remaining_daily, credits_remaining_monthly, lifetime_generations_used FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.credits_remaining_daily).toBe(500); // not 1500 or 1000
     expect(user?.credits_remaining_monthly).toBe(3000); // not 9000 or 6000
     expect(user?.lifetime_generations_used).toBe(0); // not negative or skipped
@@ -345,7 +312,7 @@ describe("refund — idempotency and lifetime decrement", () => {
 
   test("admin refund: no credits change, no lifetime change (cost was 0)", async () => {
     const { deduct, refund } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, {
+    const { id: userId } = await insertTestUser(testDb, {
       tier: "admin",
       creditsRemainingDaily: 100,
       creditsRemainingMonthly: 100,
@@ -354,19 +321,15 @@ describe("refund — idempotency and lifetime decrement", () => {
     const { logId } = await deduct(userId, "generation", null);
     await refund(logId);
 
-    const user = testDb.sqlite
-      .query<{ credits_remaining_monthly: number; lifetime_generations_used: number }, [string]>(
-        `SELECT credits_remaining_monthly, lifetime_generations_used FROM "user" WHERE id = ?`
-      )
-      .get(userId);
+    const [user] = await testDb.sql<
+      { credits_remaining_monthly: number; lifetime_generations_used: number }[]
+    >`SELECT credits_remaining_monthly, lifetime_generations_used FROM "user" WHERE id = ${userId}::uuid`;
     expect(user?.credits_remaining_monthly).toBe(100);
     expect(user?.lifetime_generations_used).toBe(0);
 
-    const log = testDb.sqlite
-      .query<{ refunded_at: number | null }, [string]>(
-        "SELECT refunded_at FROM usage_log WHERE id = ?"
-      )
-      .get(logId);
+    const [log] = await testDb.sql<
+      { refunded_at: number | null }[]
+    >`SELECT refunded_at FROM usage_log WHERE id = ${logId}`;
     expect(log?.refunded_at).not.toBeNull();
   });
 });

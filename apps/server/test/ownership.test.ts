@@ -6,16 +6,16 @@ import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 
-beforeEach(() => {
-  testDb = createTestDb();
+beforeEach(async () => {
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
 });
 
-afterEach(() => {
-  testDb.close();
+afterEach(async () => {
+  await testDb.close();
 });
 
 interface InsertGameArgs {
@@ -26,34 +26,18 @@ interface InsertGameArgs {
   title?: string;
 }
 
-function insertGame(args: InsertGameArgs): string {
+async function insertGame(args: InsertGameArgs): Promise<string> {
   const id = args.id ?? randomUUID();
   const now = Date.now();
-  testDb.sqlite
-    .prepare(
-      `INSERT INTO games (
-        id, user_id, title, current_code, thumbnail, genre,
-        original_prompt, is_public, public_slug, published_at,
-        remixed_from_game_id, created_at, updated_at
-      ) VALUES (?, ?, ?, '<html>', NULL, NULL, 'prompt', ?, ?, NULL, NULL, ?, ?)`
-    )
-    .run(
-      id,
-      args.userId,
-      args.title ?? "Test Game",
-      args.isPublic ? 1 : 0,
-      args.publicSlug ?? null,
-      now,
-      now
-    );
+  await testDb.sql`INSERT INTO games (id, user_id, title, current_code, thumbnail, genre, original_prompt, is_public, public_slug, published_at, remixed_from_game_id, created_at, updated_at) VALUES (${id}, ${args.userId}::uuid, ${args.title ?? "Test Game"}, '<html>', NULL, NULL, 'prompt', ${args.isPublic ?? false}, ${args.publicSlug ?? null}, NULL, NULL, ${now}, ${now})`;
   return id;
 }
 
 describe("loadOwnedGame", () => {
   test("returns the game for its owner", async () => {
     const { loadOwnedGame } = await import("../src/lib/ownership.js");
-    const { id: userId } = insertTestUser(testDb.sqlite);
-    const gameId = insertGame({ userId });
+    const { id: userId } = await insertTestUser(testDb);
+    const gameId = await insertGame({ userId });
 
     const game = await loadOwnedGame(gameId, userId);
     expect(game).toBeTruthy();
@@ -62,9 +46,13 @@ describe("loadOwnedGame", () => {
 
   test("returns null for a non-owner (the 404 case in route handlers)", async () => {
     const { loadOwnedGame } = await import("../src/lib/ownership.js");
-    const { id: ownerId } = insertTestUser(testDb.sqlite, { email: "owner@test" });
-    const { id: otherId } = insertTestUser(testDb.sqlite, { email: "other@test" });
-    const gameId = insertGame({ userId: ownerId });
+    const { id: ownerId } = await insertTestUser(testDb, {
+      email: "owner@test",
+    });
+    const { id: otherId } = await insertTestUser(testDb, {
+      email: "other@test",
+    });
+    const gameId = await insertGame({ userId: ownerId });
 
     const game = await loadOwnedGame(gameId, otherId);
     expect(game).toBeNull();
@@ -72,7 +60,7 @@ describe("loadOwnedGame", () => {
 
   test("returns null for a missing game id", async () => {
     const { loadOwnedGame } = await import("../src/lib/ownership.js");
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
 
     const game = await loadOwnedGame("does-not-exist", userId);
     expect(game).toBeNull();
@@ -82,8 +70,13 @@ describe("loadOwnedGame", () => {
 describe("loadPublicGame", () => {
   test("returns a payload with ownerDisplayName for a published game", async () => {
     const { loadPublicGame } = await import("../src/lib/ownership.js");
-    const { id: userId } = insertTestUser(testDb.sqlite);
-    insertGame({ userId, isPublic: true, publicSlug: "abc12345", title: "Public" });
+    const { id: userId } = await insertTestUser(testDb);
+    await insertGame({
+      userId,
+      isPublic: true,
+      publicSlug: "abc12345",
+      title: "Public",
+    });
 
     const game = await loadPublicGame("abc12345");
     expect(game).toBeTruthy();
@@ -93,8 +86,8 @@ describe("loadPublicGame", () => {
 
   test("returns null for a private game (existence-leakage guard)", async () => {
     const { loadPublicGame } = await import("../src/lib/ownership.js");
-    const { id: userId } = insertTestUser(testDb.sqlite);
-    insertGame({ userId, isPublic: false, publicSlug: "private1" });
+    const { id: userId } = await insertTestUser(testDb);
+    await insertGame({ userId, isPublic: false, publicSlug: "private1" });
 
     expect(await loadPublicGame("private1")).toBeNull();
   });
@@ -106,8 +99,8 @@ describe("loadPublicGame", () => {
 
   test("does NOT expose userId in the payload", async () => {
     const { loadPublicGame } = await import("../src/lib/ownership.js");
-    const { id: userId } = insertTestUser(testDb.sqlite);
-    insertGame({ userId, isPublic: true, publicSlug: "leak-test" });
+    const { id: userId } = await insertTestUser(testDb);
+    await insertGame({ userId, isPublic: true, publicSlug: "leak-test" });
 
     const game = await loadPublicGame("leak-test");
     expect(game).toBeTruthy();

@@ -21,17 +21,17 @@ async function buildApp() {
 }
 
 beforeEach(async () => {
-  testDb = createTestDb();
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
   app = await buildApp();
 });
 
 afterEach(async () => {
   await app.close();
-  testDb.close();
+  await testDb.close();
 });
 
 interface InsertGameArgs {
@@ -41,16 +41,16 @@ interface InsertGameArgs {
   thumbnail?: string | null;
 }
 
-function insertGame(args: InsertGameArgs): string {
+async function insertGame(args: InsertGameArgs): Promise<string> {
   const id = randomUUID();
   const now = Date.now();
-  testDb.sqlite
+  await testDb.client
     .prepare(
       `INSERT INTO games (
         id, user_id, title, current_code, thumbnail, genre,
         original_prompt, is_public, public_slug, published_at,
         remixed_from_game_id, play_count, like_count, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, 'p', ?, ?, ?, NULL, 0, 0, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, NULL, 'p', ?, ?, ?, NULL, 0, 0, ?, ?)`
     )
     .run(
       id,
@@ -58,7 +58,7 @@ function insertGame(args: InsertGameArgs): string {
       "test",
       "<html>",
       args.thumbnail ?? null,
-      args.isPublic === false ? 0 : 1,
+      args.isPublic ?? true,
       args.publicSlug,
       now,
       now,
@@ -73,8 +73,8 @@ const TINY_PNG_DATA_URL =
 
 describe("GET /api/og/:slug.png", () => {
   test("returns decoded PNG bytes for a public game with thumbnail", async () => {
-    const { id } = insertTestUser(testDb.sqlite);
-    insertGame({ userId: id, publicSlug: "abcdef12", thumbnail: TINY_PNG_DATA_URL });
+    const { id } = await insertTestUser(testDb);
+    await insertGame({ userId: id, publicSlug: "abcdef12", thumbnail: TINY_PNG_DATA_URL });
 
     const res = await app.inject({ method: "GET", url: "/api/og/abcdef12.png" });
     expect(res.statusCode).toBe(200);
@@ -92,8 +92,8 @@ describe("GET /api/og/:slug.png", () => {
     // The slug regex is case-insensitive but public_slug is stored lowercase
     // in a case-sensitive TEXT column, so the param must be normalized before
     // the lookup — otherwise this silently returns the placeholder.
-    const { id } = insertTestUser(testDb.sqlite);
-    insertGame({ userId: id, publicSlug: "abcdef12", thumbnail: TINY_PNG_DATA_URL });
+    const { id } = await insertTestUser(testDb);
+    await insertGame({ userId: id, publicSlug: "abcdef12", thumbnail: TINY_PNG_DATA_URL });
 
     const res = await app.inject({ method: "GET", url: "/api/og/ABCDEF12.png" });
     expect(res.statusCode).toBe(200);
@@ -103,8 +103,8 @@ describe("GET /api/og/:slug.png", () => {
   });
 
   test("returns fallback PNG when game has no thumbnail", async () => {
-    const { id } = insertTestUser(testDb.sqlite);
-    insertGame({ userId: id, publicSlug: "0badcafe", thumbnail: null });
+    const { id } = await insertTestUser(testDb);
+    await insertGame({ userId: id, publicSlug: "0badcafe", thumbnail: null });
 
     const res = await app.inject({ method: "GET", url: "/api/og/0badcafe.png" });
     expect(res.statusCode).toBe(200);
@@ -122,8 +122,8 @@ describe("GET /api/og/:slug.png", () => {
   });
 
   test("falls back when thumbnail data URL is malformed", async () => {
-    const { id } = insertTestUser(testDb.sqlite);
-    insertGame({
+    const { id } = await insertTestUser(testDb);
+    await insertGame({
       userId: id,
       publicSlug: "b0bacafe",
       thumbnail: "not-a-valid-data-url",
@@ -138,9 +138,9 @@ describe("GET /api/og/:slug.png", () => {
   });
 
   test("falls back with a short cache when thumbnail bytes don't match the declared MIME", async () => {
-    const { id } = insertTestUser(testDb.sqlite);
+    const { id } = await insertTestUser(testDb);
     // Valid data-URL prefix but the base64 payload is not a real PNG.
-    insertGame({
+    await insertGame({
       userId: id,
       publicSlug: "c0ffee11",
       thumbnail: "data:image/png;base64,aGVsbG8gd29ybGQgbm90IGEgcG5n",
@@ -158,8 +158,8 @@ describe("GET /api/og/:slug.png", () => {
   });
 
   test("does not serve thumbnails for private games (treated as not found)", async () => {
-    const { id } = insertTestUser(testDb.sqlite);
-    insertGame({
+    const { id } = await insertTestUser(testDb);
+    await insertGame({
       userId: id,
       publicSlug: "0ff11ce0",
       isPublic: false,

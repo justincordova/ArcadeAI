@@ -1,7 +1,9 @@
 CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
 
 CREATE TABLE "user" (
-  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  -- Profiles are populated from verified Supabase JWTs. Keep the system
+  -- creator independent of auth.users so curated public games need no login.
+  id uuid PRIMARY KEY,
   email text NOT NULL UNIQUE,
   email_verified boolean NOT NULL DEFAULT false,
   name text NOT NULL DEFAULT '',

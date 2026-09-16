@@ -10,12 +10,10 @@
  *
  * Writes:
  *   rag_examples     (id, genre, prompt, html, created_at)
- *   rag_embeddings   (id, genre, embedding)  — vec0 virtual table
+ *   rag_embeddings   (id, genre, embedding)  — pgvector table
  *
  * Idempotent: rows are upserted by `id` inside a single transaction.
- *   - `rag_examples` uses `INSERT OR REPLACE`.
- *   - `rag_embeddings` is a vec0 virtual table that does NOT support
- *     `OR REPLACE`, so each row is `DELETE`d then `INSERT`ed.
+ * Both tables use PostgreSQL UPSERTs.
  * Re-running after a curated edit re-seeds in place. This script does NOT
  * delete rows whose ids no longer appear in `rag-prompts.ts`; remove those
  * manually.
@@ -31,9 +29,9 @@ const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const CURATED_DIR = join(SCRIPTS_DIR, "rag-curated");
 const EMBEDDINGS_DIR = join(SCRIPTS_DIR, "rag-embeddings");
 
-const dbPath = process.env.DATABASE_PATH;
-if (!dbPath) {
-  console.error("DATABASE_PATH environment variable is required");
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  console.error("DATABASE_URL environment variable is required");
   process.exit(1);
 }
 
@@ -53,19 +51,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { db, sqlite } = createClient(dbPath as string);
-
-  // Confirm the vec0 virtual table exists; the post-migrate script (run
-  // via `bun run --filter @arcadeai/db migrate`) is responsible for
-  // creating it. Bail with a clear message if it isn't there yet.
-  const vecTable = sqlite
-    .prepare("SELECT name FROM sqlite_master WHERE name = 'rag_embeddings'")
-    .get();
-  if (!vecTable) {
-    console.error("rag_embeddings vec0 table is missing. Run db migrations first:");
-    console.error("  bun run --filter @arcadeai/db migrate");
-    process.exit(1);
-  }
+  const { sql } = createClient(databaseUrl as string);
 
   const now = Date.now();
 
@@ -75,7 +61,7 @@ async function main() {
     genre: string;
     prompt: string;
     html: string;
-    embedding: Float32Array;
+    embedding: string;
   }> = [];
   for (const entry of RAG_PROMPTS) {
     const html = await readFile(join(CURATED_DIR, `${entry.id}.html`), "utf8");
@@ -92,39 +78,24 @@ async function main() {
       genre: entry.genre,
       prompt: entry.prompt,
       html,
-      embedding: new Float32Array(parsed.embedding),
+      embedding: `[${parsed.embedding.join(",")}]`,
     });
   }
 
-  const upsertExample = sqlite.prepare(
-    "INSERT OR REPLACE INTO rag_examples (id, genre, prompt, html, created_at) VALUES (?, ?, ?, ?, ?)"
-  );
-  // Vec0 tables don't support INSERT OR REPLACE; we delete then insert per row.
-  const deleteEmbedding = sqlite.prepare("DELETE FROM rag_embeddings WHERE id = ?");
-  const insertEmbedding = sqlite.prepare(
-    "INSERT INTO rag_embeddings (id, genre, embedding) VALUES (?, ?, ?)"
-  );
-
-  const tx = sqlite.transaction(() => {
+  await sql.begin(async (tx) => {
     for (const r of records) {
-      upsertExample.run(r.id, r.genre, r.prompt, r.html, now);
-      deleteEmbedding.run(r.id);
-      insertEmbedding.run(r.id, r.genre, r.embedding);
+      await tx`INSERT INTO rag_examples (id, genre, prompt, html, created_at) VALUES (${r.id}, ${r.genre}, ${r.prompt}, ${r.html}, ${now}) ON CONFLICT (id) DO UPDATE SET genre = EXCLUDED.genre, prompt = EXCLUDED.prompt, html = EXCLUDED.html, created_at = EXCLUDED.created_at`;
+      await tx`INSERT INTO rag_embeddings (id, genre, embedding) VALUES (${r.id}, ${r.genre}, ${r.embedding}::extensions.vector) ON CONFLICT (id) DO UPDATE SET genre = EXCLUDED.genre, embedding = EXCLUDED.embedding`;
     }
   });
-  tx();
 
-  // Sanity check the result.
-  const exampleCount = sqlite.prepare("SELECT count(*) AS n FROM rag_examples").get() as {
-    n: number;
-  };
-  const embeddingCount = sqlite.prepare("SELECT count(*) AS n FROM rag_embeddings").get() as {
-    n: number;
-  };
-
-  const perGenre = sqlite
-    .prepare("SELECT genre, count(*) AS n FROM rag_examples GROUP BY genre ORDER BY genre")
-    .all() as Array<{ genre: string; n: number }>;
+  const [exampleCount] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM rag_examples`;
+  const [embeddingCount] = await sql<
+    { n: number }[]
+  >`SELECT count(*)::int AS n FROM rag_embeddings`;
+  const perGenre = await sql<
+    { genre: string; n: number }[]
+  >`SELECT genre, count(*)::int AS n FROM rag_examples GROUP BY genre ORDER BY genre`;
 
   console.log(
     `Seeded ${records.length} reference examples — rag_examples=${exampleCount.n}, rag_embeddings=${embeddingCount.n}`
@@ -132,12 +103,7 @@ async function main() {
   console.log("Per-genre counts:");
   for (const row of perGenre) console.log(`  ${row.genre.padEnd(12)} ${row.n}`);
 
-  // Suppress unused-binding warning from drizzle import — we're using
-  // raw prepared statements rather than the typed schema for the bulk seed
-  // (vec0 inserts go through `sqlite` directly).
-  void db;
-
-  sqlite.close();
+  await sql.end();
 }
 
 main().catch((err) => {

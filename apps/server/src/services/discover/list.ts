@@ -9,9 +9,9 @@
 // that "page 50" never materializes; if it ever does, switch to a
 // keyset cursor on (score, id).
 
-import { games, users } from "@arcadeai/db";
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
-import { db, sqlite } from "../../lib/db.js";
+import { gameLikes, games, users } from "@arcadeai/db";
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { db } from "../../lib/db.js";
 
 export type DiscoverSort = "trending" | "top" | "new";
 
@@ -54,8 +54,8 @@ export async function listDiscoverGames({
   // The +2 keeps a brand-new game from spiking to infinity at hour 0,
   // and the 1.3 exponent decays popularity within ~2 days.
   const trendingScore = sql<number>`
-    CAST(${games.likeCount} AS REAL) /
-    POW((CAST(strftime('%s','now') AS REAL) * 1000 - COALESCE(${games.publishedAt}, ${games.createdAt})) / 3600000.0 + 2, 1.3)
+    ${games.likeCount}::double precision /
+    POWER((EXTRACT(EPOCH FROM NOW()) * 1000 - COALESCE(${games.publishedAt}, ${games.createdAt})) / 3600000.0 + 2, 1.3)
   `;
 
   // Every sort ends with desc(games.id) as a deterministic tie-breaker so
@@ -118,16 +118,13 @@ export async function listDiscoverGames({
 
   // Hydrate `liked` for the viewer in a single query. Small N (<= limit),
   // so a server-side join would be fine too, but a follow-up query keeps
-  // the main query plan stable across sort modes. We drop to the bun:sqlite
-  // handle here because Drizzle's IN (?, ?, ...) over a dynamic array is
-  // verbose; a hand-rolled placeholder list is clearer.
+  // the main query plan stable across sort modes.
   const ids = rows.map((r) => r.id);
-  const placeholders = ids.map(() => "?").join(",");
-  const stmt = sqlite.prepare(
-    `SELECT game_id FROM game_likes WHERE user_id = ? AND game_id IN (${placeholders})`
-  );
-  const likedRows = stmt.all(viewerUserId, ...ids) as Array<{ game_id: string }>;
-  const likedSet = new Set<string>(likedRows.map((r) => r.game_id));
+  const likedRows = await db
+    .select({ gameId: gameLikes.gameId })
+    .from(gameLikes)
+    .where(and(eq(gameLikes.userId, viewerUserId), inArray(gameLikes.gameId, ids)));
+  const likedSet = new Set<string>(likedRows.map((r) => r.gameId));
 
   return rows
     .filter((r): r is typeof r & { slug: string } => r.slug !== null)

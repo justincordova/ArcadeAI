@@ -14,7 +14,7 @@ import type { RefundReason } from "../../services/usage/charge.js";
  *
  * Everything else that lands in `streamError` comes from a third party: the
  * Anthropic SDK, whose messages carry upstream response bodies and request
- * IDs, or Drizzle / bun:sqlite, whose messages carry SQL text and constraint
+ * IDs, or Drizzle/PostgreSQL, whose messages carry SQL text and constraint
  * names like `UNIQUE constraint failed: games.public_slug`. Those must not be
  * echoed to the client.
  */

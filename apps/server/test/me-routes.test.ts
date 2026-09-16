@@ -11,7 +11,7 @@ import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 let app: FastifyInstance;
-let stubUserId = "user-stub";
+let stubUserId: string = randomUUID();
 
 async function buildApp() {
   const fastify = Fastify({ logger: false });
@@ -26,10 +26,10 @@ async function buildApp() {
 }
 
 beforeEach(async () => {
-  testDb = createTestDb();
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
   // auth.api.signOut is called first in the delete handler; it's wrapped in a
   // try/catch that continues on failure, so a no-op stub is enough.
@@ -41,82 +41,88 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await app.close();
-  testDb.close();
+  await testDb.close();
 });
 
-function insertGame(args: { userId: string; publicSlug: string; likeCount?: number }): string {
+async function insertGame(args: {
+  userId: string;
+  publicSlug: string;
+  likeCount?: number;
+}): Promise<string> {
   const id = randomUUID();
   const now = Date.now();
-  testDb.sqlite
+  await testDb.client
     .prepare(
       `INSERT INTO games (
         id, user_id, title, current_code, thumbnail, genre,
         original_prompt, is_public, public_slug, published_at,
         remixed_from_game_id, play_count, like_count, created_at, updated_at
-      ) VALUES (?, ?, 't', '<html>', NULL, NULL, 'p', 1, ?, ?, NULL, 0, ?, ?, ?)`
+       ) VALUES (?, ?, 't', '<html>', NULL, NULL, 'p', true, ?, ?, NULL, 0, ?, ?, ?)`
     )
     .run(id, args.userId, args.publicSlug, now, args.likeCount ?? 0, now, now);
   return id;
 }
 
-function insertLike(gameId: string, userId: string) {
-  testDb.sqlite
+async function insertLike(gameId: string, userId: string) {
+  await testDb.client
     .prepare("INSERT INTO game_likes (game_id, user_id, created_at) VALUES (?, ?, ?)")
     .run(gameId, userId, Date.now());
 }
 
-function likeCountOf(gameId: string): number | undefined {
-  return testDb.sqlite
-    .query<{ like_count: number }, [string]>("SELECT like_count FROM games WHERE id = ?")
-    .get(gameId)?.like_count;
+async function likeCountOf(gameId: string): Promise<number | undefined> {
+  return (
+    await testDb.client
+      .query<{ like_count: number }, [string]>("SELECT like_count FROM games WHERE id = ?")
+      .get(gameId)
+  )?.like_count;
 }
 
 describe("DELETE /api/me — like_count reconciliation", () => {
   test("decrements like_count on other users' games the deleted user had liked", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite, { email: "owner@test" });
-    const { id: leaver } = insertTestUser(testDb.sqlite, { email: "leaver@test" });
+    const { id: owner } = await insertTestUser(testDb, { email: "owner@test" });
+    const { id: leaver } = await insertTestUser(testDb, { email: "leaver@test" });
     stubUserId = leaver;
 
     // Owner's public game, liked by the leaver (count reflects that like).
-    const game = insertGame({ userId: owner, publicSlug: "ownr0001", likeCount: 1 });
-    insertLike(game, leaver);
+    const game = await insertGame({ userId: owner, publicSlug: "ownr0001", likeCount: 1 });
+    await insertLike(game, leaver);
 
     const res = await app.inject({ method: "DELETE", url: "/api/me" });
 
     expect(res.statusCode).toBe(204);
     // The leaver's like row cascaded away; the counter must have been
     // decremented to match (was 1 -> 0), not left stale at 1.
-    expect(likeCountOf(game)).toBe(0);
+    expect(await likeCountOf(game)).toBe(0);
   });
 
   test("does not drive like_count below zero", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite, { email: "owner2@test" });
-    const { id: leaver } = insertTestUser(testDb.sqlite, { email: "leaver2@test" });
+    const { id: owner } = await insertTestUser(testDb, { email: "owner2@test" });
+    const { id: leaver } = await insertTestUser(testDb, { email: "leaver2@test" });
     stubUserId = leaver;
 
     // Counter already 0 (drifted low) but a like row exists — MAX(...,0) clamps.
-    const game = insertGame({ userId: owner, publicSlug: "ownr0002", likeCount: 0 });
-    insertLike(game, leaver);
+    const game = await insertGame({ userId: owner, publicSlug: "ownr0002", likeCount: 0 });
+    await insertLike(game, leaver);
 
     const res = await app.inject({ method: "DELETE", url: "/api/me" });
 
     expect(res.statusCode).toBe(204);
-    expect(likeCountOf(game)).toBe(0);
+    expect(await likeCountOf(game)).toBe(0);
   });
 
   test("leaves unrelated games' counters untouched", async () => {
-    const { id: owner } = insertTestUser(testDb.sqlite, { email: "owner3@test" });
-    const { id: leaver } = insertTestUser(testDb.sqlite, { email: "leaver3@test" });
+    const { id: owner } = await insertTestUser(testDb, { email: "owner3@test" });
+    const { id: leaver } = await insertTestUser(testDb, { email: "leaver3@test" });
     stubUserId = leaver;
 
-    const liked = insertGame({ userId: owner, publicSlug: "lik00001", likeCount: 5 });
-    const notLiked = insertGame({ userId: owner, publicSlug: "notl0001", likeCount: 5 });
-    insertLike(liked, leaver);
+    const liked = await insertGame({ userId: owner, publicSlug: "lik00001", likeCount: 5 });
+    const notLiked = await insertGame({ userId: owner, publicSlug: "notl0001", likeCount: 5 });
+    await insertLike(liked, leaver);
 
     const res = await app.inject({ method: "DELETE", url: "/api/me" });
 
     expect(res.statusCode).toBe(204);
-    expect(likeCountOf(liked)).toBe(4);
-    expect(likeCountOf(notLiked)).toBe(5);
+    expect(await likeCountOf(liked)).toBe(4);
+    expect(await likeCountOf(notLiked)).toBe(5);
   });
 });

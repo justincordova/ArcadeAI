@@ -18,6 +18,7 @@
     "db:migrate": "bun run --filter @arcadeai/db migrate",
     "db:generate": "bun run --filter @arcadeai/db generate",
     "db:studio": "bun run --filter @arcadeai/db studio",
+    "db:import:sqlite": "bun run apps/server/scripts/import-sqlite-to-supabase.ts",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:status": "supabase status",

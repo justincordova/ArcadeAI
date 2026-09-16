@@ -17,41 +17,41 @@ import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 
-beforeEach(() => {
-  testDb = createTestDb();
+beforeEach(async () => {
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
 });
 
-afterEach(() => {
-  testDb.close();
+afterEach(async () => {
+  await testDb.close();
 });
 
-function insertGame(userId: string, id = "game-1") {
-  testDb.sqlite
+function insertGame(userId: string, id = crypto.randomUUID()) {
+  return testDb.client
     .prepare(
       `INSERT INTO games (id, user_id, title, original_prompt, current_code, is_public,
                           like_count, play_count, created_at, updated_at)
-       VALUES (?, ?, 'T', 'p', '', 0, 0, 0, ?, ?)`
+       VALUES (?, ?, 'T', 'p', '', false, 0, 0, ?, ?)`
     )
-    .run(id, userId, Date.now(), Date.now());
-  return id;
+    .run(id, userId, Date.now(), Date.now())
+    .then(() => id);
 }
 
 describe("deleting a game mid-stream", () => {
   test("the usage_log row survives with game_id set to NULL", async () => {
     const { deduct } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, { tier: "free" });
-    const gameId = insertGame(userId);
+    const { id: userId } = await insertTestUser(testDb, { tier: "free" });
+    const gameId = await insertGame(userId);
 
     const { logId } = await deduct(userId, "generation", gameId);
-    testDb.sqlite.prepare("DELETE FROM games WHERE id = ?").run(gameId);
+    await testDb.client.prepare("DELETE FROM games WHERE id = ?").run(gameId);
 
-    const row = testDb.sqlite
+    const row = (await testDb.client
       .prepare("SELECT game_id, succeeded, refunded_at FROM usage_log WHERE id = ?")
-      .get(logId) as { game_id: string | null; succeeded: number; refunded_at: number | null };
+      .get(logId)) as { game_id: string | null; succeeded: number; refunded_at: number | null };
 
     // ON DELETE SET NULL: the billing record must outlive the game so the
     // charge stays auditable and refundable.
@@ -63,13 +63,14 @@ describe("deleting a game mid-stream", () => {
   test("persisting to the deleted game affects 0 rows without throwing", async () => {
     const { games } = await import("@arcadeai/db");
     const { and, eq } = await import("drizzle-orm");
-    const { id: userId } = insertTestUser(testDb.sqlite, { tier: "free" });
-    const gameId = insertGame(userId);
-    testDb.sqlite.prepare("DELETE FROM games WHERE id = ?").run(gameId);
+    const { id: userId } = await insertTestUser(testDb, { tier: "free" });
+    const gameId = await insertGame(userId);
+    await testDb.client.prepare("DELETE FROM games WHERE id = ?").run(gameId);
 
     // This is the shape the stream handlers use. It must report the miss
     // rather than silently succeeding.
-    const persisted = await testDb.db
+    // biome-ignore lint/suspicious/noExplicitAny: legacy SQLite test client is replaced separately.
+    const persisted = await (testDb.db as any)
       .update(games)
       .set({ currentCode: "<!DOCTYPE html>", updatedAt: Date.now() })
       .where(and(eq(games.id, gameId), eq(games.userId, userId)))
@@ -80,23 +81,23 @@ describe("deleting a game mid-stream", () => {
 
   test("refund restores credits and the lifetime counter after the game is gone", async () => {
     const { deduct, refund } = await import("../src/services/usage/charge.js");
-    const { id: userId } = insertTestUser(testDb.sqlite, { tier: "free" });
-    const gameId = insertGame(userId);
+    const { id: userId } = await insertTestUser(testDb, { tier: "free" });
+    const gameId = await insertGame(userId);
 
-    const before = testDb.sqlite
+    const before = (await testDb.client
       .prepare(
         `SELECT credits_remaining_daily d, credits_remaining_monthly m,
                 lifetime_generations_used g FROM "user" WHERE id = ?`
       )
-      .get(userId) as { d: number; m: number; g: number };
+      .get(userId)) as { d: number; m: number; g: number };
 
     const { logId } = await deduct(userId, "generation", gameId);
-    testDb.sqlite.prepare("DELETE FROM games WHERE id = ?").run(gameId);
+    await testDb.client.prepare("DELETE FROM games WHERE id = ?").run(gameId);
 
-    const charged = testDb.sqlite
+    const charged = (await testDb.client
       .prepare(`SELECT credits_remaining_monthly m, lifetime_generations_used g
                 FROM "user" WHERE id = ?`)
-      .get(userId) as { m: number; g: number };
+      .get(userId)) as { m: number; g: number };
     expect(charged.m).toBeLessThan(before.m);
     expect(charged.g).toBe(before.g + 1);
 
@@ -104,12 +105,12 @@ describe("deleting a game mid-stream", () => {
     // which routes here. Credits and the lifetime counter must both come back.
     await refund(logId, { reason: "persistence_error" });
 
-    const after = testDb.sqlite
+    const after = (await testDb.client
       .prepare(
         `SELECT credits_remaining_daily d, credits_remaining_monthly m,
                 lifetime_generations_used g FROM "user" WHERE id = ?`
       )
-      .get(userId) as { d: number; m: number; g: number };
+      .get(userId)) as { d: number; m: number; g: number };
 
     expect(after.d).toBe(before.d);
     expect(after.m).toBe(before.m);

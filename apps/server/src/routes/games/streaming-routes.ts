@@ -120,37 +120,27 @@ export function registerGameStreamingRoutes(app: FastifyInstance) {
       const now = Date.now();
       const title = prompt.slice(0, 40);
 
-      // Insert game row and initial prompt message in a single transaction.
-      // The callback MUST be synchronous: Drizzle's bun-sqlite driver wraps a
-      // sync callback in bun's native transaction (real BEGIN/COMMIT/ROLLBACK),
-      // but an `async` callback commits at the first `await`, so a failure on
-      // the second insert would NOT roll back the first — leaving an orphan
-      // game with no prompt message. Use `.run()` so each statement executes
-      // synchronously inside the transaction.
-      db.transaction((tx) => {
-        tx.insert(games)
-          .values({
-            id,
-            userId,
-            title,
-            currentCode: "",
-            thumbnail: null,
-            genre: null,
-            originalPrompt: prompt,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .run();
+      // The Postgres transaction commits only after both awaited inserts finish.
+      await db.transaction(async (tx) => {
+        await tx.insert(games).values({
+          id,
+          userId,
+          title,
+          currentCode: "",
+          thumbnail: null,
+          genre: null,
+          originalPrompt: prompt,
+          createdAt: now,
+          updatedAt: now,
+        });
 
-        tx.insert(messages)
-          .values({
-            id: randomUUID(),
-            gameId: id,
-            kind: "prompt",
-            content: prompt,
-            createdAt: now,
-          })
-          .run();
+        await tx.insert(messages).values({
+          id: randomUUID(),
+          gameId: id,
+          kind: "prompt",
+          content: prompt,
+          createdAt: now,
+        });
       });
 
       // Deduct credits (game row now exists for the FK reference).

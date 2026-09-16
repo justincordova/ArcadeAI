@@ -1,6 +1,6 @@
-import type { auth } from "../lib/auth.js";
+import type { SupabaseSession } from "../lib/supabase-auth.js";
 
-export type AuthSession = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
+export type AuthSession = SupabaseSession;
 
 // Extend FastifyRequest type with authSession
 declare module "fastify" {

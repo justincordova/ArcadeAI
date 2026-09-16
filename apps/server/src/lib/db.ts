@@ -1,40 +1,27 @@
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { createClient } from "@arcadeai/db";
-
-// Resolve the DB path relative to the server package, not the process cwd.
-// `bun --filter '*' dev` runs each workspace from its own directory, so the
-// server's cwd is `apps/server/`, but a developer running from the repo root
-// would have a different cwd. Anchoring on this file's location avoids both.
-const here = dirname(fileURLToPath(import.meta.url));
-const defaultPath = resolve(here, "../../data/arcadeai.db");
 
 export type DbClient = ReturnType<typeof createClient>;
 
 /**
  * Factory for opening a DB at an arbitrary path. Tests can call this with
- * `:memory:` (or a tmp file) to get a fully isolated handle. Production code
- * uses the `db` / `sqlite` singletons below — Better Auth and several
- * services need the DB at module-load time, which makes a pure-DI rewrite
- * more invasive than it's worth right now.
+ * a dedicated connection URL to get an isolated handle. Production code uses
+ * the shared `db` and `sql` clients below.
  */
-export function createDb(path: string): DbClient {
-  return createClient(path);
+export function createDb(databaseUrl: string): DbClient {
+  return createClient(databaseUrl);
 }
 
-const dbPath = process.env.DATABASE_PATH ?? defaultPath;
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
-// Single shared bun:sqlite client for the whole server process.
-// Imported by auth, ownership helpers, and route handlers.
-const client = createDb(dbPath);
+const client = createDb(databaseUrl);
 export const db = client.db;
-export const sqlite = client.sqlite;
+export const sql = client.sql;
 
-// Augment FastifyInstance so `app.db` / `app.sqlite` (decorated in index.ts)
-// type-check at every callsite.
+// Augment FastifyInstance so its DB decorators type-check at every callsite.
 declare module "fastify" {
   interface FastifyInstance {
     db: DbClient["db"];
-    sqlite: DbClient["sqlite"];
+    sql: DbClient["sql"];
   }
 }

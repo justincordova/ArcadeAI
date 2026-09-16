@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import fastifyStatic from "@fastify/static";
 import Fastify from "fastify";
 import { activeCount, clear as clearActiveStreams } from "./lib/active-streams.js";
-import { db, sqlite } from "./lib/db.js";
+import { db, sql } from "./lib/db.js";
 import { loadEnv } from "./lib/env.js";
 import { authPlugin, registerAuthGuard } from "./plugins/auth.js";
 import { registerCors } from "./plugins/cors.js";
@@ -80,7 +80,7 @@ const app = Fastify({
 // Better Auth construction). Tests can override these decorators by
 // constructing the app against an in-memory DB.
 app.decorate("db", db);
-app.decorate("sqlite", sqlite);
+app.decorate("sql", sql);
 
 await registerCors(app);
 await registerRateLimit(app);

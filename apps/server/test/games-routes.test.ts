@@ -10,7 +10,7 @@ import { createTestDb, insertTestUser, type TestDb } from "./test-db.js";
 
 let testDb: TestDb;
 let app: FastifyInstance;
-let stubUserId = "user-stub";
+let stubUserId: string = randomUUID();
 
 async function buildApp() {
   const fastify = Fastify({ logger: false });
@@ -55,10 +55,10 @@ function fakeStream(chunks: string[] = ["<!DOCTYPE html><html></html>"]) {
 }
 
 beforeEach(async () => {
-  testDb = createTestDb();
+  testDb = await createTestDb();
   mock.module("../src/lib/db.ts", () => ({
     db: testDb.db,
-    sqlite: testDb.sqlite,
+    sql: testDb.sql,
   }));
   // Override only the three stream entry points. The module's other exports
   // (withTimeout, AUX_LLM_TIMEOUT_MS, isLlmAuthError, LLM_TIMEOUT_MS) are
@@ -75,25 +75,25 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await app.close();
-  testDb.close();
+  await testDb.close();
 });
 
-function insertGame(args: {
+async function insertGame(args: {
   id?: string;
   userId: string;
   title?: string;
   currentCode?: string;
   thumbnail?: string | null;
-}): string {
+}): Promise<string> {
   const id = args.id ?? randomUUID();
   const now = Date.now();
-  testDb.sqlite
+  await testDb.client
     .prepare(
       `INSERT INTO games (
         id, user_id, title, current_code, thumbnail, genre,
         original_prompt, is_public, public_slug, published_at,
         remixed_from_game_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, NULL, 'p', 0, NULL, NULL, NULL, ?, ?)`
+       ) VALUES (?, ?, ?, ?, ?, NULL, 'p', false, NULL, NULL, NULL, ?, ?)`
     )
     .run(
       id,
@@ -113,9 +113,9 @@ const TINY_PNG_DATA_URL =
 
 describe("GET /api/games/:id", () => {
   test("returns the game + messages for the owner", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, title: "Mine" });
+    const gameId = await insertGame({ userId, title: "Mine" });
 
     const res = await app.inject({ method: "GET", url: `/api/games/${gameId}` });
     expect(res.statusCode).toBe(200);
@@ -130,10 +130,10 @@ describe("GET /api/games/:id", () => {
     // to 350 KB) that no client reads off this response. It is fetched on every
     // dashboard card hover and twice per refinement turn, so shipping them is
     // pure waste. canUndo carries the only bit the client needs.
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, thumbnail: TINY_PNG_DATA_URL });
-    testDb.sqlite
+    const gameId = await insertGame({ userId, thumbnail: TINY_PNG_DATA_URL });
+    await testDb.client
       .prepare("UPDATE games SET previous_code = ? WHERE id = ?")
       .run("<html>old</html>", gameId);
 
@@ -146,10 +146,10 @@ describe("GET /api/games/:id", () => {
   });
 
   test("returns 404 when caller is not the owner (no leakage of existence)", async () => {
-    const { id: ownerId } = insertTestUser(testDb.sqlite, { email: "owner@test" });
-    const { id: otherId } = insertTestUser(testDb.sqlite, { email: "other@test" });
+    const { id: ownerId } = await insertTestUser(testDb, { email: "owner@test" });
+    const { id: otherId } = await insertTestUser(testDb, { email: "other@test" });
     stubUserId = otherId;
-    const gameId = insertGame({ userId: ownerId });
+    const gameId = await insertGame({ userId: ownerId });
 
     const res = await app.inject({ method: "GET", url: `/api/games/${gameId}` });
     expect(res.statusCode).toBe(404);
@@ -158,7 +158,7 @@ describe("GET /api/games/:id", () => {
   });
 
   test("returns 404 for a missing game id", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
 
     const res = await app.inject({ method: "GET", url: "/api/games/nope" });
@@ -166,12 +166,12 @@ describe("GET /api/games/:id", () => {
   });
 
   test("inProgress is true for a live generation row, false once it goes stale", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId });
+    const gameId = await insertGame({ userId });
 
     // Live in-flight generation: succeeded=0, not refunded, recent.
-    testDb.sqlite
+    await testDb.client
       .query(
         `INSERT INTO usage_log
            (id, user_id, game_id, action, credits_charged, succeeded, created_at)
@@ -185,7 +185,7 @@ describe("GET /api/games/:id", () => {
     // Age the row past STALE_STREAM_CUTOFF_MS (15 min) — simulates a hard
     // crash that skipped finalization. The game must stop reporting
     // "generating" forever.
-    testDb.sqlite
+    await testDb.client
       .query("UPDATE usage_log SET created_at = ? WHERE id = ?")
       .run(Date.now() - 16 * 60_000, "live-gen-log");
 
@@ -196,9 +196,9 @@ describe("GET /api/games/:id", () => {
 
 describe("PATCH /api/games/:id", () => {
   test("renames the game when the body is valid", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, title: "old" });
+    const gameId = await insertGame({ userId, title: "old" });
 
     const res = await app.inject({
       method: "PATCH",
@@ -209,16 +209,16 @@ describe("PATCH /api/games/:id", () => {
     const body = res.json() as { title: string };
     expect(body.title).toBe("new");
 
-    const row = testDb.sqlite
+    const row = await testDb.client
       .query<{ title: string }, [string]>("SELECT title FROM games WHERE id = ?")
       .get(gameId);
     expect(row?.title).toBe("new");
   });
 
   test("returns 400 with VALIDATION_ERROR for an empty title", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId });
+    const gameId = await insertGame({ userId });
 
     const res = await app.inject({
       method: "PATCH",
@@ -230,10 +230,10 @@ describe("PATCH /api/games/:id", () => {
   });
 
   test("returns 404 for a non-owner", async () => {
-    const { id: ownerId } = insertTestUser(testDb.sqlite, { email: "o@t" });
-    const { id: otherId } = insertTestUser(testDb.sqlite, { email: "p@t" });
+    const { id: ownerId } = await insertTestUser(testDb, { email: "o@t" });
+    const { id: otherId } = await insertTestUser(testDb, { email: "p@t" });
     stubUserId = otherId;
-    const gameId = insertGame({ userId: ownerId });
+    const gameId = await insertGame({ userId: ownerId });
 
     const res = await app.inject({
       method: "PATCH",
@@ -246,12 +246,12 @@ describe("PATCH /api/games/:id", () => {
 
 describe("DELETE /api/games/:id", () => {
   test("deletes the game and cascades messages (FK ON DELETE CASCADE)", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId });
+    const gameId = await insertGame({ userId });
 
     // Seed a message so we can verify cascade
-    testDb.sqlite
+    await testDb.client
       .prepare(
         `INSERT INTO messages (id, game_id, kind, content, created_at) VALUES (?, ?, 'prompt', 'p', ?)`
       )
@@ -260,27 +260,27 @@ describe("DELETE /api/games/:id", () => {
     const res = await app.inject({ method: "DELETE", url: `/api/games/${gameId}` });
     expect(res.statusCode).toBe(204);
 
-    const game = testDb.sqlite
+    const game = await testDb.client
       .query<{ id: string }, [string]>("SELECT id FROM games WHERE id = ?")
       .get(gameId);
     expect(game).toBeNull();
 
-    const msg = testDb.sqlite
+    const msg = await testDb.client
       .query<{ id: string }, [string]>("SELECT id FROM messages WHERE game_id = ?")
       .get(gameId);
     expect(msg).toBeNull();
   });
 
   test("returns 404 for a non-owner; does not delete the row", async () => {
-    const { id: ownerId } = insertTestUser(testDb.sqlite, { email: "o@t" });
-    const { id: otherId } = insertTestUser(testDb.sqlite, { email: "p@t" });
+    const { id: ownerId } = await insertTestUser(testDb, { email: "o@t" });
+    const { id: otherId } = await insertTestUser(testDb, { email: "p@t" });
     stubUserId = otherId;
-    const gameId = insertGame({ userId: ownerId });
+    const gameId = await insertGame({ userId: ownerId });
 
     const res = await app.inject({ method: "DELETE", url: `/api/games/${gameId}` });
     expect(res.statusCode).toBe(404);
 
-    const row = testDb.sqlite
+    const row = await testDb.client
       .query<{ id: string }, [string]>("SELECT id FROM games WHERE id = ?")
       .get(gameId);
     expect(row?.id).toBe(gameId);
@@ -289,12 +289,12 @@ describe("DELETE /api/games/:id", () => {
 
 describe("GET /api/games (list)", () => {
   test("returns only the caller's games, sorted by updated_at desc", async () => {
-    const { id: meId } = insertTestUser(testDb.sqlite, { email: "me@t" });
-    const { id: otherId } = insertTestUser(testDb.sqlite, { email: "x@t" });
+    const { id: meId } = await insertTestUser(testDb, { email: "me@t" });
+    const { id: otherId } = await insertTestUser(testDb, { email: "x@t" });
     stubUserId = meId;
-    insertGame({ userId: meId, title: "mine-1" });
-    insertGame({ userId: meId, title: "mine-2" });
-    insertGame({ userId: otherId, title: "theirs" });
+    await insertGame({ userId: meId, title: "mine-1" });
+    await insertGame({ userId: meId, title: "mine-2" });
+    await insertGame({ userId: otherId, title: "theirs" });
 
     const res = await app.inject({ method: "GET", url: "/api/games" });
     expect(res.statusCode).toBe(200);
@@ -304,10 +304,10 @@ describe("GET /api/games (list)", () => {
   });
 
   test("returns hasThumbnail flag, not the inline thumbnail bytes", async () => {
-    const { id: meId } = insertTestUser(testDb.sqlite);
+    const { id: meId } = await insertTestUser(testDb);
     stubUserId = meId;
-    insertGame({ userId: meId, title: "with-thumb", thumbnail: TINY_PNG_DATA_URL });
-    insertGame({ userId: meId, title: "no-thumb", thumbnail: null });
+    await insertGame({ userId: meId, title: "with-thumb", thumbnail: TINY_PNG_DATA_URL });
+    await insertGame({ userId: meId, title: "no-thumb", thumbnail: null });
 
     const res = await app.inject({ method: "GET", url: "/api/games" });
     expect(res.statusCode).toBe(200);
@@ -323,9 +323,9 @@ describe("GET /api/games (list)", () => {
 
 describe("GET /api/games/:id/thumbnail.png", () => {
   test("serves the decoded PNG bytes for the owner", async () => {
-    const { id: meId } = insertTestUser(testDb.sqlite);
+    const { id: meId } = await insertTestUser(testDb);
     stubUserId = meId;
-    const gameId = insertGame({ userId: meId, thumbnail: TINY_PNG_DATA_URL });
+    const gameId = await insertGame({ userId: meId, thumbnail: TINY_PNG_DATA_URL });
 
     const res = await app.inject({ method: "GET", url: `/api/games/${gameId}/thumbnail.png` });
     expect(res.statusCode).toBe(200);
@@ -340,9 +340,9 @@ describe("GET /api/games/:id/thumbnail.png", () => {
   });
 
   test("serves a placeholder when the game has no thumbnail", async () => {
-    const { id: meId } = insertTestUser(testDb.sqlite);
+    const { id: meId } = await insertTestUser(testDb);
     stubUserId = meId;
-    const gameId = insertGame({ userId: meId, thumbnail: null });
+    const gameId = await insertGame({ userId: meId, thumbnail: null });
 
     const res = await app.inject({ method: "GET", url: `/api/games/${gameId}/thumbnail.png` });
     expect(res.statusCode).toBe(200);
@@ -351,10 +351,10 @@ describe("GET /api/games/:id/thumbnail.png", () => {
   });
 
   test("404s for a game the caller does not own (no cross-user thumbnail access)", async () => {
-    const { id: ownerId } = insertTestUser(testDb.sqlite, { email: "owner@t" });
-    const { id: otherId } = insertTestUser(testDb.sqlite, { email: "other@t" });
+    const { id: ownerId } = await insertTestUser(testDb, { email: "owner@t" });
+    const { id: otherId } = await insertTestUser(testDb, { email: "other@t" });
     stubUserId = otherId;
-    const gameId = insertGame({ userId: ownerId, thumbnail: TINY_PNG_DATA_URL });
+    const gameId = await insertGame({ userId: ownerId, thumbnail: TINY_PNG_DATA_URL });
 
     const res = await app.inject({ method: "GET", url: `/api/games/${gameId}/thumbnail.png` });
     expect(res.statusCode).toBe(404);
@@ -362,19 +362,19 @@ describe("GET /api/games/:id/thumbnail.png", () => {
 });
 
 describe("POST /api/games/:id/publish", () => {
-  function readPublish(gameId: string) {
-    return testDb.sqlite
+  async function readPublish(gameId: string) {
+    return testDb.client
       .query<
-        { is_public: number; public_slug: string | null; published_at: number | null },
+        { is_public: boolean; public_slug: string | null; published_at: string | null },
         [string]
       >("SELECT is_public, public_slug, published_at FROM games WHERE id = ?")
       .get(gameId);
   }
 
   test("first publish sets slug, is_public, and published_at together", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>game</html>" });
+    const gameId = await insertGame({ userId, currentCode: "<html>game</html>" });
 
     const res = await app.inject({
       method: "POST",
@@ -390,16 +390,16 @@ describe("POST /api/games/:id/publish", () => {
 
     // The row must never be half-published: a slug without is_public is the
     // inconsistent state the single-UPDATE fix prevents.
-    const row = readPublish(gameId);
-    expect(row?.is_public).toBe(1);
+    const row = await readPublish(gameId);
+    expect(row?.is_public).toBe(true);
     expect(row?.public_slug).toBe(body.slug);
-    expect(row?.published_at).toBeGreaterThan(0);
+    expect(row?.published_at).not.toBeNull();
   });
 
   test("re-publish reuses the existing slug", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>game</html>" });
+    const gameId = await insertGame({ userId, currentCode: "<html>game</html>" });
 
     const first = await app.inject({
       method: "POST",
@@ -425,13 +425,13 @@ describe("POST /api/games/:id/publish", () => {
     const secondSlug = (second.json() as { slug: string }).slug;
 
     expect(secondSlug).toBe(firstSlug);
-    expect(readPublish(gameId)?.is_public).toBe(1);
+    expect((await readPublish(gameId))?.is_public).toBe(true);
   });
 
   test("rejects publishing a game with no code", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "" });
+    const gameId = await insertGame({ userId, currentCode: "" });
 
     const res = await app.inject({
       method: "POST",
@@ -444,12 +444,14 @@ describe("POST /api/games/:id/publish", () => {
 });
 
 describe("POST /api/games/:id/undo", () => {
-  function setPreviousCode(gameId: string, previous: string | null) {
-    testDb.sqlite.query("UPDATE games SET previous_code = ? WHERE id = ?").run(previous, gameId);
+  async function setPreviousCode(gameId: string, previous: string | null) {
+    await testDb.client
+      .query("UPDATE games SET previous_code = ? WHERE id = ?")
+      .run(previous, gameId);
   }
 
-  function readCodes(gameId: string) {
-    return testDb.sqlite
+  async function readCodes(gameId: string) {
+    return testDb.client
       .query<{ current_code: string; previous_code: string | null }, [string]>(
         "SELECT current_code, previous_code FROM games WHERE id = ?"
       )
@@ -457,10 +459,10 @@ describe("POST /api/games/:id/undo", () => {
   }
 
   test("restores previous_code into current_code and clears the slot", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
-    setPreviousCode(gameId, "<html>original</html>");
+    const gameId = await insertGame({ userId, currentCode: "<html>refined</html>" });
+    await setPreviousCode(gameId, "<html>original</html>");
 
     const res = await app.inject({
       method: "POST",
@@ -474,15 +476,15 @@ describe("POST /api/games/:id/undo", () => {
     expect(body.currentCode).toBe("<html>original</html>");
     expect(body.canUndo).toBe(false);
 
-    const row = readCodes(gameId);
+    const row = await readCodes(gameId);
     expect(row?.current_code).toBe("<html>original</html>");
     expect(row?.previous_code).toBeNull();
   });
 
   test("returns 409 when there is nothing to undo", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>only</html>" });
+    const gameId = await insertGame({ userId, currentCode: "<html>only</html>" });
     // previous_code defaults to NULL — never refined.
 
     const res = await app.inject({
@@ -495,14 +497,14 @@ describe("POST /api/games/:id/undo", () => {
     expect(res.statusCode).toBe(409);
     expect((res.json() as { code: string }).code).toBe("CONFLICT");
     // current_code must be untouched.
-    expect(readCodes(gameId)?.current_code).toBe("<html>only</html>");
+    expect((await readCodes(gameId))?.current_code).toBe("<html>only</html>");
   });
 
   test("a second undo is a no-op (single-level, no redo)", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
-    setPreviousCode(gameId, "<html>original</html>");
+    const gameId = await insertGame({ userId, currentCode: "<html>refined</html>" });
+    await setPreviousCode(gameId, "<html>original</html>");
 
     const first = await app.inject({
       method: "POST",
@@ -520,19 +522,19 @@ describe("POST /api/games/:id/undo", () => {
     });
     expect(second.statusCode).toBe(409);
     // Still the restored original — a second undo cannot resurrect the refined code.
-    expect(readCodes(gameId)?.current_code).toBe("<html>original</html>");
+    expect((await readCodes(gameId))?.current_code).toBe("<html>original</html>");
   });
 
   test("returns 409 while a stream is in flight for the game", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
-    setPreviousCode(gameId, "<html>original</html>");
+    const gameId = await insertGame({ userId, currentCode: "<html>refined</html>" });
+    await setPreviousCode(gameId, "<html>original</html>");
 
     // Simulate an in-flight refinement: charged (succeeded=0) and not
     // refunded. Under background-stream semantics this row exists for the
     // whole life of the stream, even after the client disconnects.
-    testDb.sqlite
+    await testDb.client
       .query(
         `INSERT INTO usage_log
            (id, user_id, game_id, action, credits_charged, succeeded, created_at)
@@ -551,22 +553,22 @@ describe("POST /api/games/:id/undo", () => {
     expect((res.json() as { code: string }).code).toBe("CONFLICT");
     // Nothing swapped — the stream's eventual persistence won't clobber an
     // undo because the undo never happened.
-    const row = readCodes(gameId);
+    const row = await readCodes(gameId);
     expect(row?.current_code).toBe("<html>refined</html>");
     expect(row?.previous_code).toBe("<html>original</html>");
   });
 
   test("undo succeeds when the only in-flight row is stale (crash-orphaned)", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
-    setPreviousCode(gameId, "<html>original</html>");
+    const gameId = await insertGame({ userId, currentCode: "<html>refined</html>" });
+    await setPreviousCode(gameId, "<html>original</html>");
 
     // A row left succeeded=0 / refunded_at NULL by a hard crash (no
     // finalization ever ran). The STALE_STREAM_CUTOFF_MS predicate must
     // treat it as dead — without the cutoff this row would 409 every undo
     // for this game forever. 16 minutes > the 15-minute cutoff.
-    testDb.sqlite
+    await testDb.client
       .query(
         `INSERT INTO usage_log
            (id, user_id, game_id, action, credits_charged, succeeded, created_at)
@@ -582,17 +584,17 @@ describe("POST /api/games/:id/undo", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(readCodes(gameId)?.current_code).toBe("<html>original</html>");
+    expect((await readCodes(gameId))?.current_code).toBe("<html>original</html>");
   });
 
   test("undo succeeds once the in-flight stream has settled (refunded)", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>refined</html>" });
-    setPreviousCode(gameId, "<html>original</html>");
+    const gameId = await insertGame({ userId, currentCode: "<html>refined</html>" });
+    await setPreviousCode(gameId, "<html>original</html>");
 
     // A failed-and-refunded stream is no longer in flight.
-    testDb.sqlite
+    await testDb.client
       .query(
         `INSERT INTO usage_log
            (id, user_id, game_id, action, credits_charged, succeeded, refunded_at, created_at)
@@ -608,16 +610,16 @@ describe("POST /api/games/:id/undo", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(readCodes(gameId)?.current_code).toBe("<html>original</html>");
+    expect((await readCodes(gameId))?.current_code).toBe("<html>original</html>");
   });
 
   test("404 when the game is not owned by the caller", async () => {
-    const { id: ownerId } = insertTestUser(testDb.sqlite);
-    const gameId = insertGame({ userId: ownerId, currentCode: "<html>refined</html>" });
-    setPreviousCode(gameId, "<html>original</html>");
+    const { id: ownerId } = await insertTestUser(testDb);
+    const gameId = await insertGame({ userId: ownerId, currentCode: "<html>refined</html>" });
+    await setPreviousCode(gameId, "<html>original</html>");
 
     // Caller is a different user.
-    stubUserId = "someone-else";
+    stubUserId = randomUUID();
     const res = await app.inject({
       method: "POST",
       url: `/api/games/${gameId}/undo`,
@@ -627,28 +629,28 @@ describe("POST /api/games/:id/undo", () => {
 
     expect(res.statusCode).toBe(404);
     // The owner's game must be untouched.
-    expect(readCodes(gameId)?.current_code).toBe("<html>refined</html>");
-    expect(readCodes(gameId)?.previous_code).toBe("<html>original</html>");
+    expect((await readCodes(gameId))?.current_code).toBe("<html>refined</html>");
+    expect((await readCodes(gameId))?.previous_code).toBe("<html>original</html>");
   });
 });
 
 describe("POST /api/games/:id/repair — daily budget", () => {
   test("returns 429 RATE_LIMITED once 50 repairs have run in the last 24h", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>broken</html>" });
+    const gameId = await insertGame({ userId, currentCode: "<html>broken</html>" });
 
     // Seed 50 repair attempts inside the rolling window. Repairs are
     // credit-free and exempt from lifetime caps, so this budget is the ONLY
     // cost control on the endpoint — the check must fire before the SSE
     // hijack so the client gets a proper JSON 429.
-    const insert = testDb.sqlite.prepare(
+    const insert = testDb.client.prepare(
       `INSERT INTO usage_log
          (id, user_id, game_id, action, credits_charged, succeeded, created_at)
        VALUES (?, ?, ?, 'repair', 0, 1, ?)`
     );
     for (let i = 0; i < 50; i++) {
-      insert.run(`repair-log-${i}`, userId, gameId, Date.now() - i * 1000);
+      await insert.run(`repair-log-${i}`, userId, gameId, Date.now() - i * 1000);
     }
 
     const res = await app.inject({
@@ -663,22 +665,22 @@ describe("POST /api/games/:id/repair — daily budget", () => {
   });
 
   test("repairs older than 24h do not count against the budget", async () => {
-    const { id: userId } = insertTestUser(testDb.sqlite);
+    const { id: userId } = await insertTestUser(testDb);
     stubUserId = userId;
-    const gameId = insertGame({ userId, currentCode: "<html>broken</html>" });
+    const gameId = await insertGame({ userId, currentCode: "<html>broken</html>" });
 
     // 50 attempts, all aged past the rolling window — the budget check must
     // ignore them. The request then proceeds past the 429 guard into a
     // hijacked SSE response driven by the stubbed LLM client, so all this
     // test asserts is that the budget did not reject it (statusCode !== 429).
-    const insert = testDb.sqlite.prepare(
+    const insert = testDb.client.prepare(
       `INSERT INTO usage_log
          (id, user_id, game_id, action, credits_charged, succeeded, created_at)
        VALUES (?, ?, ?, 'repair', 0, 1, ?)`
     );
     const old = Date.now() - 25 * 3600_000;
     for (let i = 0; i < 50; i++) {
-      insert.run(`old-repair-log-${i}`, userId, gameId, old - i * 1000);
+      await insert.run(`old-repair-log-${i}`, userId, gameId, old - i * 1000);
     }
 
     const res = await app.inject({

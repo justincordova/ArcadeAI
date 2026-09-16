@@ -3,7 +3,7 @@
  * `games` table under a synthetic "ArcadeAI" creator so the games appear
  * on the Discover page.
  *
- * Run: DATABASE_PATH=apps/server/data/arcadeai.db bun run apps/server/scripts/seed-system-games.ts
+ * Run: DATABASE_URL=postgresql://... bun run apps/server/scripts/seed-system-games.ts
  *
  * Independent from seed-rag-examples.ts — this one does NOT touch
  * rag_examples or rag_embeddings. It only writes:
@@ -33,7 +33,7 @@ const CURATED_DIR = join(SCRIPTS_DIR, "rag-curated");
 
 // Stable identifiers for the synthetic creator. These must never change
 // without also writing a migration to move existing rows.
-const SYSTEM_USER_ID = "system-arcadeai";
+const SYSTEM_USER_ID = "00000000-0000-4000-8000-000000000001";
 const SYSTEM_USER_EMAIL = "system@arcadeai.local";
 const SYSTEM_USER_DISPLAY_NAME = "ArcadeAI";
 
@@ -62,9 +62,9 @@ const TITLES: Record<string, string> = {
   "other-rhythm-tap": "Rhythm Tap",
 };
 
-const dbPath = process.env.DATABASE_PATH;
-if (!dbPath) {
-  console.error("DATABASE_PATH environment variable is required");
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  console.error("DATABASE_URL environment variable is required");
   process.exit(1);
 }
 
@@ -118,7 +118,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { sqlite } = createClient(dbPath as string);
+  const { sql } = createClient(databaseUrl as string);
   const now = Date.now();
 
   // Preload all HTML into memory so the seed runs in one transaction.
@@ -140,113 +140,20 @@ async function main() {
     });
   }
 
-  // 1. Synthetic user row (idempotent via INSERT OR IGNORE).
-  //    The "user" table is owned by Better Auth; we insert raw to skip
-  //    Drizzle's strict checks around timestamps.
-  const upsertUser = sqlite.prepare(`
-    INSERT OR IGNORE INTO "user" (
-      id, email, email_verified, name, image, display_name,
-      tier, credits_remaining_daily, credits_remaining_monthly,
-      daily_reset_at, monthly_reset_at,
-      lifetime_generations_used, lifetime_refinements_used,
-      theme, created_at, updated_at
-    ) VALUES (
-      ?, ?, 1, ?, NULL, ?,
-      'admin', 0, 0,
-      0, 0,
-      0, 0,
-      'dark', ?, ?
-    )
-  `);
-  upsertUser.run(
-    SYSTEM_USER_ID,
-    SYSTEM_USER_EMAIL,
-    SYSTEM_USER_DISPLAY_NAME,
-    SYSTEM_USER_DISPLAY_NAME,
-    now,
-    now
-  );
-
-  // 2. Game rows. INSERT OR IGNORE first (to create with metrics = 0), then
-  //    UPDATE non-metric fields. This preserves play_count / like_count if
-  //    a game was already seeded and engaged with.
-  const insertGame = sqlite.prepare(`
-    INSERT OR IGNORE INTO games (
-      id, user_id, title, current_code, thumbnail, genre, original_prompt,
-      is_public, public_slug, published_at, remixed_from_game_id,
-      play_count, like_count, created_at, updated_at
-    ) VALUES (
-      ?, ?, ?, ?, NULL, ?, ?,
-      1, ?, ?, NULL,
-      0, 0, ?, ?
-    )
-  `);
-  const updateGame = sqlite.prepare(`
-    UPDATE games
-       SET title = ?,
-           current_code = ?,
-           genre = ?,
-           original_prompt = ?,
-           is_public = 1,
-           public_slug = ?,
-           published_at = COALESCE(published_at, ?),
-           updated_at = ?
-     WHERE id = ?
-  `);
-
-  const tx = sqlite.transaction(() => {
+  await sql.begin(async (tx) => {
+    await tx`INSERT INTO "user" (id, email, email_verified, name, display_name, tier, credits_remaining_daily, credits_remaining_monthly, daily_reset_at, monthly_reset_at, lifetime_generations_used, lifetime_refinements_used, theme, created_at, updated_at) VALUES (${SYSTEM_USER_ID}::uuid, ${SYSTEM_USER_EMAIL}, true, ${SYSTEM_USER_DISPLAY_NAME}, ${SYSTEM_USER_DISPLAY_NAME}, 'admin', 0, 0, 0, 0, 0, 0, 'dark', ${now}, ${now}) ON CONFLICT (id) DO NOTHING`;
     for (const r of records) {
-      insertGame.run(
-        r.gameId,
-        SYSTEM_USER_ID,
-        r.title,
-        r.html,
-        r.entry.genre,
-        r.entry.prompt,
-        r.slug,
-        now,
-        now,
-        now
-      );
-      const updated = updateGame.run(
-        r.title,
-        r.html,
-        r.entry.genre,
-        r.entry.prompt,
-        r.slug,
-        now,
-        now,
-        r.gameId
-      ).changes;
-      // OR IGNORE above swallows ANY conflict, not just the id conflict it
-      // exists for. If the derived slug collides with a real user's
-      // public_slug, the insert is silently skipped and this UPDATE (keyed
-      // on the never-created id) matches 0 rows — previously the script
-      // then reported success while the game was never seeded. Fail loudly
-      // instead so the collision is visible and fixable.
-      if (updated !== 1) {
-        throw new Error(
-          `Seed row ${r.gameId} was not written (0 rows updated). Likely a public_slug collision on "${r.slug}" with an existing user game.`
-        );
-      }
+      await tx`INSERT INTO games (id, user_id, title, current_code, genre, original_prompt, is_public, public_slug, published_at, play_count, like_count, created_at, updated_at) VALUES (${r.gameId}, ${SYSTEM_USER_ID}::uuid, ${r.title}, ${r.html}, ${r.entry.genre}, ${r.entry.prompt}, true, ${r.slug}, ${now}, 0, 0, ${now}, ${now}) ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, current_code = EXCLUDED.current_code, genre = EXCLUDED.genre, original_prompt = EXCLUDED.original_prompt, is_public = true, public_slug = EXCLUDED.public_slug, published_at = COALESCE(games.published_at, EXCLUDED.published_at), updated_at = EXCLUDED.updated_at`;
     }
   });
-  tx();
 
   // Sanity report.
-  const counts = sqlite
-    .prepare(
-      `SELECT count(*) AS total,
-              sum(CASE WHEN is_public THEN 1 ELSE 0 END) AS published
-         FROM games WHERE user_id = ?`
-    )
-    .get(SYSTEM_USER_ID) as { total: number; published: number };
-
-  const per = sqlite
-    .prepare(
-      "SELECT genre, count(*) AS n FROM games WHERE user_id = ? GROUP BY genre ORDER BY genre"
-    )
-    .all(SYSTEM_USER_ID) as Array<{ genre: string; n: number }>;
+  const [counts] = await sql<
+    { total: number; published: number }[]
+  >`SELECT count(*)::int AS total, count(*) FILTER (WHERE is_public)::int AS published FROM games WHERE user_id = ${SYSTEM_USER_ID}::uuid`;
+  const per = await sql<
+    { genre: string; n: number }[]
+  >`SELECT genre, count(*)::int AS n FROM games WHERE user_id = ${SYSTEM_USER_ID}::uuid GROUP BY genre ORDER BY genre`;
 
   console.log(
     `Seeded ${records.length} ArcadeAI games — total=${counts.total}, public=${counts.published}`
@@ -255,7 +162,7 @@ async function main() {
   for (const row of per) console.log(`  ${row.genre.padEnd(12)} ${row.n}`);
   console.log("\nView on Discover: http://localhost:5173/discover");
 
-  sqlite.close();
+  await sql.end();
 }
 
 main().catch((err) => {
