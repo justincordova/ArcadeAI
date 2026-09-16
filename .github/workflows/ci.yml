@@ -23,6 +23,18 @@ jobs:
     # Database.setCustomSQLite path in packages/db only fires on darwin),
     # so a stock ubuntu runner is sufficient — no extra system packages.
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     # The whole pipeline runs in well under a minute; without a cap a hung
     # step burns the 6-hour default.
     timeout-minutes: 15
@@ -42,4 +54,24 @@ jobs:
 
       - run: bun run build
 
+      - name: Initialize test database
+        run: |
+          docker exec -i ${{ job.services.postgres.id }} psql -U postgres -d postgres <<'SQL'
+          CREATE SCHEMA IF NOT EXISTS extensions;
+          CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA extensions;
+          CREATE SCHEMA IF NOT EXISTS auth;
+          CREATE TABLE IF NOT EXISTS auth.users (
+            id uuid PRIMARY KEY,
+            aud text NOT NULL,
+            role text NOT NULL,
+            email text NOT NULL,
+            encrypted_password text NOT NULL,
+            email_confirmed_at timestamptz,
+            raw_app_meta_data jsonb NOT NULL DEFAULT '{}',
+            raw_user_meta_data jsonb NOT NULL DEFAULT '{}'
+          );
+          SQL
+
       - run: bun run test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
